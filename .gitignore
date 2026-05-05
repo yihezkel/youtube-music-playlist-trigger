@@ -1,0 +1,28 @@
+# Build outputs
+build/
+app/build/
+.gradle/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs / temp
+*.log
+obj/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keystore
+*.keystore
+*.jks
+
+# Research artifacts not meant for the repo
+musicscreen*.txt
+*.flo
+
