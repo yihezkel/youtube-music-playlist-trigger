@@ -219,25 +219,26 @@ class YtmAccessibilityService : AccessibilityService() {
 
     private suspend fun skipNext(): Boolean {
         val root = rootOrNull() ?: return logFalse("Skip: no root")
-        // Capture current title for verification
+        // Capture current title for optional verification.
         val titleBefore = currentTitle(root)
         Logger.d("A11y", "Skip: title before", mapOf("title" to (titleBefore ?: "")))
         val nextBtn = findById(root, "player_control_next_button")
             ?: findByContentDescContains(root, "next track")
-            ?: findById(root, "mini_player_play_pause_replay_button")?.let {
-                // Fall back: if nothing else, dispatch KEYCODE_MEDIA_NEXT via global action is not possible;
-                // we won't tap play/pause as that's wrong. Skip this fallback.
-                null
-            }
         if (nextBtn == null) return logFalse("Skip: next button not found")
         val ok = performClickOrTap(nextBtn)
         if (!ok) return logFalse("Skip: tap failed")
-        // Verify by polling for title change
-        repeat(10) {
-            delay(500)
+        // Only verify when we actually have a baseline title to compare against.
+        // Without a baseline we'd just be polling empty-string vs empty-string,
+        // wasting time and producing a misleading "title did not change" warning.
+        if (titleBefore.isNullOrEmpty()) {
+            return true
+        }
+        // Verify by polling for title change.
+        repeat(6) {
+            delay(400)
             val now = currentTitle(rootOrNull() ?: return@repeat)
-            if (now != null && now != titleBefore) {
-                Logger.i("A11y", "Skip verified", mapOf("from" to (titleBefore ?: ""), "to" to now))
+            if (!now.isNullOrEmpty() && now != titleBefore) {
+                Logger.i("A11y", "Skip verified", mapOf("from" to titleBefore, "to" to now))
                 return true
             }
         }
@@ -246,9 +247,14 @@ class YtmAccessibilityService : AccessibilityService() {
     }
 
     private fun currentTitle(root: AccessibilityNodeInfo): String? {
+        // Try only known now-playing title ids. Avoid the generic "title" id
+        // because many unrelated nodes (playlist header, suggestions, etc.) end
+        // in /title and produce false positives like "Add a song".
         return findById(root, "mini_player_title")?.text?.toString()
             ?: findById(root, "swipeable_mini_player_title")?.text?.toString()
-            ?: findById(root, "title")?.text?.toString()
+            ?: findById(root, "player_title")?.text?.toString()
+            ?: findById(root, "track_title")?.text?.toString()
+            ?: findById(root, "now_playing_title")?.text?.toString()
     }
 
     private fun findShuffleNode(): AccessibilityNodeInfo? {

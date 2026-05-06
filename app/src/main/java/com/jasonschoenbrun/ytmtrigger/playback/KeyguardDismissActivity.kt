@@ -26,11 +26,17 @@ class KeyguardDismissActivity : Activity() {
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
         )
         val km = getSystemService(KeyguardManager::class.java)
-        km?.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
-            override fun onDismissError() { Logger.w("KeyguardActivity", "Dismiss error") }
-            override fun onDismissSucceeded() { Logger.i("KeyguardActivity", "Dismiss succeeded") }
-            override fun onDismissCancelled() { Logger.w("KeyguardActivity", "Dismiss cancelled") }
-        })
+        // Only request dismiss if the keyguard is actually showing; otherwise the
+        // platform invokes onDismissError, which is noisy and misleading.
+        if (km?.isKeyguardLocked == true) {
+            km.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+                override fun onDismissError() { Logger.w("KeyguardActivity", "Dismiss error") }
+                override fun onDismissSucceeded() { Logger.i("KeyguardActivity", "Dismiss succeeded") }
+                override fun onDismissCancelled() { Logger.w("KeyguardActivity", "Dismiss cancelled") }
+            })
+        } else {
+            Logger.d("KeyguardActivity", "Keyguard not locked; skipping dismiss")
+        }
 
         // Forward a launch intent if provided
         intent?.let {
