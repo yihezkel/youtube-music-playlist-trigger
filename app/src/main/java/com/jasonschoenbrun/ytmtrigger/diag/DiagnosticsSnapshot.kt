@@ -215,6 +215,7 @@ object DiagnosticsSnapshot {
         Logger.i(origin, "Diag: a11y", mapOf(
             "enabledInSettings" to a11yOn.toString(),
             "serviceBound" to YtmAccessibilityService.isRunning().toString(),
+            "serviceResponsive" to YtmAccessibilityService.isResponsive().toString(),
         ))
     }
 
@@ -366,6 +367,7 @@ object DiagnosticsSnapshot {
         return A11yStateData(
             enabledInSettings = a11yOn,
             serviceBound = YtmAccessibilityService.isRunning(),
+            serviceResponsive = YtmAccessibilityService.isResponsive(),
         )
     }
 

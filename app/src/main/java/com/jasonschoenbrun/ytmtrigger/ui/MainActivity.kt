@@ -791,18 +791,28 @@ fun SelfTestScreen(onBack: () -> Unit) {
                 )
             },
         )
+        val a11ySvc = com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
+        val a11yEnf = com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
         checks += SelfTestRow(
             label = "Accessibility service running",
-            ok = com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService.isRunning(),
-            details = "Required to press Play, enable shuffle, skip first track, and dismiss Premium upsells.",
-            actionLabel = if (!com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService.isRunning()) {
-                if (com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer.hasWriteSecureSettings(ctx)) "Auto-enable"
-                else "Open Accessibility"
-            } else null,
+            ok = a11ySvc.isResponsive(),
+            details = if (a11ySvc.isResponsive()) {
+                "Required to press Play, enable shuffle, skip first track, and dismiss Premium upsells."
+            } else if (a11ySvc.isRunning()) {
+                "The service is bound but unresponsive — it can't read the active window, so it won't receive events or press Play. Android reports it as enabled, which is why this needs its own check. Tap Restart service to force Android to re-bind it."
+            } else {
+                "Required to press Play, enable shuffle, skip first track, and dismiss Premium upsells. The service is not running."
+            },
+            actionLabel = if (a11ySvc.isResponsive()) {
+                null
+            } else if (a11ySvc.isRunning()) {
+                if (a11yEnf.hasWriteSecureSettings(ctx)) "Restart service" else "Open Accessibility"
+            } else {
+                if (a11yEnf.hasWriteSecureSettings(ctx)) "Auto-enable" else "Open Accessibility"
+            },
             action = {
-                val enf = com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
-                if (enf.hasWriteSecureSettings(ctx)) {
-                    enf.ensureEnabled(ctx)
+                if (a11yEnf.hasWriteSecureSettings(ctx)) {
+                    if (a11ySvc.isRunning()) a11yEnf.restart(ctx) else a11yEnf.ensureEnabled(ctx)
                 } else {
                     ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }

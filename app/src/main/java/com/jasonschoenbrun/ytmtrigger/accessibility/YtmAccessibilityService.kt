@@ -54,6 +54,8 @@ class YtmAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         running.set(true)
         instance.set(this)
+        sawEventSinceConnect.set(false)
+        connectedAtMs.set(System.currentTimeMillis())
         Logger.i("A11y", "Service connected")
     }
 
@@ -71,6 +73,9 @@ class YtmAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
+        // Liveness marker: proves AccessibilityManagerService is actually
+        // delivering to us. See isResponsive().
+        sawEventSinceConnect.set(true)
         // D-fix-3: log every window-state change at debug, even when there's
         // no pending action, so we can correlate logs with what the user saw.
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
@@ -645,12 +650,56 @@ class YtmAccessibilityService : AccessibilityService() {
 
         private val running = java.util.concurrent.atomic.AtomicBoolean(false)
         private val instance = AtomicReference<YtmAccessibilityService?>(null)
+        private val sawEventSinceConnect = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val connectedAtMs = java.util.concurrent.atomic.AtomicLong(0L)
         private val pending = AtomicReference<PostLaunchAction?>(null)
         private val actionDone = OneShot()
         private val lastActionResult = AtomicReference<A11yActionResult?>(null)
         private val lastQueuedAction = AtomicReference<PostLaunchAction?>(null)
 
+        /** Grace window after binding, before "no events yet" means anything. */
+        const val RESPONSIVE_GRACE_MS = 15_000L
+
         fun isRunning(): Boolean = running.get()
+
+        /**
+         * Whether the service is not just bound but actually *usable*.
+         *
+         * [isRunning] only reports that `onServiceConnected` fired. That has
+         * been observed to be true while the service received no events at
+         * all — seen once after the installer dropped the service and
+         * [A11yPermissionEnforcer] re-enabled it by writing secure settings:
+         * `dumpsys accessibility` listed the service as bound with the right
+         * `eventTypes`, yet no `TYPE_WINDOW_STATE_CHANGED` arrived for 90s
+         * and every self-test strategy timed out with `a11yStarted=false`.
+         * Reporting [isRunning] alone therefore shows a green health check
+         * for a service that cannot do its job.
+         *
+         * Having received at least one event since connecting is the cheap,
+         * decisive proof that delivery works. A healthy service sees events
+         * as soon as any window changes — including this app's own screens
+         * opening — so by the time a checklist is rendered it has fired.
+         * Within [RESPONSIVE_GRACE_MS] of binding we report healthy, because
+         * "no window has changed yet" is not evidence of failure.
+         *
+         * Deliberately does no binder work, so it is safe to call from the UI
+         * thread; [canReadActiveWindow] is the stronger, blocking variant.
+         */
+        fun isResponsive(): Boolean {
+            if (!isRunning()) return false
+            if (sawEventSinceConnect.get()) return true
+            return System.currentTimeMillis() - connectedAtMs.get() < RESPONSIVE_GRACE_MS
+        }
+
+        /**
+         * Stronger liveness probe: can we actually read the active window?
+         *
+         * Performs a blocking binder round-trip. **Never call this from the
+         * main thread** — when one of this app's own windows is foreground,
+         * the interrogation is served by this process's main thread, so
+         * calling it there blocks until the ~5s timeout and returns null.
+         */
+        fun canReadActiveWindow(): Boolean = currentForegroundPackage() != null
 
         /**
          * The package that owns the current foreground window, as seen by the
@@ -663,7 +712,8 @@ class YtmAccessibilityService : AccessibilityService() {
          * an appop no ordinary app can grant itself (`AppOpsManager.setMode`
          * requires signature-level MANAGE_APP_OPS_MODES).
          *
-         * Returns null only when the service isn't bound.
+         * Returns null when the service isn't bound, and also — briefly —
+         * during window transitions, so a single null is not proof of death.
          */
         fun currentForegroundPackage(): String? = try {
             instance.get()?.rootInActiveWindow?.packageName?.toString()

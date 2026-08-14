@@ -187,6 +187,12 @@ data class AudioStateData(
 data class A11yStateData(
     val enabledInSettings: Boolean,
     val serviceBound: Boolean,
+    /**
+     * Bound *and* able to read the active window. `serviceBound` alone can be
+     * true for a service that receives no events; see
+     * [com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService.isResponsive].
+     */
+    val serviceResponsive: Boolean? = null,
 )
 
 @Serializable

@@ -150,25 +150,97 @@ object A11yPermissionEnforcer {
 
     /**
      * Like [ensureEnabled], but also waits up to [bindTimeoutMs] for the
-     * accessibility service to actually bind (i.e. `isRunning()` to become
-     * true). Useful at the start of a trigger / self-test path where we
-     * need the service available right now.
+     * accessibility service to become genuinely usable — bound *and* able to
+     * read the active window.
      *
-     * Returns `true` only if the service is bound by the time this returns.
+     * Waiting on `isRunning()` alone was not enough: a service can bind and
+     * report running while delivering no events and reading no windows, which
+     * made this return true for a service that could not press Play. Polling
+     * until it can read a window also absorbs the transient nulls that occur
+     * during a window transition, so one bad sample can't cause a false alarm.
+     *
+     * Callers are background paths (trigger + self-test), which is required:
+     * [YtmAccessibilityService.canReadActiveWindow] blocks on a binder call.
+     *
+     * Returns `true` only if the service is usable by the time this returns.
      */
     suspend fun ensureEnabledAndBound(
         context: Context,
         bindTimeoutMs: Long = DEFAULT_BIND_TIMEOUT_MS,
         pollIntervalMs: Long = 150L,
     ): Boolean {
-        if (YtmAccessibilityService.isRunning()) return true
+        fun usable() =
+            YtmAccessibilityService.isRunning() && YtmAccessibilityService.canReadActiveWindow()
+
+        if (usable()) return true
         ensureEnabled(context)
         val deadline = System.currentTimeMillis() + bindTimeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (YtmAccessibilityService.isRunning()) return true
+            if (usable()) return true
             delay(pollIntervalMs)
         }
-        return YtmAccessibilityService.isRunning()
+        if (YtmAccessibilityService.isRunning()) {
+            Logger.w(
+                "A11yPerm",
+                "A11y service is bound but unresponsive — it cannot read the active window, " +
+                    "so it will not receive events or press Play. Use 'Restart service' on the " +
+                    "Self-test screen to force a re-bind.",
+                mapOf(
+                    "timeoutMs" to bindTimeoutMs.toString(),
+                    "sawEvents" to YtmAccessibilityService.isResponsive().toString(),
+                ),
+            )
+        }
+        return usable()
+    }
+
+    /**
+     * Force AccessibilityManagerService to unbind and re-bind our service by
+     * removing it from the enabled list and immediately re-adding it.
+     *
+     * This is the remediation for the "bound but unresponsive" state that
+     * [YtmAccessibilityService.isResponsive] detects — a stale binding can't
+     * be repaired from inside the service, only replaced. It is deliberately
+     * user-initiated rather than automatic: the failure has been seen only
+     * once and is not yet reproducible, so silently toggling the service the
+     * app depends on would risk more than it fixes.
+     *
+     * The re-enable runs in a `finally` so an exception midway can never
+     * leave the service disabled.
+     */
+    fun restart(context: Context): Boolean {
+        if (!hasWriteSecureSettings(context)) {
+            Logger.w(
+                "A11yPerm",
+                "Cannot restart A11y service: WRITE_SECURE_SETTINGS not granted",
+                mapOf("grant" to adbGrantCommand(context)),
+            )
+            return false
+        }
+        try {
+            val cr = context.contentResolver
+            val expected = expectedServiceComponent(context)
+            val current = Settings.Secure.getString(
+                cr,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            ) ?: ""
+            val without = current.split(":")
+                .filter { it.isNotBlank() && !it.equals(expected, ignoreCase = true) }
+            Settings.Secure.putString(
+                cr,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                without.joinToString(":"),
+            )
+            Logger.i("A11yPerm", "Removed A11y service to force a re-bind", mapOf("before" to current))
+        } catch (t: Throwable) {
+            Logger.e("A11yPerm", "A11y restart: removal failed", t = t)
+        } finally {
+            runCatching { ensureEnabled(context) }
+                .onFailure { Logger.e("A11yPerm", "A11y restart: re-enable failed", t = it) }
+        }
+        val ok = isAccessibilityEnabled(context)
+        Logger.i("A11yPerm", "A11y restart finished", mapOf("enabled" to ok.toString()))
+        return ok
     }
 
     /**
