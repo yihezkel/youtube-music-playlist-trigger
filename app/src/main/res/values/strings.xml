@@ -2,5 +2,7 @@
     <string name="app_name">YTM Trigger</string>
     <string name="accessibility_service_label">YTM Trigger Helper</string>
     <string name="accessibility_service_description">After a scheduled playlist starts, enables shuffle and skips one track so the first song is randomized. Only acts on YouTube Music when triggered by this app.</string>
+    <string name="media_listener_service_label">YTM Trigger Media Watcher</string>
     <string name="widget_button_label">Play Now</string>
+    <string name="self_test_alert_text">YouTube Music Bluetooth phone isn\'t working and needs attention</string>
 </resources>

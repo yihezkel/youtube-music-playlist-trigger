@@ -13,8 +13,8 @@ android {
         applicationId = "com.jasonschoenbrun.ytmtrigger"
         minSdk = 34
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 7
+        versionName = "0.4.0"
     }
 
     buildTypes {
@@ -32,7 +32,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // Needed so MainActivity can read BuildConfig.VERSION_NAME when
+        // stamping exported self-test run records. AGP 8.x defaults to false.
+        buildConfig = true
+    }
     packaging {
         resources.excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1")
     }

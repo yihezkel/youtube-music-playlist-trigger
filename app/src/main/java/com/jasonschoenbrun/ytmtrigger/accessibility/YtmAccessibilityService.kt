@@ -2,10 +2,14 @@ package com.jasonschoenbrun.ytmtrigger.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.jasonschoenbrun.ytmtrigger.diag.A11yActionResult
+import com.jasonschoenbrun.ytmtrigger.diag.A11yStep
+import com.jasonschoenbrun.ytmtrigger.log.EvalFix
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +19,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
@@ -30,12 +36,19 @@ data class PostLaunchAction(
     val skipFirstTrack: Boolean,
     val expectedPlaylistId: String,
     val queuedAtMs: Long,
+    /** Caller-supplied id for cross-referencing with a SelfTestRunRecord. */
+    val runId: String? = null,
 )
 
 class YtmAccessibilityService : AccessibilityService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var workerJob: Job? = null
+    /** C-fix-1: serialise runAction so a debounced event can never start a
+     *  second worker while the first is still pressing buttons. */
+    private val actionMutex = Mutex()
+    /** C-fix-2: timestamp of the last window-state event we acted on. */
+    @Volatile private var lastEventActedMs: Long = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -56,38 +69,80 @@ class YtmAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
+        // D-fix-3: log every window-state change at debug, even when there's
+        // no pending action, so we can correlate logs with what the user saw.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            Logger.d("A11y", "WindowStateChanged", mapOf(
+                "pkg" to (event.packageName?.toString() ?: ""),
+                "cls" to (event.className?.toString() ?: ""),
+                "text" to event.text.joinToString("|").take(120),
+            ))
+        }
         if (pending.get() == null) return
-        // We only care about events from YT Music.
+        // B-fix-1: only events from YT Music ever start the worker.
         if (event.packageName?.toString() != YT_MUSIC_PKG) return
+        // C-fix-2: debounce - ignore events that arrive within 250ms of the
+        // last one we acted on. YT Music emits a flurry of state changes as it
+        // navigates into a playlist.
+        val now = System.currentTimeMillis()
+        if (now - lastEventActedMs < EVENT_DEBOUNCE_MS) {
+            Logger.d("A11y", "Event debounced", mapOf("sinceLastMs" to (now - lastEventActedMs).toString()))
+            return
+        }
         // Ensure exactly one worker is running.
         if (workerJob?.isActive == true) return
         val action = pending.getAndSet(null) ?: return
+        lastEventActedMs = now
         Logger.i("A11y", "Triggered by event", mapOf(
             "type" to AccessibilityEvent.eventTypeToString(event.eventType),
             "shuffle" to action.enableShuffle.toString(),
             "skip" to action.skipFirstTrack.toString(),
         ))
-        workerJob = scope.launch { runAction(action) }
+        workerJob = scope.launch { actionMutex.withLock { runAction(action) } }
     }
 
     private suspend fun runAction(action: PostLaunchAction) {
+        val trace = ActionTrace(
+            runId = action.runId,
+            startMs = System.currentTimeMillis(),
+        )
+        trace.started = true
+        trace.foregroundPkgAtStart = foregroundPackage()
+        var completedCleanly = false
         try {
             // Give YT Music a moment to render the playlist page
             delay(1500)
 
             // STEP 0: dismiss any blocking dialog (Premium upsell, "Try X",
             // restore-playback prompt, system permission dialog, etc.)
-            dismissUnwantedDialogs(label = "pre-play")
+            trace.step("DismissDialog:pre-play", ok = true) {
+                dismissUnwantedDialogs(label = "pre-play")
+                true
+            }
+
+            // B-fix-2: every step entry verifies that YT Music is still the
+            // foreground window. If it isn't, try to restore it (B-fix-4).
+            val foregroundOk = trace.step("EnsureForeground:pre-press-play") {
+                ensureForegroundYtm(stepLabel = "pre-press-play")
+            }
+            if (!foregroundOk) {
+                Logger.w("A11y", "Aborting action: YT Music not foreground after recovery")
+                return
+            }
 
             // STEP 1: tap the playlist's Play button. The deep-link intent loads
             // the playlist page but does not auto-play, so we must press Play.
-            var played = pressPlaylistPlay()
+            var played = trace.step("PressPlay") { pressPlaylistPlay() }
             Logger.i("A11y", "Press play step", mapOf("ok" to played.toString()))
             if (!played) {
                 // Maybe a dialog appeared between page-load and now. Try again.
                 delay(2000)
-                dismissUnwantedDialogs(label = "play-retry")
-                played = pressPlaylistPlay()
+                trace.step("DismissDialog:play-retry", ok = true) {
+                    dismissUnwantedDialogs(label = "play-retry")
+                    true
+                }
+                trace.step("EnsureForeground:play-retry") { ensureForegroundYtm(stepLabel = "play-retry") }
+                played = trace.step("PressPlayRetry") { pressPlaylistPlay() }
                 Logger.i("A11y", "Press play retry", mapOf("ok" to played.toString()))
             }
             if (!played) dumpWindow("press-play-failed")
@@ -95,41 +150,59 @@ class YtmAccessibilityService : AccessibilityService() {
             // STEP 2: wait for actual playback to begin. We need this before
             // enabling shuffle / skipping, otherwise the next-track button is
             // disabled and the shuffle toggle applies to a stale mini-player.
-            val playing = waitForActivePlayback(timeoutMs = 12_000)
+            val playing = trace.step("WaitForActivePlayback") { waitForActivePlayback(timeoutMs = 12_000) }
             Logger.i("A11y", "Active playback wait", mapOf("playing" to playing.toString()))
             if (!playing) {
                 // A dialog may be silently blocking playback. Sweep again.
-                dismissUnwantedDialogs(label = "post-play-wait")
-                val playing2 = waitForActivePlayback(timeoutMs = 4_000)
+                trace.step("DismissDialog:post-play-wait", ok = true) {
+                    dismissUnwantedDialogs(label = "post-play-wait")
+                    true
+                }
+                val playing2 = trace.step("WaitForActivePlaybackRetry") { waitForActivePlayback(timeoutMs = 4_000) }
                 Logger.i("A11y", "Active playback wait retry", mapOf("playing" to playing2.toString()))
                 if (!playing2) dumpWindow("playback-not-started")
             }
 
             if (action.enableShuffle) {
                 delay(800)
-                val ok = enableShuffle()
-                Logger.i("A11y", "Shuffle step done", mapOf("ok" to ok.toString()))
-                if (!ok) {
-                    delay(1500)
-                    val ok2 = enableShuffle()
-                    Logger.i("A11y", "Shuffle retry", mapOf("ok" to ok2.toString()))
-                    if (!ok2) dumpWindow("shuffle-failed")
+                val fgOk = trace.step("EnsureForeground:pre-shuffle") { ensureForegroundYtm(stepLabel = "pre-shuffle") }
+                if (!fgOk) {
+                    Logger.w("A11y", "Skipping shuffle: YT Music not foreground")
+                } else {
+                    val ok = trace.step("Shuffle") { enableShuffle() }
+                    Logger.i("A11y", "Shuffle step done", mapOf("ok" to ok.toString()))
+                    if (!ok) {
+                        delay(1500)
+                        trace.step("EnsureForeground:shuffle-retry") { ensureForegroundYtm(stepLabel = "shuffle-retry") }
+                        val ok2 = trace.step("ShuffleRetry") { enableShuffle() }
+                        Logger.i("A11y", "Shuffle retry", mapOf("ok" to ok2.toString()))
+                        if (!ok2) dumpWindow("shuffle-failed")
+                    }
                 }
             }
             if (action.skipFirstTrack) {
                 delay(800)
-                val ok = skipNext()
-                Logger.i("A11y", "Skip step done", mapOf("ok" to ok.toString()))
-                if (!ok) {
-                    delay(1200)
-                    val ok2 = skipNext()
-                    Logger.i("A11y", "Skip retry", mapOf("ok" to ok2.toString()))
-                    if (!ok2) dumpWindow("skip-failed")
+                val fgOk = trace.step("EnsureForeground:pre-skip") { ensureForegroundYtm(stepLabel = "pre-skip") }
+                if (!fgOk) {
+                    Logger.w("A11y", "Skipping skip: YT Music not foreground")
+                } else {
+                    val ok = trace.step("Skip") { skipNext() }
+                    Logger.i("A11y", "Skip step done", mapOf("ok" to ok.toString()))
+                    if (!ok) {
+                        delay(1200)
+                        trace.step("EnsureForeground:skip-retry") { ensureForegroundYtm(stepLabel = "skip-retry") }
+                        val ok2 = trace.step("SkipRetry") { skipNext() }
+                        Logger.i("A11y", "Skip retry", mapOf("ok" to ok2.toString()))
+                        if (!ok2) dumpWindow("skip-failed")
+                    }
                 }
             }
+            completedCleanly = true
         } catch (t: Throwable) {
+            trace.errorMessage = t.message ?: t.javaClass.simpleName
             Logger.e("A11y", "Action error", t = t)
         } finally {
+            lastActionResult.set(trace.toResult(completed = completedCleanly))
             actionDone.complete()
         }
     }
@@ -186,7 +259,7 @@ class YtmAccessibilityService : AccessibilityService() {
             Logger.d("A11y", "Tapping mini player to expand")
             performClickOrTap(miniPlayer)
             // Wait for player view
-            waitFor("playback_queue_shuffle_button_view", 4000)
+            waitFor("playback_queue_shuffle_button_view", 5000)
         }
 
         val shuffleNode = findShuffleNode() ?: run {
@@ -264,10 +337,14 @@ class YtmAccessibilityService : AccessibilityService() {
 
     private suspend fun waitFor(idShortName: String, timeoutMs: Long): AccessibilityNodeInfo? {
         val deadline = System.currentTimeMillis() + timeoutMs
+        // G-fix-1: exponential backoff 150ms -> 300ms -> 600ms -> 1s, so we
+        // poll aggressively early on but don't burn the CPU late in the wait.
+        var sleep = 150L
         while (System.currentTimeMillis() < deadline) {
             val n = rootOrNull()?.let { findById(it, idShortName) }
             if (n != null) return n
-            delay(150)
+            delay(sleep)
+            sleep = (sleep * 2).coerceAtMost(1_000L)
         }
         return null
     }
@@ -349,7 +426,18 @@ class YtmAccessibilityService : AccessibilityService() {
                 Logger.w("A11y", "Window dump: no root", mapOf("reason" to reason))
                 return
             }
-            Logger.w("A11y", "==== BEGIN WINDOW DUMP ====", mapOf("reason" to reason))
+            // D-fix-2: include package, window class, and window id so we know
+            // which surface the dump came from. Window id is stable per window
+            // session, useful for diff'ing dumps across two failures.
+            val pkg = root.packageName?.toString() ?: ""
+            val cls = root.className?.toString() ?: ""
+            val winId = try { root.windowId } catch (_: Throwable) { -1 }
+            Logger.w("A11y", "==== BEGIN WINDOW DUMP ====", mapOf(
+                "reason" to reason,
+                "pkg" to pkg,
+                "cls" to cls,
+                "windowId" to winId.toString(),
+            ))
             val sb = StringBuilder()
             dumpNode(root, depth = 0, out = sb)
             // Logger entries are line-oriented; chunk to avoid logcat truncation.
@@ -381,6 +469,89 @@ class YtmAccessibilityService : AccessibilityService() {
     }
 
     private fun rootOrNull(): AccessibilityNodeInfo? = try { rootInActiveWindow } catch (_: Throwable) { null }
+
+    /**
+     * Identify what package owns the current foreground window.
+     * Used by [ensureForegroundYtm] (B-fix-2/3/4) and the L-fix-1
+     * systemui-bouncer fail-fast.
+     */
+    private fun foregroundPackage(): String? = try {
+        rootInActiveWindow?.packageName?.toString()
+    } catch (_: Throwable) { null }
+
+    /**
+     * B-fix-2 / B-fix-3 / B-fix-4: verify YT Music is foreground, wait briefly
+     * with a 1s grace period in case the window is still transitioning, and
+     * if it still isn't, try once to bring YT Music back via its launcher
+     * intent. Logs an [EvalFix] entry every time a recovery is attempted.
+     *
+     * Also L-fix-1: if the foreground is the SystemUI bouncer (lock screen
+     * password prompt), fail fast and do not try to recover — the user is
+     * actively interacting with the device.
+     */
+    private suspend fun ensureForegroundYtm(stepLabel: String): Boolean {
+        val initial = foregroundPackage()
+        Logger.d("A11y", "Foreground at step", mapOf("step" to stepLabel, "pkg" to (initial ?: "")))
+        if (initial == YT_MUSIC_PKG) return true
+        // L-fix-1: SystemUI bouncer means user is unlocking. Don't fight it.
+        if (initial == SYSTEMUI_PKG) {
+            val root = rootOrNull()
+            val hasBouncer = root?.let { findFirst(it) { n ->
+                val id = n.viewIdResourceName ?: return@findFirst false
+                id.contains("alternate_bouncer", ignoreCase = true) ||
+                    id.contains("bouncer", ignoreCase = true) ||
+                    id.contains("password", ignoreCase = true)
+            } } != null
+            EvalFix.once("L-fix-1-systemuiBouncer", success = !hasBouncer, mapOf(
+                "step" to stepLabel,
+                "hasBouncerId" to hasBouncer.toString(),
+            ))
+            if (hasBouncer) {
+                Logger.w("A11y", "Aborting: systemui bouncer is foreground")
+                return false
+            }
+        }
+        // B-fix-3: 1s grace period — the window may just be transitioning.
+        delay(FOREGROUND_GRACE_MS)
+        val afterGrace = foregroundPackage()
+        if (afterGrace == YT_MUSIC_PKG) {
+            EvalFix.once("B-fix-3-graceRecover", success = true, mapOf(
+                "step" to stepLabel, "wasPkg" to (initial ?: ""),
+            ))
+            return true
+        }
+        // B-fix-4: try to bring YT Music back to foreground via its launcher.
+        EvalFix.start("B-fix-4-foregroundRestore", mapOf(
+            "step" to stepLabel, "displacingPkg" to (afterGrace ?: ""),
+        ))
+        Logger.w("A11y", "YT Music displaced; attempting restore", mapOf(
+            "step" to stepLabel, "displacingPkg" to (afterGrace ?: ""),
+        ))
+        val pm = packageManager
+        val launch = pm.getLaunchIntentForPackage(YT_MUSIC_PKG)
+        if (launch == null) {
+            EvalFix.end("B-fix-4-foregroundRestore", success = false, mapOf("reason" to "noLauncher"))
+            return false
+        }
+        try {
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(launch)
+        } catch (t: Throwable) {
+            EvalFix.end("B-fix-4-foregroundRestore", success = false, mapOf("err" to (t.message ?: "")))
+            return false
+        }
+        // Wait up to 2.5s for YT Music to claim foreground again.
+        val deadline = System.currentTimeMillis() + FOREGROUND_RESTORE_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            delay(200)
+            if (foregroundPackage() == YT_MUSIC_PKG) {
+                EvalFix.end("B-fix-4-foregroundRestore", success = true)
+                return true
+            }
+        }
+        EvalFix.end("B-fix-4-foregroundRestore", success = false, mapOf("reason" to "timeout"))
+        return false
+    }
 
     private fun findById(root: AccessibilityNodeInfo, shortId: String): AccessibilityNodeInfo? {
         val full = "$YT_MUSIC_PKG:id/$shortId"
@@ -462,26 +633,132 @@ class YtmAccessibilityService : AccessibilityService() {
 
     companion object {
         const val YT_MUSIC_PKG = "com.google.android.apps.youtube.music"
+        const val SYSTEMUI_PKG = "com.android.systemui"
+        /** C-fix-2: ignore window events within 250ms of the last one acted on. */
+        const val EVENT_DEBOUNCE_MS = 250L
+        /** B-fix-3: wait this long before declaring YT Music actually displaced. */
+        const val FOREGROUND_GRACE_MS = 1_000L
+        /** B-fix-4: wait this long for YT Music to come back after restore. */
+        const val FOREGROUND_RESTORE_TIMEOUT_MS = 2_500L
 
         private val running = java.util.concurrent.atomic.AtomicBoolean(false)
         private val pending = AtomicReference<PostLaunchAction?>(null)
         private val actionDone = OneShot()
+        private val lastActionResult = AtomicReference<A11yActionResult?>(null)
+        private val lastQueuedAction = AtomicReference<PostLaunchAction?>(null)
 
         fun isRunning(): Boolean = running.get()
 
         fun queueAction(action: PostLaunchAction) {
             pending.set(action)
             actionDone.reset()
-            Logger.i("A11y", "Action queued (static)", mapOf("playlistId" to action.expectedPlaylistId))
+            lastActionResult.set(null)
+            lastQueuedAction.set(action)
+            Logger.i("A11y", "Action queued (static)", mapOf(
+                "playlistId" to action.expectedPlaylistId,
+                "runId" to (action.runId ?: ""),
+            ))
         }
 
+        /**
+         * Legacy boolean API — returns true if the action coroutine ran to
+         * completion within [timeoutMs]. Kept for callers that don't need the
+         * structured trace; new callers should prefer [awaitActionResult].
+         */
         suspend fun awaitActionComplete(timeoutMs: Long): Boolean {
             return withTimeoutOrNull(timeoutMs) {
                 actionDone.await()
                 true
             } ?: false
         }
+
+        /**
+         * Wait up to [timeoutMs] for the queued [PostLaunchAction] to run.
+         * On timeout (the A11y service never fired, e.g. YT Music never
+         * came to foreground) returns a synthetic [A11yActionResult] with
+         * `started=false` so the caller can attach SOMETHING to the
+         * SelfTestRunRecord.
+         */
+        suspend fun awaitActionResult(timeoutMs: Long): A11yActionResult {
+            val ok = awaitActionComplete(timeoutMs)
+            val result = lastActionResult.get()
+            if (result != null) return result
+            val queued = lastQueuedAction.get()
+            val startMs = queued?.queuedAtMs ?: System.currentTimeMillis()
+            return A11yActionResult(
+                completed = ok,
+                started = false,
+                totalDurationMs = System.currentTimeMillis() - startMs,
+                steps = emptyList(),
+                foregroundPkgAtStart = null,
+                errorMessage = if (ok) null else "Action coroutine never started (no YT Music window event within ${timeoutMs}ms)",
+            )
+        }
     }
+}
+
+/**
+ * Mutable per-action trace collected by [YtmAccessibilityService.runAction].
+ * Each call to [step] records a single entry. The final result is published
+ * via [YtmAccessibilityService.Companion.lastActionResult] before
+ * [YtmAccessibilityService.Companion.actionDone] is signalled.
+ */
+private class ActionTrace(
+    val runId: String?,
+    val startMs: Long,
+) {
+    private val steps = ArrayList<A11yStep>(16)
+    @Volatile var foregroundPkgAtStart: String? = null
+    @Volatile var errorMessage: String? = null
+    @Volatile var started: Boolean = false
+
+    /**
+     * Time [body], record its outcome, and return whatever the body returned.
+     * If [body] throws, the step is recorded as `ok=false` and the throwable
+     * propagates so the caller's outer try/catch can handle it.
+     */
+    suspend inline fun step(name: String, crossinline body: suspend () -> Boolean): Boolean {
+        val start = System.currentTimeMillis()
+        var ok = false
+        try {
+            ok = body()
+            return ok
+        } finally {
+            steps += A11yStep(
+                name = name,
+                startedAtMs = start,
+                endedAtMs = System.currentTimeMillis(),
+                ok = ok,
+            )
+        }
+    }
+
+    /**
+     * Variant for steps that don't naturally return a Boolean (e.g. fire-and-
+     * forget dismiss-dialog sweeps). [ok] is recorded as-is.
+     */
+    suspend inline fun step(name: String, ok: Boolean, crossinline body: suspend () -> Unit) {
+        val start = System.currentTimeMillis()
+        try {
+            body()
+        } finally {
+            steps += A11yStep(
+                name = name,
+                startedAtMs = start,
+                endedAtMs = System.currentTimeMillis(),
+                ok = ok,
+            )
+        }
+    }
+
+    fun toResult(completed: Boolean): A11yActionResult = A11yActionResult(
+        completed = completed,
+        started = started,
+        totalDurationMs = System.currentTimeMillis() - startMs,
+        steps = steps.toList(),
+        foregroundPkgAtStart = foregroundPkgAtStart,
+        errorMessage = errorMessage,
+    )
 }
 
 /** Single-shot completion latch that can be reset between uses. */

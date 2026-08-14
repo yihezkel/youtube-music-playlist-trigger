@@ -14,9 +14,29 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!--
+        WRITE_SECURE_SETTINGS lets the app re-enable its own Accessibility
+        service (Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) if Android
+        ever turns it off — e.g. after a reboot on some OEMs, after an OS
+        update, after the user clears app data, or after a sideload-install
+        of a new version. This is a 'signature|privileged' permission so a
+        normal install won't get it; the user must grant it once via adb:
+            adb shell pm grant com.jasonschoenbrun.ytmtrigger \
+                android.permission.WRITE_SECURE_SETTINGS
+        Once granted, the grant persists across reboots and app updates.
+        The 'tools:ignore' is required to suppress the lint warning that
+        regular apps can't normally hold this permission.
+    -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <queries>
         <package android:name="com.google.android.apps.youtube.music" />
@@ -77,8 +97,31 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <service
+            android:name=".playback.MediaSessionListenerService"
+            android:exported="false"
+            android:label="@string/media_listener_service_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".selftest.SelfTestAlertService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="self-test failure audio alert TTS" />
+        </service>
+
         <receiver
             android:name=".alarm.TriggerReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".selftest.SelfTestReceiver"
             android:exported="false" />
 
         <receiver

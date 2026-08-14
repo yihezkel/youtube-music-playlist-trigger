@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
+import com.jasonschoenbrun.ytmtrigger.log.EvalFix
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import com.jasonschoenbrun.ytmtrigger.ui.MainActivity
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -27,7 +29,8 @@ object AlarmScheduler {
         if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
             Logger.w("Alarm", "Cannot schedule exact alarms - permission missing")
         }
-        // Cancel previous before re-arming all
+        // C-fix-3: cancel previous before re-arming all so we never have two
+        // pending intents for the same schedule (which could double-fire).
         for (s in schedules) cancel(context, s.id)
         for (s in schedules) if (s.enabled) scheduleNext(context, s)
     }
@@ -42,21 +45,56 @@ object AlarmScheduler {
             Logger.w("Alarm", "Could not compute next trigger", mapOf("id" to schedule.id))
             return
         }
+        // C-fix-3 (belt-and-braces): explicitly cancel any pre-existing
+        // PendingIntent for this schedule before re-arming. rescheduleAll
+        // already does this, but scheduleNext is also called on its own.
+        cancel(context, schedule.id)
         val pi = pendingIntent(context, schedule.id, nextMs, create = true) ?: run {
             Logger.e("Alarm", "PendingIntent null", mapOf("id" to schedule.id))
             return
         }
         val am = context.getSystemService(AlarmManager::class.java) ?: return
+        // H-fix-2: use setAlarmClock instead of setExactAndAllowWhileIdle.
+        // The user-visible alarm-clock path is the highest-priority wakeup
+        // available to apps and survives doze, restricted standby, and
+        // foreground-service throttling. Speculative; eval-traced so we can
+        // decide whether to keep it.
+        EvalFix.start("H-fix-2-setAlarmClock", mapOf(
+            "id" to schedule.id,
+            "deltaMin" to ((nextMs - System.currentTimeMillis()) / 60000).toString(),
+        ))
         try {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextMs, pi)
+            val showIntent = PendingIntent.getActivity(
+                context, schedule.id.hashCode(),
+                Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+            val info = AlarmManager.AlarmClockInfo(nextMs, showIntent)
+            am.setAlarmClock(info, pi)
+            EvalFix.end("H-fix-2-setAlarmClock", success = true)
+            // E-fix-1: include daysOfWeek + targetTime + actual computed
+            // trigger so we can verify the schedule fires on the correct day.
             Logger.i("Alarm", "Scheduled", mapOf(
                 "id" to schedule.id,
                 "name" to schedule.name,
                 "at" to FMT.format(Date(nextMs)),
                 "inMin" to ((nextMs - System.currentTimeMillis()) / 60000).toString(),
+                "daysOfWeek" to schedule.daysOfWeek.joinToString(","),
+                "localTime" to schedule.localTime().toString(),
             ))
         } catch (se: SecurityException) {
-            Logger.e("Alarm", "Exact alarm denied", t = se)
+            EvalFix.end("H-fix-2-setAlarmClock", success = false, mapOf("err" to "SecurityException"))
+            Logger.e("Alarm", "setAlarmClock denied", t = se)
+            // Fall back to the previous behaviour so we still schedule something.
+            try {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextMs, pi)
+                Logger.w("Alarm", "Fell back to setExactAndAllowWhileIdle")
+            } catch (se2: SecurityException) {
+                Logger.e("Alarm", "Fallback also denied", t = se2)
+            }
+        } catch (t: Throwable) {
+            EvalFix.end("H-fix-2-setAlarmClock", success = false, mapOf("err" to (t.message ?: "")))
+            Logger.e("Alarm", "setAlarmClock failed", t = t)
         }
     }
 

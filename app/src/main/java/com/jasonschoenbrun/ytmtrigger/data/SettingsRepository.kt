@@ -23,6 +23,27 @@ data class AppSettings(
     val defaultVolumePercent: Int? = 100,
     val defaultEnableShuffle: Boolean = true,
     val defaultSkipFirstTrack: Boolean = true,
+    /** Run a non-destructive end-to-end self-test every 6 hours. */
+    val selfTestEnabled: Boolean = true,
+    /** Israeli observance = single-day Yom Tov (default). When false the
+     *  Diaspora two-day table is used. UI exposes the inverse as
+     *  "Use Diaspora dates" so the default-OFF semantics read naturally. */
+    val israeliObservance: Boolean = true,
+    /** Playlist URL the self-test uses (must be a valid YT Music playlist).
+     *  When null, the self-test picks the first default playlist. */
+    val selfTestPlaylistUrl: String? = null,
+    /** Timestamp (epoch ms) of the last successful self-test, or 0. */
+    val lastSelfTestSuccessMs: Long = 0,
+    /** Strategy name (A/B/C) that succeeded in the last successful test. */
+    val lastSelfTestSuccessStrategy: String? = null,
+    /** Timestamp (epoch ms) of the last failed self-test (alert played), or 0. */
+    val lastSelfTestFailureMs: Long = 0,
+    /** Human-readable summary of the last failure, or null. */
+    val lastSelfTestFailureReason: String? = null,
+    /** Timestamp (epoch ms) of the last skipped self-test, or 0. */
+    val lastSelfTestSkipMs: Long = 0,
+    /** Reason a self-test was last skipped (Shabat/Yom Tov/music playing), or null. */
+    val lastSelfTestSkipReason: String? = null,
 )
 
 private val SETTINGS_KEY = stringPreferencesKey("settings_json")

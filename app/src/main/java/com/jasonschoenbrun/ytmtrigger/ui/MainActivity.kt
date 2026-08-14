@@ -13,6 +13,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jasonschoenbrun.ytmtrigger.BuildConfig
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.data.PlaylistUrl
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
@@ -71,12 +75,49 @@ class MainActivity : ComponentActivity() {
             notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface { AppNav() }
+            MaterialTheme(colorScheme = AppDarkColors) {
+                Surface(color = MaterialTheme.colorScheme.background) { AppNav() }
             }
         }
     }
 }
+
+private val BrandRed          = Color(0xFFFF1744)
+private val BrandRedContainer = Color(0xFF8B0017)
+private val Accent            = Color(0xFFB59CFF)
+private val AccentContainer   = Color(0xFF4A3E80)
+private val BgNeutral         = Color(0xFF101013)
+private val SurfaceNeutral    = Color(0xFF15151A)
+private val SurfaceElevated   = Color(0xFF1F1F26)
+private val SurfaceMuted      = Color(0xFF2A2A33)
+private val OnSurface         = Color(0xFFEBE6F0)
+private val OnSurfaceMuted    = Color(0xFFB5B0BD)
+private val OutlineMuted      = Color(0xFF3A3A45)
+
+private val AppDarkColors = darkColorScheme(
+    primary             = BrandRed,
+    onPrimary           = Color.White,
+    primaryContainer    = BrandRedContainer,
+    onPrimaryContainer  = Color(0xFFFFD9DC),
+    secondary           = Accent,
+    onSecondary         = Color.Black,
+    secondaryContainer  = AccentContainer,
+    onSecondaryContainer = Color(0xFFE6DEFF),
+    tertiary            = Color(0xFF7FE3C4),
+    onTertiary          = Color.Black,
+    background          = BgNeutral,
+    onBackground        = OnSurface,
+    surface             = SurfaceNeutral,
+    onSurface           = OnSurface,
+    surfaceVariant      = SurfaceMuted,
+    onSurfaceVariant    = OnSurfaceMuted,
+    outline             = OutlineMuted,
+    outlineVariant      = Color(0xFF2A2A33),
+    error               = Color(0xFFFF6E7C),
+    onError             = Color.Black,
+    errorContainer      = Color(0xFF6B0018),
+    onErrorContainer    = Color(0xFFFFD9DD),
+)
 
 @Composable
 fun AppNav() {
@@ -107,60 +148,189 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
     val repo = remember { ScheduleRepository.get(ctx) }
     val schedules by repo.flow.collectAsStateWithLifecycle()
     val perms = rememberPermissionState()
-    Scaffold(topBar = { TopAppBar(title = { Text("YTM Trigger") }) }) { inner ->
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        "YTM Trigger",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+    ) { inner ->
         Column(
-            Modifier.padding(inner).padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.padding(inner).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             PermsCard(perms)
-            ElevatedCard {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Trigger now", style = MaterialTheme.typography.titleMedium)
-                    if (schedules.isEmpty()) {
-                        Text("Add a schedule first to define which playlists to use.")
-                    } else {
+            SectionCard(
+                title = "Trigger now",
+                icon = Icons.Default.PlayArrow,
+            ) {
+                if (schedules.isEmpty()) {
+                    Text(
+                        "Add a schedule first to define which playlists to use.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (s in schedules) {
                             Button(
                                 onClick = {
                                     Logger.i("UI", "Manual trigger", mapOf("scheduleId" to s.id))
                                     PlaybackTriggerService.startManual(ctx, s.id)
+                                    // B-fix-5: bow out of MainActivity so it can't sit on top
+                                    // of YT Music after the launch intent fires. The trigger
+                                    // service routes through KeyguardDismissActivity which
+                                    // will become the top activity.
+                                    (ctx as? android.app.Activity)?.finish()
                                 },
+                                shape = RoundedCornerShape(14.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Icon(Icons.Default.PlayArrow, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Play '${s.name}' now")
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    "Play '${s.name}'",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
                             }
                         }
                     }
                 }
             }
-            ElevatedCard {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Next scheduled triggers", style = MaterialTheme.typography.titleMedium)
-                    val fmt = SimpleDateFormat("EEE MMM d, HH:mm", Locale.US)
-                    if (schedules.none { it.enabled }) {
-                        Text("No enabled schedules.")
-                    } else {
+            SectionCard(
+                title = "Next scheduled triggers",
+                icon = Icons.Default.Schedule,
+            ) {
+                val fmt = SimpleDateFormat("EEE MMM d, HH:mm", Locale.US)
+                if (schedules.none { it.enabled }) {
+                    Text(
+                        "No enabled schedules.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         for (s in schedules.filter { it.enabled }) {
                             val next = AlarmScheduler.computeNextTriggerMs(s)
-                            Text("${s.name}: ${if (next != null) fmt.format(Date(next)) else "—"}")
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    s.name,
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    if (next != null) fmt.format(Date(next)) else "—",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
             }
-            FilledTonalButton(onClick = { onNav(Screen.Schedules) }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(8.dp)); Text("Schedules")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                NavTile("Schedules", Icons.Default.Schedule, Modifier.weight(1f)) { onNav(Screen.Schedules) }
+                NavTile("Logs", Icons.Default.List, Modifier.weight(1f)) { onNav(Screen.Logs) }
             }
-            FilledTonalButton(onClick = { onNav(Screen.Logs) }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.List, null); Spacer(Modifier.width(8.dp)); Text("Logs")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                NavTile("Self-test", Icons.Default.BugReport, Modifier.weight(1f)) { onNav(Screen.SelfTest) }
+                NavTile("Settings", Icons.Default.Settings, Modifier.weight(1f)) { onNav(Screen.Settings) }
             }
-            FilledTonalButton(onClick = { onNav(Screen.SelfTest) }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.BugReport, null); Spacer(Modifier.width(8.dp)); Text("Self-test")
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun SectionCard(
+    title: String,
+    icon: ImageVector? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = SurfaceElevated,
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    Icon(
+                        icon, null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
-            FilledTonalButton(onClick = { onNav(Screen.Settings) }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Settings, null); Spacer(Modifier.width(8.dp)); Text("Default settings")
+            content()
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NavTile(
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    ElevatedCard(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = SurfaceElevated),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+        modifier = modifier.height(108.dp),
+    ) {
+        Column(
+            Modifier.fillMaxSize().padding(18.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    icon, null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
             }
+            Text(
+                label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }
@@ -216,51 +386,96 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
 @Composable
 private fun ScheduleCard(schedule: Schedule, onClick: () -> Unit, onToggle: (Boolean) -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val containerColor = if (schedule.enabled) cs.primaryContainer else cs.surfaceVariant
-    val onContainer = if (schedule.enabled) cs.onPrimaryContainer else cs.onSurfaceVariant
     val time = "%02d:%02d".format(schedule.timeMinutes / 60, schedule.timeMinutes % 60)
     val nextMs = if (schedule.enabled) AlarmScheduler.computeNextTriggerMs(schedule) else null
     val nextLabel = nextMs?.let {
         val fmt = java.text.SimpleDateFormat("EEE MMM d, HH:mm", java.util.Locale.US)
         "Next: ${fmt.format(java.util.Date(it))}"
     } ?: if (schedule.enabled) "Next: —" else "Disabled"
+    val titleColor = if (schedule.enabled) cs.onSurface else cs.onSurfaceVariant
 
     ElevatedCard(
         onClick = onClick,
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor, contentColor = onContainer),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = SurfaceElevated),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(schedule.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(nextLabel, style = MaterialTheme.typography.bodySmall)
-                }
-                Text(time, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Light)
-                Spacer(Modifier.width(12.dp))
-                Switch(checked = schedule.enabled, onCheckedChange = onToggle)
-            }
-            DayOfWeekStrip(selected = schedule.daysOfWeek, onClick = null)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.QueueMusic, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "${schedule.playlistUrls.size} playlist" + if (schedule.playlistUrls.size == 1) "" else "s",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                if (schedule.enableShuffle) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(
+                Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(if (schedule.enabled) cs.primary else cs.outlineVariant)
+            )
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            schedule.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = titleColor,
+                        )
+                        Text(
+                            nextLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        time,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Light,
+                        color = titleColor,
+                    )
                     Spacer(Modifier.width(12.dp))
-                    Icon(Icons.Default.Shuffle, null, modifier = Modifier.size(16.dp))
+                    Switch(checked = schedule.enabled, onCheckedChange = onToggle)
                 }
-                if (schedule.skipFirstTrack) {
-                    Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(16.dp))
-                }
-                schedule.targetVolumePercent?.let {
-                    Spacer(Modifier.width(12.dp))
-                    Icon(Icons.Default.VolumeUp, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("$it%", style = MaterialTheme.typography.bodySmall)
+                DayOfWeekStrip(selected = schedule.daysOfWeek, onClick = null)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.QueueMusic, null,
+                        modifier = Modifier.size(16.dp),
+                        tint = cs.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "${schedule.playlistUrls.size} playlist" +
+                            if (schedule.playlistUrls.size == 1) "" else "s",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                    )
+                    if (schedule.enableShuffle) {
+                        Spacer(Modifier.width(12.dp))
+                        Icon(
+                            Icons.Default.Shuffle, null,
+                            modifier = Modifier.size(16.dp),
+                            tint = cs.onSurfaceVariant,
+                        )
+                    }
+                    if (schedule.skipFirstTrack) {
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            Icons.Default.SkipNext, null,
+                            modifier = Modifier.size(16.dp),
+                            tint = cs.onSurfaceVariant,
+                        )
+                    }
+                    schedule.targetVolumePercent?.let {
+                        Spacer(Modifier.width(12.dp))
+                        Icon(
+                            Icons.Default.VolumeUp, null,
+                            modifier = Modifier.size(16.dp),
+                            tint = cs.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "$it%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -291,42 +506,25 @@ private fun DayOfWeekStrip(
             val isSel = d.value in selected
             val bg = if (isSel) cs.primary else Color.Transparent
             val fg = if (isSel) cs.onPrimary else cs.onSurfaceVariant
-            val border = if (isSel) cs.primary else cs.outlineVariant
+            val borderStroke = if (isSel) null else BorderStroke(1.dp, cs.outline)
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(36.dp)
+                    .height(38.dp)
                     .clip(CircleShape)
                     .background(bg)
+                    .then(borderStroke?.let { Modifier.border(it, CircleShape) } ?: Modifier)
                     .then(
                         if (onClick != null) Modifier.clickable { onClick(d) } else Modifier
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (!isSel) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clip(CircleShape)
-                            .background(Color.Transparent),
-                    )
-                }
                 Text(
                     letter,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = fg,
                 )
-                // outline ring for unselected (drawn via stroked Surface workaround):
-                if (!isSel) {
-                    androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
-                        drawCircle(
-                            color = border,
-                            radius = (size.minDimension / 2f) - 1f,
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),
-                        )
-                    }
-                }
             }
         }
     }
@@ -364,25 +562,30 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                         onDone()
                     }) { Icon(Icons.Default.Delete, null) }
                 }
-                IconButton(onClick = {
-                    val updated = initial.copy(
-                        name = name.ifBlank { "Schedule" },
-                        enabled = enabled,
-                        timeMinutes = timeMin,
-                        daysOfWeek = days.toSet(),
-                        playlistUrls = urls.toList(),
-                        enableShuffle = enableShuffle,
-                        skipFirstTrack = skipFirst,
-                        targetVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
-                        autoStopMinutes = stopMinText.toIntOrNull()?.coerceAtLeast(1),
-                    )
-                    repo.upsert(updated)
-                    val all = repo.all().toMutableList()
-                    val idx = all.indexOfFirst { it.id == updated.id }
-                    if (idx >= 0) all[idx] = updated else all.add(updated)
-                    AlarmScheduler.rescheduleAll(ctx, all)
-                    onDone()
-                }) { Icon(Icons.Default.Check, null) }
+                IconButton(
+                    onClick = {
+                        val updated = initial.copy(
+                            name = name.ifBlank { "Schedule" },
+                            enabled = enabled,
+                            timeMinutes = timeMin,
+                            daysOfWeek = days.toSet(),
+                            playlistUrls = urls.toList(),
+                            enableShuffle = enableShuffle,
+                            skipFirstTrack = skipFirst,
+                            targetVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
+                            autoStopMinutes = stopMinText.toIntOrNull()?.coerceAtLeast(1),
+                        )
+                        repo.upsert(updated)
+                        val all = repo.all().toMutableList()
+                        val idx = all.indexOfFirst { it.id == updated.id }
+                        if (idx >= 0) all[idx] = updated else all.add(updated)
+                        AlarmScheduler.rescheduleAll(ctx, all)
+                        onDone()
+                    },
+                    // E-fix-2: scheduling needs at least one day; otherwise the
+                    // alarm never fires.
+                    enabled = days.isNotEmpty(),
+                ) { Icon(Icons.Default.Check, null) }
             },
         )
     }) { inner ->
@@ -435,6 +638,13 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                     if (days.contains(d.value)) days.remove(d.value) else days.add(d.value)
                 },
             )
+            if (days.isEmpty()) {
+                Text(
+                    "Pick at least one day — save is disabled until then.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Text("Playlists", style = MaterialTheme.typography.titleSmall)
             for ((i, u) in urls.withIndex()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -585,9 +795,37 @@ fun SelfTestScreen(onBack: () -> Unit) {
             label = "Accessibility service running",
             ok = com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService.isRunning(),
             details = "Required to press Play, enable shuffle, skip first track, and dismiss Premium upsells.",
-            actionLabel = if (!com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService.isRunning()) "Open Accessibility" else null,
+            actionLabel = if (!com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService.isRunning()) {
+                if (com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer.hasWriteSecureSettings(ctx)) "Auto-enable"
+                else "Open Accessibility"
+            } else null,
             action = {
-                ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                val enf = com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
+                if (enf.hasWriteSecureSettings(ctx)) {
+                    enf.ensureEnabled(ctx)
+                } else {
+                    ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            },
+        )
+        // Auto-heal diag row: shows whether WRITE_SECURE_SETTINGS has been
+        // granted via adb, so the app can re-enable its own Accessibility
+        // service if Android disables it (after reboot / OS update / etc.).
+        val hasSecureWrite = com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer.hasWriteSecureSettings(ctx)
+        val grantCmd = com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer.adbGrantCommand(ctx)
+        checks += SelfTestRow(
+            label = "Accessibility auto-heal",
+            ok = hasSecureWrite,
+            details = if (hasSecureWrite) {
+                "WRITE_SECURE_SETTINGS granted — the app will automatically re-enable the Accessibility service if Android ever disables it."
+            } else {
+                "Not granted. Without this, you'll need to re-enable the Accessibility service manually if Android ever disables it. To grant once (persists across reboots and updates), run this on a computer with adb:\n\n$grantCmd"
+            },
+            actionLabel = if (!hasSecureWrite) "Copy adb command" else null,
+            action = {
+                val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("adb grant", grantCmd))
+                android.widget.Toast.makeText(ctx, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
             },
         )
 
@@ -651,6 +889,9 @@ fun SelfTestScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(8.dp))
 
+            // Background self-test history + manual trigger.
+            BackgroundSelfTestCard()
+
             // Vendor-specific advice card. Always shown — even if OS-level
             // signals are green — because vendors layer their own restriction
             // systems that don't expose APIs.
@@ -659,6 +900,100 @@ fun SelfTestScreen(onBack: () -> Unit) {
                     advice = advice,
                     osLevelOk = bgStatus.value?.osLevelOk == true,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackgroundSelfTestCard() {
+    val ctx = LocalContext.current
+    val repo = remember { SettingsRepository.get(ctx) }
+    val s by repo.flow.collectAsStateWithLifecycle()
+    val fmt = SimpleDateFormat("EEE MMM d, HH:mm:ss", Locale.US)
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Background self-test", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Runs every 6 hours. Verifies end-to-end that YouTube Music can be " +
+                    "launched and starts playing. Volume is muted during the test.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                if (s.selfTestEnabled) "Currently enabled." else "Currently disabled — toggle in Default settings.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (s.selfTestEnabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error,
+            )
+
+            // Inlined three rows: local @Composable funs are unsupported on
+            // some Compose-Kotlin versions, so just emit them directly.
+            for ((label, ms, extra) in listOf(
+                Triple("Last success", s.lastSelfTestSuccessMs, s.lastSelfTestSuccessStrategy),
+                Triple("Last failure", s.lastSelfTestFailureMs, s.lastSelfTestFailureReason),
+                Triple("Last skip",    s.lastSelfTestSkipMs,    s.lastSelfTestSkipReason),
+            )) {
+                if (ms <= 0) {
+                    Text("$label: never", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text(
+                        "$label: ${fmt.format(Date(ms))}" + (extra?.let { " — $it" } ?: ""),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                FilledTonalButton(
+                    onClick = {
+                        Logger.i("UI", "Manual self-test requested")
+                        com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver.fireManual(ctx)
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Run now")
+                }
+                FilledTonalButton(
+                    onClick = {
+                        Logger.i("UI", "Stop self-test alert")
+                        com.jasonschoenbrun.ytmtrigger.selftest.SelfTestAlertService.stop(ctx)
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.Stop, null); Spacer(Modifier.width(6.dp)); Text("Stop alert")
+                }
+            }
+            // Second row: export the structured per-run records. Tap to share
+            // the 20 most-recent SelfTestRunRecord entries as pretty JSON.
+            FilledTonalButton(
+                onClick = {
+                    Logger.i("UI", "Export self-test runs requested")
+                    val f = com.jasonschoenbrun.ytmtrigger.diag.SelfTestRunStore
+                        .exportRecentAsJson(ctx, max = 20, appVersion = BuildConfig.VERSION_NAME)
+                    if (f == null) {
+                        android.widget.Toast.makeText(
+                            ctx, "No self-test runs recorded yet", android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                        return@FilledTonalButton
+                    }
+                    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/json"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    ctx.startActivity(
+                        Intent.createChooser(send, "Share self-test runs")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Export last 20 runs (JSON)")
             }
         }
     }
@@ -772,9 +1107,16 @@ private fun PermsCard(perms: PermissionState) {
                 }) { Text("Allow exact alarms") }
             }
             if (!perms.accessibility) {
-                Button(onClick = {
-                    ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }) { Text("Enable Accessibility service (YTM Trigger Helper)") }
+                val enf = com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
+                if (enf.hasWriteSecureSettings(ctx)) {
+                    Button(onClick = { enf.ensureEnabled(ctx) }) {
+                        Text("Auto-enable Accessibility service")
+                    }
+                } else {
+                    Button(onClick = {
+                        ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }) { Text("Enable Accessibility service (YTM Trigger Helper)") }
+                }
             }
             if (!perms.batteryOptOff) {
                 Button(onClick = {
@@ -864,6 +1206,18 @@ fun SettingsScreen(onBack: () -> Unit) {
     var skipFirst by remember(settings.defaultSkipFirstTrack) {
         mutableStateOf(settings.defaultSkipFirstTrack)
     }
+    var selfTestEnabled by remember(settings.selfTestEnabled) {
+        mutableStateOf(settings.selfTestEnabled)
+    }
+    // Storage uses `israeliObservance` (default = true = Israel). The UI
+    // exposes the inverse — "Use Diaspora dates" — so the default-OFF state
+    // reads naturally.
+    var useDiasporaDates by remember(settings.israeliObservance) {
+        mutableStateOf(!settings.israeliObservance)
+    }
+    var selfTestUrlText by remember(settings.selfTestPlaylistUrl) {
+        mutableStateOf(settings.selfTestPlaylistUrl.orEmpty())
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -877,8 +1231,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                             defaultVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
                             defaultEnableShuffle = enableShuffle,
                             defaultSkipFirstTrack = skipFirst,
+                            selfTestEnabled = selfTestEnabled,
+                            israeliObservance = !useDiasporaDates,
+                            selfTestPlaylistUrl = selfTestUrlText.trim().ifBlank { null },
                         )
                     }
+                    // Apply self-test toggle immediately so the user doesn't
+                    // have to wait for the next launch for it to take effect.
+                    com.jasonschoenbrun.ytmtrigger.selftest.SelfTestScheduler
+                        .ensureScheduled(ctx, selfTestEnabled)
                     onBack()
                 }) { Icon(Icons.Default.Check, null) }
             },
@@ -924,6 +1285,42 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Text("Default: skip first track", Modifier.weight(1f))
                 Switch(checked = skipFirst, onCheckedChange = { skipFirst = it })
             }
+
+            Divider(Modifier.padding(vertical = 8.dp))
+            Text("Self-test", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Runs every 6 hours, silently. Plays an audible alert if YouTube Music " +
+                    "playback can't be started. Skipped on Shabat and Yom Tov.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Enable self-test", Modifier.weight(1f))
+                Switch(checked = selfTestEnabled, onCheckedChange = { selfTestEnabled = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Use Diaspora dates")
+                    Text(
+                        "Off (default): Israel single-day Yom Tov. " +
+                            "On: two-day Diaspora observance.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = useDiasporaDates, onCheckedChange = { useDiasporaDates = it })
+            }
+            OutlinedTextField(
+                value = selfTestUrlText,
+                onValueChange = { selfTestUrlText = it },
+                label = { Text("Self-test playlist URL (blank = first default)") },
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    Text(
+                        "Used only for the silent self-test. The volume is muted to 0 " +
+                            "during the test and music is paused as soon as it starts."
+                    )
+                },
+            )
         }
     }
 }
