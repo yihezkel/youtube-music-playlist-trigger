@@ -53,11 +53,13 @@ class YtmAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         running.set(true)
+        instance.set(this)
         Logger.i("A11y", "Service connected")
     }
 
     override fun onDestroy() {
         running.set(false)
+        instance.compareAndSet(this, null)
         scope.cancel()
         Logger.i("A11y", "Service destroyed")
         super.onDestroy()
@@ -642,12 +644,30 @@ class YtmAccessibilityService : AccessibilityService() {
         const val FOREGROUND_RESTORE_TIMEOUT_MS = 2_500L
 
         private val running = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val instance = AtomicReference<YtmAccessibilityService?>(null)
         private val pending = AtomicReference<PostLaunchAction?>(null)
         private val actionDone = OneShot()
         private val lastActionResult = AtomicReference<A11yActionResult?>(null)
         private val lastQueuedAction = AtomicReference<PostLaunchAction?>(null)
 
         fun isRunning(): Boolean = running.get()
+
+        /**
+         * The package that owns the current foreground window, as seen by the
+         * accessibility service.
+         *
+         * This is the authoritative source and needs no extra permission: the
+         * service is already bound and `rootInActiveWindow` reflects whatever
+         * the user is looking at. The UsageStats-based alternative silently
+         * returns nothing unless PACKAGE_USAGE_STATS is granted, and that is
+         * an appop no ordinary app can grant itself (`AppOpsManager.setMode`
+         * requires signature-level MANAGE_APP_OPS_MODES).
+         *
+         * Returns null only when the service isn't bound.
+         */
+        fun currentForegroundPackage(): String? = try {
+            instance.get()?.rootInActiveWindow?.packageName?.toString()
+        } catch (_: Throwable) { null }
 
         fun queueAction(action: PostLaunchAction) {
             pending.set(action)

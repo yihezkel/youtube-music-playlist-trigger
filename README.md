@@ -58,6 +58,13 @@ The home screen shows a red "Setup needed" card whenever a required permission i
    ```
 
    The Self-test screen shows whether this is active and offers a "Copy adb command" button.
+7. **MediaSession probe (recommended)** — grant notification-listener access once so the app can read YouTube Music's actual playback state instead of inferring it from `AudioManager` (which reports *any* audio as playing):
+
+   ```sh
+   adb shell cmd notification allow_listener com.jasonschoenbrun.ytmtrigger/com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
+   ```
+
+   Unlike accessibility, this one cannot be self-healed: since Android 8 the `enabled_notification_listeners` secure setting is only a compatibility write-back, and the API that really grants access is `@SystemApi`. You can also enable it manually under Settings → Notifications → Device & app notifications.
 
 Then add at least one schedule from the **Schedules** screen.
 

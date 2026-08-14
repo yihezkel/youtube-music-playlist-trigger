@@ -828,6 +828,28 @@ fun SelfTestScreen(onBack: () -> Unit) {
                 android.widget.Toast.makeText(ctx, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
             },
         )
+        // MediaSession probe row. Without notification-listener access,
+        // getActiveSessions() throws and self-test run records log every
+        // mediaSession sample as "Unavailable", leaving only
+        // AudioManager.isMusicActive (true for ANY audio, not just YT Music).
+        val notifEnf = com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
+        val listenerOk = notifEnf.isEnabled(ctx)
+        val allowCmd = notifEnf.adbAllowCommand(ctx)
+        checks += SelfTestRow(
+            label = "MediaSession probe (notification access)",
+            ok = listenerOk,
+            details = if (listenerOk) {
+                "Granted — playback is verified directly from YouTube Music's media session."
+            } else {
+                "Not granted. Playback detection falls back to AudioManager, which reports ANY audio as playing, and self-test records can't show YouTube Music's real playback state. Unlike Accessibility, this cannot be self-healed — grant it once from a computer with adb:\n\n$allowCmd\n\nOr turn on notification access for YTM Trigger manually."
+            },
+            actionLabel = if (!listenerOk) "Copy adb command" else null,
+            action = {
+                val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("adb allow_listener", allowCmd))
+                android.widget.Toast.makeText(ctx, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+            },
+        )
 
         // Background-restriction (vendor-specific) check
         val bg = BackgroundRestrictionChecker.check(ctx)

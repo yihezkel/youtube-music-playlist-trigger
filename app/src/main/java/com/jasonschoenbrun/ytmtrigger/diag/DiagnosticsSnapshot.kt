@@ -20,6 +20,7 @@ import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionProbe
+import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
 
 /**
  * Captures a one-shot snapshot of every system signal we care about when
@@ -256,22 +257,8 @@ object DiagnosticsSnapshot {
     }
 
     private fun logForegroundApp(context: Context, origin: String) {
-        // Best-effort: requires PACKAGE_USAGE_STATS permission, which the user
-        // grants in Settings -> Special access. If denied, we log "no perm".
-        val usm = context.getSystemService(UsageStatsManager::class.java) ?: return
-        val now = System.currentTimeMillis()
-        val events = try { usm.queryEvents(now - 10_000, now) } catch (_: Throwable) { null }
-        if (events == null) { Logger.d(origin, "Diag: fg=noPerm"); return }
-        var lastPkg: String? = null
-        val ev = android.app.usage.UsageEvents.Event()
-        while (events.hasNextEvent()) {
-            events.getNextEvent(ev)
-            if (ev.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                ev.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
-                lastPkg = ev.packageName
-            }
-        }
-        Logger.i(origin, "Diag: foreground", mapOf("pkg" to (lastPkg ?: "unknown")))
+        val pkg = dataForegroundApp(context)
+        Logger.i(origin, "Diag: foreground", mapOf("pkg" to (pkg ?: "unknown")))
     }
 
     private fun logMediaSession(context: Context, origin: String) {
@@ -383,13 +370,11 @@ object DiagnosticsSnapshot {
     }
 
     private fun dataNotifListener(context: Context): NotifListenerData {
-        val enabled = try {
-            val s = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: ""
-            val expected = "${context.packageName}/${MediaSessionListenerService::class.java.name}"
-            s.split(":").any { it.equals(expected, ignoreCase = true) }
-        } catch (_: Throwable) { false }
+        // Ask the framework, not the `enabled_notification_listeners` secure
+        // setting: since Android 8 that setting is a compatibility write-back
+        // and can claim access we don't actually have. See NotifListenerEnforcer.
         return NotifListenerData(
-            enabledInSettings = enabled,
+            enabledInSettings = NotifListenerEnforcer.isEnabled(context),
             serviceConnected = MediaSessionListenerService.isListenerConnected(),
         )
     }
@@ -408,7 +393,17 @@ object DiagnosticsSnapshot {
         )
     }
 
+    /**
+     * The current foreground package.
+     *
+     * The accessibility service already knows this and needs no extra
+     * permission, so it is preferred. UsageStats is only a fallback: it
+     * silently returns nothing without PACKAGE_USAGE_STATS, which is an
+     * appop the app cannot grant itself, and that made this field empty in
+     * real run records.
+     */
     private fun dataForegroundApp(context: Context): String? {
+        YtmAccessibilityService.currentForegroundPackage()?.let { return it }
         val usm = context.getSystemService(UsageStatsManager::class.java) ?: return null
         val now = System.currentTimeMillis()
         val events = try { usm.queryEvents(now - 10_000, now) } catch (_: Throwable) { return null }

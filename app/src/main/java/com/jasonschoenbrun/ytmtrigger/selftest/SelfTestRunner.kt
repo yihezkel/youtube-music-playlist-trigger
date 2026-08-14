@@ -26,6 +26,7 @@ import com.jasonschoenbrun.ytmtrigger.log.EvalFix
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionProbe
+import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
 import com.jasonschoenbrun.ytmtrigger.playback.YtmLauncher
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
@@ -179,6 +180,20 @@ object SelfTestRunner {
                         "Enable accessibility for this app in system settings, or grant " +
                         "WRITE_SECURE_SETTINGS via adb so the app can self-heal.",
                     mapOf("grant" to A11yPermissionEnforcer.adbGrantCommand(context), "runId" to runId),
+                )
+            }
+            // Without the notification listener, MediaSessionProbe throws
+            // SecurityException and every mediaSessionTimeline sample in this
+            // run's record would read "Unavailable". Not fatal — playback
+            // detection falls back to AudioManager — but it costs us the more
+            // reliable signal. It can't be self-granted, so just wait for the
+            // bind if it's approved and record the gap if it isn't.
+            if (!NotifListenerEnforcer.awaitConnected(context)) {
+                Logger.w(
+                    "SelfTest",
+                    "Notification listener not connected — MediaSession timeline will be Unavailable; " +
+                        "falling back to AudioManager.isMusicActive",
+                    mapOf("allow" to NotifListenerEnforcer.adbAllowCommand(context), "runId" to runId),
                 )
             }
             for ((i, strat) in strategies.withIndex()) {
@@ -395,11 +410,16 @@ object SelfTestRunner {
     }
 
     /**
-     * Returns the package name of whatever app is currently foreground per
-     * UsageStats. Requires PACKAGE_USAGE_STATS to actually return non-null;
-     * returns null if the permission isn't granted (we don't fail the run).
+     * Returns the package name of whatever app is currently foreground.
+     *
+     * Prefers the accessibility service, which already knows this and needs
+     * no extra permission. Falls back to UsageStats, which silently yields
+     * nothing unless PACKAGE_USAGE_STATS is granted — an appop the app cannot
+     * grant itself. Relying on UsageStats alone made [ytmCameToForeground] a
+     * false negative on devices without that grant.
      */
     private fun currentForegroundApp(context: Context): String? {
+        YtmAccessibilityService.currentForegroundPackage()?.let { return it }
         return try {
             val usm = context.getSystemService(android.app.usage.UsageStatsManager::class.java) ?: return null
             val now = System.currentTimeMillis()

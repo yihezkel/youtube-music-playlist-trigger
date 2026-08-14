@@ -10,6 +10,7 @@ import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
 import com.jasonschoenbrun.ytmtrigger.selftest.SelfTestScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,15 @@ class YtmApp : Application() {
             A11yPermissionEnforcer.startWatching(this)
         } catch (t: Throwable) {
             Logger.e("App", "A11y enforcer setup failed", t = t)
+        }
+        // Same treatment for the notification listener, which is what lets
+        // MediaSessionProbe see whether YT Music is really playing. Unlike
+        // accessibility this cannot be self-granted, so we only record the
+        // state and surface the one-time command when it's missing.
+        try {
+            NotifListenerEnforcer.logState(this)
+        } catch (t: Throwable) {
+            Logger.e("App", "Notification-listener state check failed", t = t)
         }
         // Re-arm all schedules at app start (covers update-triggered restarts)
         appScope.launch {
