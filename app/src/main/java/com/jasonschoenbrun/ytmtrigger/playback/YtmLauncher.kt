@@ -4,12 +4,28 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Builds and dispatches the intent that opens a playlist in YouTube Music.
  * Shared by [PlaybackTriggerService] (which uses [Strategy.DeepLink]) and
  * the self-test (which uses [Strategy.LauncherThenDeepLink] and
  * [Strategy.CustomScheme] as fallbacks).
+ *
+ * ## Launch results
+ * The intent is not dispatched directly: it is handed to
+ * [KeyguardDismissActivity], which wakes the screen and forwards it. That
+ * means [launch] returning normally says nothing about whether YouTube Music
+ * actually started — the real `startActivity` happens later, in another
+ * component. A run record that reported `intentDispatchOk=true` while the
+ * forward threw `ActivityNotFoundException` is exactly how the dead
+ * `youtubemusic://` scheme went unnoticed.
+ *
+ * So [launch] returns a launch id, [KeyguardDismissActivity] reports the
+ * forward's outcome through [reportResult], and callers can wait for the
+ * truth with [awaitResult].
  */
 object YtmLauncher {
 
@@ -17,12 +33,22 @@ object YtmLauncher {
 
     enum class Strategy { DeepLink, LauncherThenDeepLink, CustomScheme }
 
+    /** Outcome of the real `startActivity` for one [launch] call. */
+    data class LaunchResult(val launchId: Long, val ok: Boolean, val error: String?)
+
+    private val seq = AtomicLong(0)
+    private val lastResult = AtomicReference<LaunchResult?>(null)
+
     /**
      * Launch YT Music using [strategy] for the playlist identified by
      * [playlistId]. The intent is wrapped in [KeyguardDismissActivity] so the
      * screen wakes & the keyguard is dismissed.
+     *
+     * Returns a launch id to pass to [awaitResult].
      */
-    fun launch(context: Context, playlistId: String, strategy: Strategy) {
+    fun launch(context: Context, playlistId: String, strategy: Strategy): Long {
+        val launchId = seq.incrementAndGet()
+        lastResult.set(null)
         val httpsUri = Uri.parse("https://music.youtube.com/playlist?list=$playlistId")
         val launch: Intent = when (strategy) {
             Strategy.DeepLink -> Intent(Intent.ACTION_VIEW, httpsUri).apply {
@@ -51,7 +77,17 @@ object YtmLauncher {
                 }
             }
             Strategy.CustomScheme -> {
-                val customUri = Uri.parse("youtubemusic://playlist?list=$playlistId")
+                // vnd.youtube.music:// — NOT youtubemusic://, which resolves to
+                // nothing on YT Music 9.x and made this strategy dead weight:
+                // `cmd package resolve-activity` reports "No activity found"
+                // and every attempt threw ActivityNotFoundException.
+                //
+                // This scheme is worth keeping as the third strategy precisely
+                // because it enters through a different activity than the https
+                // deep-link (.activities.MusicActivity vs
+                // .deeplink.MusicServiceDeepLinkActivity), so it is a genuinely
+                // independent path rather than a near-duplicate.
+                val customUri = Uri.parse("vnd.youtube.music://playlist?list=$playlistId")
                 Intent(Intent.ACTION_VIEW, customUri).apply {
                     setPackage(YT_MUSIC_PKG)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -63,17 +99,60 @@ object YtmLauncher {
         Logger.i("YtmLauncher", "Launching YT Music", mapOf(
             "strategy" to strategy.name,
             "uri" to launch.dataString.orEmpty(),
+            "launchId" to launchId.toString(),
         ))
         val keyguardIntent = Intent(context, KeyguardDismissActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             putExtra(KeyguardDismissActivity.EXTRA_LAUNCH, launch)
+            putExtra(KeyguardDismissActivity.EXTRA_LAUNCH_ID, launchId)
         }
         try {
             context.startActivity(keyguardIntent)
         } catch (t: Throwable) {
             Logger.e("YtmLauncher", "Failed to start KeyguardDismissActivity", t = t)
+            // Fall back to dispatching directly; report that outcome ourselves
+            // since KeyguardDismissActivity never ran to do it.
             runCatching { context.startActivity(launch) }
-                .onFailure { t2 -> Logger.e("YtmLauncher", "Direct launch also failed", t = t2) }
+                .onSuccess { reportResult(launchId, true, null) }
+                .onFailure { t2 ->
+                    Logger.e("YtmLauncher", "Direct launch also failed", t = t2)
+                    reportResult(launchId, false, describe(t2))
+                }
+        }
+        return launchId
+    }
+
+    /** Called by [KeyguardDismissActivity] once it has forwarded the intent. */
+    fun reportResult(launchId: Long, ok: Boolean, error: String?) {
+        lastResult.set(LaunchResult(launchId, ok, error))
+        if (!ok) {
+            Logger.w("YtmLauncher", "Launch reported failure", mapOf(
+                "launchId" to launchId.toString(),
+                "error" to (error ?: ""),
+            ))
         }
     }
+
+    /**
+     * Wait for the real dispatch outcome of [launchId].
+     *
+     * Returns null if no result arrived in [timeoutMs] — meaning
+     * [KeyguardDismissActivity] never got far enough to report, which is
+     * itself a failure worth recording rather than silently calling the
+     * dispatch successful.
+     */
+    suspend fun awaitResult(launchId: Long, timeoutMs: Long = DEFAULT_RESULT_TIMEOUT_MS): LaunchResult? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val r = lastResult.get()
+            if (r != null && r.launchId == launchId) return r
+            delay(50)
+        }
+        return null
+    }
+
+    private fun describe(t: Throwable): String = "${t.javaClass.simpleName}: ${t.message ?: ""}"
+
+    /** Forwarding happens in the activity's onCreate, normally well under 1s. */
+    const val DEFAULT_RESULT_TIMEOUT_MS: Long = 2_500L
 }

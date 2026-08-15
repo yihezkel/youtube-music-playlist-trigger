@@ -300,14 +300,32 @@ object SelfTestRunner {
         // Dispatch the launch intent. Capture any exception so the attempt
         // record clearly distinguishes "intent threw" from "intent dispatched
         // but playback never started."
-        // Declared as `var` because Kotlin cannot prove definite assignment
-        // across a try/catch: the try body may throw partway through, so a
-        // `val` assigned in both branches is rejected.
+        // Dispatch the launch intent. The real startActivity happens inside
+        // KeyguardDismissActivity, so wait for the outcome it reports rather
+        // than assuming this call returning means YT Music opened.
         var intentDispatchOk = false
         var intentException: String? = null
         try {
-            YtmLauncher.launch(context, playlistId, strategy)
-            intentDispatchOk = true
+            val launchId = YtmLauncher.launch(context, playlistId, strategy)
+            val result = YtmLauncher.awaitResult(launchId)
+            when {
+                result == null -> {
+                    intentException = "No launch result within " +
+                        "${YtmLauncher.DEFAULT_RESULT_TIMEOUT_MS}ms (KeyguardDismissActivity did not report)"
+                    Logger.w("SelfTest", "Launch result missing", mapOf(
+                        "strategy" to strategy.name, "runId" to runId,
+                    ))
+                }
+                result.ok -> intentDispatchOk = true
+                else -> {
+                    intentException = result.error
+                    Logger.e("SelfTest", "Launch intent failed", mapOf(
+                        "strategy" to strategy.name,
+                        "error" to (result.error ?: ""),
+                        "runId" to runId,
+                    ))
+                }
+            }
         } catch (t: Throwable) {
             Logger.e("SelfTest", "Launch intent threw", mapOf(
                 "strategy" to strategy.name, "runId" to runId,

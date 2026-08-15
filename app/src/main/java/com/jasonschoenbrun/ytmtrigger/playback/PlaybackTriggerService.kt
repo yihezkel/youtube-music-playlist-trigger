@@ -204,17 +204,32 @@ class PlaybackTriggerService : Service() {
     /** Launch strategies — used by both this service (DeepLink) and SelfTestRunner. */
     enum class LaunchStrategy { DeepLink, LauncherThenDeepLink, CustomScheme }
 
-    private fun launchYtMusic(choice: PlaylistPicker.Choice, strategy: LaunchStrategy) {
+    private suspend fun launchYtMusic(choice: PlaylistPicker.Choice, strategy: LaunchStrategy) {
         val mapped = when (strategy) {
             LaunchStrategy.DeepLink -> YtmLauncher.Strategy.DeepLink
             LaunchStrategy.LauncherThenDeepLink -> YtmLauncher.Strategy.LauncherThenDeepLink
             LaunchStrategy.CustomScheme -> YtmLauncher.Strategy.CustomScheme
         }
-        YtmLauncher.launch(this, choice.playlistId, mapped)
+        val launchId = YtmLauncher.launch(this, choice.playlistId, mapped)
+        // The real startActivity happens in KeyguardDismissActivity, so check
+        // what it reported. Without this a failed launch looks identical to a
+        // successful one that simply didn't start playing, and we'd burn the
+        // whole verification timeout before noticing.
+        val result = YtmLauncher.awaitResult(launchId)
+        when {
+            result == null -> Logger.w("PlaybackSvc", "No launch result reported", mapOf(
+                "strategy" to strategy.name, "playlistId" to choice.playlistId,
+            ))
+            !result.ok -> Logger.e("PlaybackSvc", "Launch intent failed", mapOf(
+                "strategy" to strategy.name,
+                "playlistId" to choice.playlistId,
+                "error" to (result.error ?: ""),
+            ))
+        }
     }
 
     /** Public so SelfTestRunner can drive launches through the same code path. */
-    internal fun launchForSelfTest(choice: PlaylistPicker.Choice, strategy: LaunchStrategy) {
+    internal suspend fun launchForSelfTest(choice: PlaylistPicker.Choice, strategy: LaunchStrategy) {
         launchYtMusic(choice, strategy)
     }
 

@@ -67,6 +67,7 @@ class KeyguardDismissActivity : Activity() {
         // Forward a launch intent if provided
         intent?.let {
             val launch = it.getParcelableExtra<Intent>(EXTRA_LAUNCH)
+            val launchId = it.getLongExtra(EXTRA_LAUNCH_ID, -1L)
             if (launch != null) {
                 // A-fix-5: ensure the launched activity gets its own task and
                 // is brought to front cleanly even if YT Music has stale state.
@@ -79,9 +80,26 @@ class KeyguardDismissActivity : Activity() {
                     "data" to (launch.dataString ?: ""),
                     "package" to (launch.`package` ?: ""),
                     "flagsHex" to "0x" + Integer.toHexString(launch.flags),
+                    "launchId" to launchId.toString(),
                 ))
+                // This is the real dispatch. Report its outcome so the caller
+                // records what actually happened instead of assuming success —
+                // an ActivityNotFoundException here used to be logged and then
+                // forgotten, leaving run records claiming the launch worked.
                 runCatching { startActivity(launch) }
-                    .onFailure { t -> Logger.e("KeyguardActivity", "Launch failed", t = t) }
+                    .onSuccess {
+                        if (launchId >= 0) YtmLauncher.reportResult(launchId, true, null)
+                    }
+                    .onFailure { t ->
+                        Logger.e("KeyguardActivity", "Launch failed", t = t)
+                        if (launchId >= 0) {
+                            YtmLauncher.reportResult(
+                                launchId,
+                                false,
+                                "${t.javaClass.simpleName}: ${t.message ?: ""}",
+                            )
+                        }
+                    }
             }
         }
         if (!wasLocked) {
@@ -108,6 +126,7 @@ class KeyguardDismissActivity : Activity() {
 
     companion object {
         const val EXTRA_LAUNCH = "launchIntent"
+        const val EXTRA_LAUNCH_ID = "launchId"
         // 3 seconds: long enough for keyguard dismiss + launched activity to
         // claim focus, short enough that the user doesn't notice an invisible
         // shim activity if the launch fails.
