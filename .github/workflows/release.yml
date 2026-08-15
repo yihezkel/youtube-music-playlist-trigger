@@ -28,6 +28,13 @@ jobs:
       - name: Grant gradlew execute permission
         run: chmod +x ./gradlew
 
+      # Optional: only when the secret is configured. Without it the build
+      # still succeeds — app/build.gradle.kts skips the google-services plugin
+      # and the APK simply ships without remote control.
+      - name: Restore Firebase config
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > app/google-services.json
+
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 

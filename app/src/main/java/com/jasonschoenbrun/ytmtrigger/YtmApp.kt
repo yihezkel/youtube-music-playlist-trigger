@@ -11,6 +11,8 @@ import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
+import com.jasonschoenbrun.ytmtrigger.remote.RemotePollWorker
+import com.jasonschoenbrun.ytmtrigger.remote.RemoteSync
 import com.jasonschoenbrun.ytmtrigger.selftest.SelfTestScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +51,14 @@ class YtmApp : Application() {
             NotifListenerEnforcer.logState(this)
         } catch (t: Throwable) {
             Logger.e("App", "Notification-listener state check failed", t = t)
+        }
+        // Remote control (optional). Everything here no-ops when Firebase
+        // isn't configured or nobody has signed in.
+        try {
+            RemotePollWorker.ensureScheduled(this)
+            appScope.launch { RemoteSync.syncOnce(this@YtmApp, reason = "app-start") }
+        } catch (t: Throwable) {
+            Logger.e("App", "Remote sync setup failed", t = t)
         }
         // Re-arm all schedules at app start (covers update-triggered restarts)
         appScope.launch {

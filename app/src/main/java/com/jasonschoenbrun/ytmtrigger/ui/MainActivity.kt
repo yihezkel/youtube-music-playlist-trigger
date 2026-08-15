@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -204,6 +205,66 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
+                        }
+                    }
+                }
+            }
+            SectionCard(
+                title = "Remote control",
+                icon = Icons.Default.Cloud,
+            ) {
+                val scope = rememberCoroutineScope()
+                var remoteStatus by remember {
+                    mutableStateOf(com.jasonschoenbrun.ytmtrigger.remote.RemoteGate.statusText(ctx))
+                }
+                var busy by remember { mutableStateOf(false) }
+                Text(
+                    remoteStatus,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (com.jasonschoenbrun.ytmtrigger.remote.RemoteGate.isInitialised(ctx)) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (com.jasonschoenbrun.ytmtrigger.remote.RemoteGate.isReady(ctx)) {
+                            FilledTonalButton(
+                                enabled = !busy,
+                                onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        com.jasonschoenbrun.ytmtrigger.remote.RemoteSync
+                                            .syncOnce(ctx, reason = "manual")
+                                        com.jasonschoenbrun.ytmtrigger.remote.RemoteSync
+                                            .uploadLogs(ctx, days = 3)
+                                        remoteStatus = com.jasonschoenbrun.ytmtrigger.remote.RemoteGate.statusText(ctx)
+                                        busy = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text(if (busy) "Syncing…" else "Sync now") }
+                            OutlinedButton(
+                                enabled = !busy,
+                                onClick = {
+                                    com.jasonschoenbrun.ytmtrigger.remote.RemoteGate.signOut(ctx)
+                                    remoteStatus = com.jasonschoenbrun.ytmtrigger.remote.RemoteGate.statusText(ctx)
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Sign out") }
+                        } else {
+                            Button(
+                                enabled = !busy,
+                                onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        com.jasonschoenbrun.ytmtrigger.remote.RemoteAuth.signIn(ctx)
+                                        com.jasonschoenbrun.ytmtrigger.remote.RemoteSync
+                                            .syncOnce(ctx, reason = "post-sign-in")
+                                        remoteStatus = com.jasonschoenbrun.ytmtrigger.remote.RemoteGate.statusText(ctx)
+                                        busy = false
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(if (busy) "Signing in…" else "Sign in with Google") }
                         }
                     }
                 }

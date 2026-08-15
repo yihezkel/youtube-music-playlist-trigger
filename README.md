@@ -2,7 +2,7 @@
 
 Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at a scheduled time, opens YouTube Music, and plays a randomly chosen playlist — over Bluetooth or the built-in speaker.
 
-**Current version: 0.4.0** — see [Releases](../../releases) for the APK.
+**Current version: 0.5.0** — see [Releases](../../releases) for the APK.
 
 ## What it does
 
@@ -73,6 +73,53 @@ Then add at least one schedule from the **Schedules** screen.
 - **Default settings** screen sets the playlists, volume, shuffle, skip-first-track, and self-test options that new schedules inherit.
 - **Self-test** screen shows the live setup checklist, the last self-test success / failure / skip timestamps, a "Run now" button, and "Export last 20 runs (JSON)" for full per-run forensics. Tap "Stop alert" if the failure alarm is sounding.
 - **Logs** screen shows everything the app has done; level filter and free-text search are at the top, with copy-to-clipboard and share-as-file in the toolbar.
+
+## Remote control (optional)
+
+Lets you change playlists and schedules, read the phone's logs, and trigger playback from any browser — useful when the YT Music phone is a dedicated device you don't want to pick up.
+
+**It is entirely optional.** Without `app/google-services.json` the project builds and the app behaves exactly as before; the home screen just shows "Remote control — not configured".
+
+### Setup
+
+1. Create a Firebase project, then **Add app → Android** with package `com.jasonschoenbrun.ytmtrigger`.
+2. Download `google-services.json` into `app/`. It is gitignored on purpose.
+3. **Authentication → Sign-in method → enable Google.** Then **re-download `google-services.json`** — enabling Google is what adds the OAuth web client the phone needs to sign in. Without it, sign-in fails with `No default_web_client_id`.
+4. **Firestore Database → create** (production mode).
+5. Deploy rules and the console:
+
+   ```sh
+   npm i -g firebase-tools
+   firebase login
+   firebase use --add            # pick your project
+   firebase deploy --only firestore:rules,hosting
+   ```
+
+6. Rebuild the app, open it, and tap **Sign in with Google** on the Remote control card using the account that owns the project.
+7. Open the Hosting URL on any phone, sign in with the same account, and your device appears.
+
+For tagged releases, add the file as a repository secret so CI keeps remote support:
+
+```sh
+base64 -w0 app/google-services.json      # paste into secret GOOGLE_SERVICES_JSON
+```
+
+### What you can do remotely
+
+- Edit default playlists, volume, shuffle/skip, self-test options and full schedules
+- **Play now**, **Run self-test**, **Request logs**
+- Read uploaded logs in the browser
+- See device health: accessibility, MediaSession probe, battery exemption, last self-test result
+
+Logs are also **uploaded automatically whenever a self-test fails**, so a breakage shows up in the console without you touching the phone.
+
+### Latency
+
+The phone applies remote changes on its next check-in: at app start, after every trigger and self-test, and on a 15-minute background poll. Commands are therefore not instant. True push would need FCM plus a server component to send it (Cloud Functions requires the paid Blaze plan), which isn't worth it for a personal device — so this deliberately trades a few minutes of latency for zero cost and no backend.
+
+### Privacy
+
+Everything lives under `users/{your-uid}/` in your own Firebase project, and the security rules reject any request whose UID doesn't match. Uploaded logs can contain playlist IDs and device diagnostics; nothing is public.
 
 ## Privacy / data
 

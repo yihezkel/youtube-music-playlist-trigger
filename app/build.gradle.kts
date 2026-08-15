@@ -5,6 +5,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+// Remote control (Firestore) is optional. The google-services plugin hard-fails
+// the build when google-services.json is missing, which would break every
+// tagged release build in CI for anyone who hasn't set up Firebase, so only
+// apply it when the file is actually there. RemoteGate mirrors this at runtime.
+val hasFirebaseConfig = file("google-services.json").exists()
+if (hasFirebaseConfig) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.jasonschoenbrun.ytmtrigger"
     compileSdk = 35
@@ -13,8 +22,11 @@ android {
         applicationId = "com.jasonschoenbrun.ytmtrigger"
         minSdk = 34
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.4.0"
+        versionCode = 8
+        versionName = "0.5.0"
+        // Lets the app tell at runtime whether it was built with a Firebase
+        // config, without probing for generated resources.
+        buildConfigField("boolean", "HAS_FIREBASE", hasFirebaseConfig.toString())
     }
 
     buildTypes {
@@ -59,5 +71,21 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // Remote control. Safe to compile in unconditionally — these are inert
+    // until google-services.json exists and RemoteGate reports ready.
+    //
+    // Pinned to the 33.x line on purpose: firebase-auth 24.x (BOM 34.x) is
+    // compiled with Kotlin 2.3 metadata, which this project's Kotlin 2.0.21
+    // compiler refuses to read. Bumping the whole Kotlin/Compose toolchain
+    // just to gain unused Firebase features is not worth the regression risk.
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

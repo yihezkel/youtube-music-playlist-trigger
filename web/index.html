@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>YTM Trigger — Remote</title>
+<style>
+  :root { color-scheme: dark; --bg:#12131a; --card:#1c1e28; --line:#2c2f3d; --fg:#e9eaf2; --dim:#9aa0b4; --accent:#e0403a; --ok:#3ecf6a; --warn:#f0b429; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:16px; max-width:760px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 10px; letter-spacing:.02em; text-transform:uppercase; color:var(--dim); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin:12px 0; }
+  label { display:block; font-size:13px; color:var(--dim); margin:10px 0 4px; }
+  input[type=text], input[type=number], input[type=time], textarea, select {
+    width:100%; background:#12141c; color:var(--fg); border:1px solid var(--line);
+    border-radius:9px; padding:9px 10px; font:inherit; }
+  textarea { min-height:78px; resize:vertical; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:10px; padding:10px 14px; font:inherit; font-weight:600; cursor:pointer; }
+  button.sec { background:#2a2d3a; }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .row > * { flex:1 1 auto; }
+  .days { display:flex; gap:6px; flex-wrap:wrap; }
+  .days label { display:flex; align-items:center; gap:5px; margin:0; color:var(--fg); font-size:13px;
+    background:#12141c; border:1px solid var(--line); border-radius:8px; padding:6px 9px; cursor:pointer; }
+  .kv { display:flex; justify-content:space-between; gap:10px; padding:4px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .kv:last-child { border-bottom:0; }
+  .kv span:first-child { color:var(--dim); }
+  .ok { color:var(--ok); } .bad { color:var(--accent); } .warn { color:var(--warn); }
+  .muted { color:var(--dim); font-size:13px; }
+  pre { background:#0e0f15; border:1px solid var(--line); border-radius:9px; padding:10px; overflow:auto; max-height:60vh; font-size:12px; }
+  .sched { border:1px solid var(--line); border-radius:11px; padding:11px; margin-bottom:10px; background:#171923; }
+  #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:18px; background:#2a2d3a;
+    border:1px solid var(--line); padding:9px 14px; border-radius:10px; opacity:0; transition:opacity .2s; }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<h1>YTM Trigger</h1>
+<div class="muted" id="whoami">Loading&hellip;</div>
+
+<div class="card" id="authCard">
+  <button id="signIn">Sign in with Google</button>
+  <div class="muted" style="margin-top:8px">Use the same Google account that owns this Firebase project.</div>
+</div>
+
+<div id="main" hidden>
+  <div class="card">
+    <h2>Device</h2>
+    <select id="deviceSel"></select>
+    <div id="state" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Actions</h2>
+    <div class="row">
+      <button id="btnPlay">Play now</button>
+      <button id="btnSelfTest" class="sec">Run self-test</button>
+      <button id="btnLogs" class="sec">Request logs</button>
+    </div>
+    <div class="muted" style="margin-top:8px">
+      The phone polls about every 15 minutes, so a command can take that long unless the app is awake.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Default settings</h2>
+    <label>Playlist URLs (one per line)</label>
+    <textarea id="playlists"></textarea>
+    <div class="row">
+      <div style="flex:1 1 120px">
+        <label>Volume %</label>
+        <input type="number" id="volume" min="0" max="100" />
+      </div>
+      <div style="flex:1 1 160px">
+        <label>Self-test playlist URL (blank = first default)</label>
+        <input type="text" id="selfTestUrl" />
+      </div>
+    </div>
+    <div class="days" style="margin-top:10px">
+      <label><input type="checkbox" id="shuffle" /> Shuffle</label>
+      <label><input type="checkbox" id="skip" /> Skip first track</label>
+      <label><input type="checkbox" id="selfTestEnabled" /> Self-test</label>
+      <label><input type="checkbox" id="israeli" /> Israel Yom Tov dates</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Schedules</h2>
+    <div id="schedules"></div>
+    <button id="addSched" class="sec">Add schedule</button>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="save">Save &amp; push to phone</button>
+      <button id="reload" class="sec">Discard / reload</button>
+    </div>
+    <div class="muted" style="margin-top:8px" id="revInfo"></div>
+  </div>
+
+  <div class="card">
+    <h2>Logs</h2>
+    <select id="logSel"></select>
+    <div class="row" style="margin-top:8px">
+      <button id="btnLoadLog" class="sec">Load</button>
+    </div>
+    <pre id="logView" hidden></pre>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }
+  from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, query }
+  from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+// Firebase Hosting serves this project's own config, so the page carries no
+// hard-coded keys and works unchanged across projects.
+const cfg = await (await fetch('/__/firebase/init.json')).json();
+const app = initializeApp(cfg);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = (id) => document.getElementById(id);
+const DAYS = [['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6],['Sun',7]];
+let uid = null, deviceId = null, schedules = [], currentRevision = 0;
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+const devRef = () => doc(db, 'users', uid, 'devices', deviceId);
+const cfgRef = () => doc(db, 'users', uid, 'devices', deviceId, 'data', 'config');
+
+$('signIn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => toast(e.message));
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    $('whoami').textContent = 'Not signed in.';
+    $('authCard').hidden = false; $('main').hidden = true;
+    return;
+  }
+  uid = user.uid;
+  $('whoami').innerHTML = `Signed in as ${esc(user.email)} &middot; <a href="#" id="out" style="color:var(--dim)">sign out</a>`;
+  $('out').onclick = (e) => { e.preventDefault(); signOut(auth); };
+  $('authCard').hidden = true; $('main').hidden = false;
+  await loadDevices();
+});
+
+async function loadDevices() {
+  const snap = await getDocs(collection(db, 'users', uid, 'devices'));
+  const sel = $('deviceSel'); sel.innerHTML = '';
+  if (snap.empty) {
+    sel.innerHTML = '<option>No devices yet &mdash; sign in on the phone first</option>';
+    return;
+  }
+  snap.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.id;
+    o.textContent = `${d.data().deviceModel || d.id} (${d.data().appVersionName || '?'})`;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => { deviceId = sel.value; loadDevice(); };
+  deviceId = sel.value;
+  await loadDevice();
+}
+
+async function loadDevice() {
+  await Promise.all([loadState(), loadConfig(), loadLogList()]);
+}
+
+async function loadState() {
+  const s = await getDoc(devRef());
+  const el = $('state');
+  if (!s.exists()) { el.textContent = 'No state reported yet.'; return; }
+  let st = {};
+  try { st = JSON.parse(s.data().json || '{}'); } catch {}
+  const when = (ms) => ms ? new Date(ms).toLocaleString() : '\u2014';
+  const flag = (b) => b ? '<span class="ok">yes</span>' : '<span class="bad">no</span>';
+  const stale = st.updatedAtMs && (Date.now() - st.updatedAtMs > 3600e3);
+  el.innerHTML = `
+    <div class="kv"><span>Last check-in</span><span class="${stale ? 'warn' : ''}">${when(st.updatedAtMs)}</span></div>
+    <div class="kv"><span>Accessibility healthy</span><span>${flag(st.accessibilityHealthy)}</span></div>
+    <div class="kv"><span>MediaSession probe</span><span>${flag(st.notificationListenerReady)}</span></div>
+    <div class="kv"><span>Battery-optimisation exempt</span><span>${flag(st.batteryOptimizationIgnored)}</span></div>
+    <div class="kv"><span>Last self-test OK</span><span>${when(st.lastSelfTestSuccessMs)} ${esc(st.lastSelfTestSuccessStrategy || '')}</span></div>
+    <div class="kv"><span>Last self-test failure</span><span>${when(st.lastSelfTestFailureMs)}</span></div>
+    ${st.lastSelfTestFailureReason ? `<div class="kv"><span></span><span class="bad">${esc(st.lastSelfTestFailureReason)}</span></div>` : ''}
+    <div class="kv"><span>Last skip</span><span>${when(st.lastSelfTestSkipMs)} ${esc(st.lastSelfTestSkipReason || '')}</span></div>
+    <div class="kv"><span>Schedules</span><span>${st.scheduleCount ?? '\u2014'}</span></div>
+    <div class="kv"><span>Applied config revision</span><span>${st.appliedConfigRevision ?? '\u2014'}</span></div>`;
+}
+
+async function loadConfig() {
+  const c = await getDoc(cfgRef());
+  let conf = {};
+  currentRevision = 0;
+  if (c.exists()) {
+    currentRevision = c.data().revision || 0;
+    try { conf = JSON.parse(c.data().json || '{}'); } catch {}
+  }
+  $('playlists').value = (conf.defaultPlaylistUrls || []).join('\n');
+  $('volume').value = conf.defaultVolumePercent ?? 100;
+  $('selfTestUrl').value = conf.selfTestPlaylistUrl || '';
+  $('shuffle').checked = conf.defaultEnableShuffle !== false;
+  $('skip').checked = conf.defaultSkipFirstTrack !== false;
+  $('selfTestEnabled').checked = conf.selfTestEnabled !== false;
+  $('israeli').checked = conf.israeliObservance !== false;
+  schedules = conf.schedules || [];
+  renderSchedules();
+  $('revInfo').textContent = `Config revision ${currentRevision}. Saving publishes revision ${currentRevision + 1}.`;
+}
+
+function renderSchedules() {
+  const host = $('schedules'); host.innerHTML = '';
+  schedules.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'sched';
+    const hh = String(Math.floor((s.timeMinutes ?? 450) / 60)).padStart(2, '0');
+    const mm = String((s.timeMinutes ?? 450) % 60).padStart(2, '0');
+    div.innerHTML = `
+      <div class="row">
+        <input type="text" data-f="name" placeholder="Name" value="${esc(s.name || '')}" />
+        <input type="time" data-f="time" value="${hh}:${mm}" style="flex:0 0 130px" />
+      </div>
+      <label>Days</label>
+      <div class="days">${DAYS.map(([n, v]) =>
+        `<label><input type="checkbox" data-day="${v}" ${(s.daysOfWeek || []).includes(v) ? 'checked' : ''}/>${n}</label>`).join('')}</div>
+      <label>Playlist URLs (one per line; blank = use defaults)</label>
+      <textarea data-f="playlists">${esc((s.playlistUrls || []).join('\n'))}</textarea>
+      <div class="row" style="margin-top:8px">
+        <label style="display:flex;align-items:center;gap:6px;color:var(--fg)">
+          <input type="checkbox" data-f="enabled" ${s.enabled !== false ? 'checked' : ''}/> Enabled</label>
+        <button class="sec" data-del="1" style="flex:0 0 auto">Delete</button>
+      </div>`;
+    div.querySelector('[data-del]').onclick = () => {
+      schedules = [...document.querySelectorAll('.sched')].map(d => d._read());
+      schedules.splice(i, 1);
+      renderSchedules();
+    };
+    div._read = () => {
+      const days = [...div.querySelectorAll('[data-day]')].filter(c => c.checked).map(c => +c.dataset.day);
+      const [h, m] = div.querySelector('[data-f=time]').value.split(':').map(Number);
+      return {
+        ...s,
+        name: div.querySelector('[data-f=name]').value || 'Schedule',
+        enabled: div.querySelector('[data-f=enabled]').checked,
+        daysOfWeek: days,
+        timeMinutes: (h * 60 + m) || 0,
+        playlistUrls: div.querySelector('[data-f=playlists]').value.split('\n').map(x => x.trim()).filter(Boolean),
+      };
+    };
+    host.appendChild(div);
+  });
+}
+
+$('addSched').onclick = () => {
+  schedules = [...document.querySelectorAll('.sched')].map(d => d._read());
+  schedules.push({
+    id: crypto.randomUUID(), name: 'New', enabled: true,
+    daysOfWeek: [1, 2, 3, 4, 5], timeMinutes: 7 * 60 + 30,
+    playlistUrls: [], targetVolumePercent: null, autoStopMinutes: null,
+    enableShuffle: true, skipFirstTrack: true, lastPickedPlaylistIds: [],
+  });
+  renderSchedules();
+};
+
+$('reload').onclick = () => loadDevice();
+
+$('save').onclick = async () => {
+  const conf = {
+    defaultPlaylistUrls: $('playlists').value.split('\n').map(s => s.trim()).filter(Boolean),
+    defaultVolumePercent: Number($('volume').value),
+    defaultEnableShuffle: $('shuffle').checked,
+    defaultSkipFirstTrack: $('skip').checked,
+    selfTestEnabled: $('selfTestEnabled').checked,
+    israeliObservance: $('israeli').checked,
+    selfTestPlaylistUrl: $('selfTestUrl').value.trim() || null,
+    schedules: [...document.querySelectorAll('.sched')].map(d => d._read()),
+  };
+  await setDoc(cfgRef(), {
+    json: JSON.stringify(conf),
+    revision: currentRevision + 1,
+    updatedAtMs: Date.now(),
+  });
+  toast('Saved \u2014 phone applies on its next check-in');
+  await loadConfig();
+};
+
+async function sendCommand(type, arg) {
+  await addDoc(collection(db, 'users', uid, 'devices', deviceId, 'commands'), {
+    type, arg: arg ?? null, status: 'pending', createdAtMs: Date.now(),
+  });
+  toast(`Queued "${type}"`);
+}
+$('btnPlay').onclick = () => sendCommand('playNow', schedules[0]?.id);
+$('btnSelfTest').onclick = () => sendCommand('runSelfTest');
+$('btnLogs').onclick = () => sendCommand('uploadLogs', '3');
+
+async function loadLogList() {
+  const snap = await getDocs(query(collection(db, 'users', uid, 'devices', deviceId, 'logs')));
+  const sel = $('logSel'); sel.innerHTML = '';
+  const ids = []; snap.forEach(d => ids.push(d.id));
+  ids.sort().reverse();
+  if (!ids.length) { sel.innerHTML = '<option value="">No logs uploaded yet</option>'; return; }
+  ids.forEach(id => { const o = document.createElement('option'); o.value = id; o.textContent = id; sel.appendChild(o); });
+}
+
+$('btnLoadLog').onclick = async () => {
+  const id = $('logSel').value; if (!id) return;
+  const d = await getDoc(doc(db, 'users', uid, 'devices', deviceId, 'logs', id));
+  const v = $('logView');
+  v.hidden = false;
+  v.textContent = d.exists()
+    ? (d.data().truncated ? '[older lines truncated]\n' : '') + d.data().content
+    : 'Not found';
+};
+</script>
+</body>
+</html>

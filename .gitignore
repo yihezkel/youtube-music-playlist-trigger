@@ -27,3 +27,9 @@ musicscreen*.txt
 *.flo
 CopilotPromptsInVsCode.txt
 
+# Firebase project config — identifies your project, so keep it out of a
+# public repo. CI injects it from the GOOGLE_SERVICES_JSON secret.
+app/google-services.json
+.firebaserc
+.firebase/
+

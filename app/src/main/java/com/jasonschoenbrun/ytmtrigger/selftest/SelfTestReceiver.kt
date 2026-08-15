@@ -8,6 +8,7 @@ import com.jasonschoenbrun.ytmtrigger.diag.RunOutcome
 import com.jasonschoenbrun.ytmtrigger.diag.SelfTestRunRecord
 import com.jasonschoenbrun.ytmtrigger.diag.SelfTestRunStore
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import com.jasonschoenbrun.ytmtrigger.remote.RemoteSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,6 +52,14 @@ class SelfTestReceiver : BroadcastReceiver() {
                 val record = SelfTestRunner.run(context.applicationContext, trigger = trigger)
                 SelfTestRunStore.record(context.applicationContext, record)
                 handleRecord(context.applicationContext, record, repo)
+                // Push the outcome, and on failure the logs themselves, so a
+                // breakage is visible from the console without physically
+                // fetching the phone — which is the whole point of the remote
+                // channel. Upload before the sync so state reflects reality.
+                if (record.outcome is RunOutcome.AllFailed) {
+                    RemoteSync.uploadLogs(context.applicationContext, days = 2)
+                }
+                RemoteSync.syncOnce(context.applicationContext, reason = "self-test")
             } catch (t: Throwable) {
                 Logger.e("SelfTestRecv", "Self-test crashed", t = t)
                 repo.update {

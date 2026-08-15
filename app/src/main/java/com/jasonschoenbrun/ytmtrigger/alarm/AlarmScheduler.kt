@@ -98,8 +98,43 @@ object AlarmScheduler {
         }
     }
 
-    fun cancel(context: Context, scheduleId: String) {
-        val pi = pendingIntent(context, scheduleId, 0, create = false) ?: return
+    /**
+     * Fire [scheduleId] as a manual trigger almost immediately.
+     *
+     * Deliberately goes through an exact alarm rather than calling
+     * [android.content.Context.startForegroundService] directly: remote
+     * commands are handled from a background worker, and since Android 12 a
+     * background start throws `ForegroundServiceStartNotAllowedException`.
+     * Delivering an exact alarm puts the app on the temporary power
+     * allowlist, which is what makes the existing scheduled path legal — so
+     * this reuses it instead of inventing a second, fragile one.
+     */
+    fun triggerSoon(context: Context, scheduleId: String, delayMs: Long = 2_000L) {
+        val am = context.getSystemService(AlarmManager::class.java) ?: return
+        val intent = Intent(context, TriggerReceiver::class.java).apply {
+            action = "com.jasonschoenbrun.ytmtrigger.TRIGGER"
+            putExtra(EXTRA_SCHEDULE_ID, scheduleId)
+            putExtra(EXTRA_MANUAL, true)
+        }
+        val pi = PendingIntent.getBroadcast(
+            context,
+            "remote:$scheduleId".hashCode(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val at = System.currentTimeMillis() + delayMs
+        try {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            Logger.i("Alarm", "Immediate trigger armed", mapOf(
+                "id" to scheduleId,
+                "at" to FMT.format(Date(at)),
+            ))
+        } catch (se: SecurityException) {
+            Logger.e("Alarm", "Immediate trigger denied", t = se)
+        }
+    }
+
+    fun cancel(context: Context, scheduleId: String) {        val pi = pendingIntent(context, scheduleId, 0, create = false) ?: return
         context.getSystemService(AlarmManager::class.java)?.cancel(pi)
         pi.cancel()
         Logger.d("Alarm", "Cancelled", mapOf("id" to scheduleId))
