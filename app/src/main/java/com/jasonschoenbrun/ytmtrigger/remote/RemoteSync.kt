@@ -57,6 +57,7 @@ object RemoteSync {
             val device = deviceDoc(context, uid)
             pullAndApplyConfig(context, device)
             pushState(context, device)
+            pushReportedConfig(context, device)
             runPendingCommands(context, device)
             Logger.d("Remote", "Sync complete", mapOf("reason" to reason))
             true
@@ -121,6 +122,41 @@ object RemoteSync {
     }
 
     // --- state ----------------------------------------------------------
+
+    /**
+     * Publish the configuration this device is actually running.
+     *
+     * Without this the console has nothing to show on a fresh project: the
+     * `config` document is written only by the console, so its editor would
+     * start empty even though the phone has schedules. Saving from that empty
+     * editor would then push `schedules: []` and wipe them — a data-loss path,
+     * not just a cosmetic gap.
+     *
+     * Publishing to a separate `reported` document rather than seeding
+     * `config` keeps authorship unambiguous: `config` stays desired state from
+     * the console, `reported` stays actual state from the device, and the
+     * console prefills from whichever is newer so edits made on the phone
+     * itself also show up.
+     */
+    private suspend fun pushReportedConfig(context: Context, device: DocumentReference) {
+        val s = SettingsRepository.get(context).current()
+        val reported = RemoteConfig(
+            defaultPlaylistUrls = s.defaultPlaylistUrls,
+            defaultVolumePercent = s.defaultVolumePercent,
+            defaultEnableShuffle = s.defaultEnableShuffle,
+            defaultSkipFirstTrack = s.defaultSkipFirstTrack,
+            selfTestEnabled = s.selfTestEnabled,
+            israeliObservance = s.israeliObservance,
+            selfTestPlaylistUrl = s.selfTestPlaylistUrl,
+            schedules = ScheduleRepository.get(context).all(),
+        )
+        device.collection("data").document("reported").set(
+            mapOf(
+                "json" to json.encodeToString(reported),
+                "updatedAtMs" to System.currentTimeMillis(),
+            ),
+        ).await()
+    }
 
     private suspend fun pushState(context: Context, device: DocumentReference) {
         val settings = SettingsRepository.get(context).current()

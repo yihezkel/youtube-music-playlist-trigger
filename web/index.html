@@ -128,7 +128,7 @@ const db = getFirestore(app);
 
 const $ = (id) => document.getElementById(id);
 const DAYS = [['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6],['Sun',7]];
-let uid = null, deviceId = null, schedules = [], currentRevision = 0;
+let uid = null, deviceId = null, schedules = [], currentRevision = 0, loadedOk = false;
 
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -137,6 +137,7 @@ function toast(msg) {
 function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
 const devRef = () => doc(db, 'users', uid, 'devices', deviceId);
 const cfgRef = () => doc(db, 'users', uid, 'devices', deviceId, 'data', 'config');
+const reportedRef = () => doc(db, 'users', uid, 'devices', deviceId, 'data', 'reported');
 
 $('signIn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => toast(e.message));
 
@@ -198,13 +199,30 @@ async function loadState() {
 }
 
 async function loadConfig() {
-  const c = await getDoc(cfgRef());
-  let conf = {};
-  currentRevision = 0;
-  if (c.exists()) {
-    currentRevision = c.data().revision || 0;
-    try { conf = JSON.parse(c.data().json || '{}'); } catch {}
+  // The console writes `config`; the phone publishes what it is actually
+  // running to `reported`. Prefill from whichever is newer so that edits made
+  // on the phone show up here too, and so a fresh project shows the phone's
+  // real schedules instead of an empty form.
+  const [c, r] = await Promise.all([getDoc(cfgRef()), getDoc(reportedRef())]);
+  currentRevision = c.exists() ? (c.data().revision || 0) : 0;
+  const cAt = c.exists() ? (c.data().updatedAtMs || 0) : -1;
+  const rAt = r.exists() ? (r.data().updatedAtMs || 0) : -1;
+
+  if (cAt < 0 && rAt < 0) {
+    // Saving now would push an empty config and wipe the phone.
+    loadedOk = false;
+    $('save').disabled = true;
+    $('revInfo').textContent =
+      'Waiting for the phone to check in. Open the app and tap "Sync now", then reload.';
+    schedules = [];
+    renderSchedules();
+    return;
   }
+
+  const src = rAt > cAt ? r : c;
+  let conf = {};
+  try { conf = JSON.parse(src.data().json || '{}'); } catch {}
+
   $('playlists').value = (conf.defaultPlaylistUrls || []).join('\n');
   $('volume').value = conf.defaultVolumePercent ?? 100;
   $('selfTestUrl').value = conf.selfTestPlaylistUrl || '';
@@ -214,7 +232,13 @@ async function loadConfig() {
   $('israeli').checked = conf.israeliObservance !== false;
   schedules = conf.schedules || [];
   renderSchedules();
-  $('revInfo').textContent = `Config revision ${currentRevision}. Saving publishes revision ${currentRevision + 1}.`;
+
+  loadedOk = true;
+  $('save').disabled = false;
+  const from = rAt > cAt ? 'the phone' : 'this console';
+  $('revInfo').textContent =
+    `Showing config from ${from} (${new Date(src.data().updatedAtMs || 0).toLocaleString()}). ` +
+    `Saving publishes revision ${currentRevision + 1}.`;
 }
 
 function renderSchedules() {
@@ -274,6 +298,7 @@ $('addSched').onclick = () => {
 $('reload').onclick = () => loadDevice();
 
 $('save').onclick = async () => {
+  if (!loadedOk) { toast('Config not loaded yet'); return; }
   const conf = {
     defaultPlaylistUrls: $('playlists').value.split('\n').map(s => s.trim()).filter(Boolean),
     defaultVolumePercent: Number($('volume').value),

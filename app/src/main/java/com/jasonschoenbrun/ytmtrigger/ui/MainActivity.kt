@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -123,6 +124,15 @@ private val AppDarkColors = darkColorScheme(
 @Composable
 fun AppNav() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    // Without this the system back button is never intercepted, so it reaches
+    // the Activity and finishes the app from every sub-screen instead of
+    // returning to the screen the user came from.
+    BackHandler(enabled = screen != Screen.Home) {
+        screen = when (screen) {
+            is Screen.Edit -> Screen.Schedules
+            else -> Screen.Home
+        }
+    }
     when (val s = screen) {
         Screen.Home -> HomeScreen(onNav = { screen = it })
         Screen.Schedules -> SchedulesScreen(onNav = { screen = it })
@@ -170,45 +180,6 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             PermsCard(perms)
-            SectionCard(
-                title = "Trigger now",
-                icon = Icons.Default.PlayArrow,
-            ) {
-                if (schedules.isEmpty()) {
-                    Text(
-                        "Add a schedule first to define which playlists to use.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for (s in schedules) {
-                            Button(
-                                onClick = {
-                                    Logger.i("UI", "Manual trigger", mapOf("scheduleId" to s.id))
-                                    PlaybackTriggerService.startManual(ctx, s.id)
-                                    // B-fix-5: bow out of MainActivity so it can't sit on top
-                                    // of YT Music after the launch intent fires. The trigger
-                                    // service routes through KeyguardDismissActivity which
-                                    // will become the top activity.
-                                    (ctx as? android.app.Activity)?.finish()
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Icon(Icons.Default.PlayArrow, null)
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    "Play '${s.name}'",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
             SectionCard(
                 title = "Remote control",
                 icon = Icons.Default.Cloud,
@@ -429,6 +400,13 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
                     ScheduleCard(
                         schedule = s,
                         onClick = { onNav(Screen.Edit(s.id)) },
+                        onPlay = {
+                            Logger.i("UI", "Manual trigger", mapOf("scheduleId" to s.id))
+                            PlaybackTriggerService.startManual(ctx, s.id)
+                            // B-fix-5: bow out of MainActivity so it can't sit on
+                            // top of YT Music once the launch intent fires.
+                            (ctx as? android.app.Activity)?.finish()
+                        },
                         onToggle = { newEnabled ->
                             repo.upsert(s.copy(enabled = newEnabled))
                             AlarmScheduler.rescheduleAll(
@@ -445,7 +423,12 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScheduleCard(schedule: Schedule, onClick: () -> Unit, onToggle: (Boolean) -> Unit) {
+private fun ScheduleCard(
+    schedule: Schedule,
+    onClick: () -> Unit,
+    onPlay: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     val time = "%02d:%02d".format(schedule.timeMinutes / 60, schedule.timeMinutes % 60)
     val nextMs = if (schedule.enabled) AlarmScheduler.computeNextTriggerMs(schedule) else null
@@ -537,6 +520,16 @@ private fun ScheduleCard(schedule: Schedule, onClick: () -> Unit, onToggle: (Boo
                             color = cs.onSurfaceVariant,
                         )
                     }
+                }
+                FilledTonalButton(
+                    onClick = onPlay,
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Play now", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
