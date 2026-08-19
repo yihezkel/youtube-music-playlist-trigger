@@ -113,10 +113,10 @@ Lets you change playlists and schedules, read the phone's logs, and trigger play
    npm i -g firebase-tools
    firebase login
    firebase use --add            # pick your project
-   firebase deploy --only firestore:rules,hosting
+   firebase deploy --only firestore,hosting
    ```
 
-   `firebase deploy` prints the Hosting URL, e.g. `https://<project-id>.web.app`.
+   This deploys the security rules, the composite index the command queue needs, and the console. `firebase deploy` prints the Hosting URL, e.g. `https://<project-id>.web.app`.
 
 7. Rebuild the app, open it, and tap **Sign in with Google** on the Remote control card using the account that owns the project.
 8. Open the Hosting URL on any phone, sign in with the same account, and your device appears.
