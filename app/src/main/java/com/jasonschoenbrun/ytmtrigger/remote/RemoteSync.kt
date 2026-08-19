@@ -168,7 +168,12 @@ object RemoteSync {
             deviceModel = Build.MODEL,
             androidSdk = Build.VERSION.SDK_INT,
             updatedAtMs = System.currentTimeMillis(),
-            accessibilityHealthy = YtmAccessibilityService.isResponsive(),
+            // RemoteSync runs on background threads, so use the accurate
+            // probe. isResponsive() infers health from recent events and
+            // reports false on an idle phone, which would show "Accessibility
+            // healthy: no" in the console for a perfectly working device.
+            accessibilityHealthy = YtmAccessibilityService.isRunning() &&
+                YtmAccessibilityService.canReadActiveWindow(),
             notificationListenerReady = NotifListenerEnforcer.isEnabled(context),
             batteryOptimizationIgnored =
                 pm?.isIgnoringBatteryOptimizations(context.packageName) == true,

@@ -14,6 +14,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
@@ -215,7 +216,7 @@ object DiagnosticsSnapshot {
         Logger.i(origin, "Diag: a11y", mapOf(
             "enabledInSettings" to a11yOn.toString(),
             "serviceBound" to YtmAccessibilityService.isRunning().toString(),
-            "serviceResponsive" to YtmAccessibilityService.isResponsive().toString(),
+            "serviceResponsive" to a11yResponsive().toString(),
         ))
     }
 
@@ -358,6 +359,36 @@ object DiagnosticsSnapshot {
         )
     }
 
+    /**
+     * Is the accessibility service actually usable right now?
+     *
+     * Picks the probe by thread, because the two available signals fail in
+     * opposite situations:
+     *
+     * - [YtmAccessibilityService.canReadActiveWindow] is accurate regardless
+     *   of how quiet the device is, but blocks on a binder call. On the main
+     *   thread, while one of this app's own windows is foreground, that call
+     *   is served by this same thread and would deadlock until it times out.
+     * - [YtmAccessibilityService.isResponsive] never blocks, but infers health
+     *   from having seen an event since connecting. On an idle phone — the
+     *   normal state for a dedicated alarm device between triggers — a
+     *   perfectly healthy service legitimately receives no events, so it
+     *   reports false. That was observed twice in real run records
+     *   (2026-08-16 01:32 and 2026-08-19 21:27): `serviceResponsive=false`
+     *   while the very same run went on to complete all four accessibility
+     *   steps and succeed.
+     *
+     * Diagnostics run on background threads, so they get the accurate probe;
+     * the UI checklist gets the non-blocking one, where our own window being
+     * foreground guarantees a recent event anyway.
+     */
+    private fun a11yResponsive(): Boolean =
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            YtmAccessibilityService.isResponsive()
+        } else {
+            YtmAccessibilityService.isRunning() && YtmAccessibilityService.canReadActiveWindow()
+        }
+
     private fun dataA11y(context: Context): A11yStateData? {
         val enabledSetting = try {
             Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
@@ -367,7 +398,7 @@ object DiagnosticsSnapshot {
         return A11yStateData(
             enabledInSettings = a11yOn,
             serviceBound = YtmAccessibilityService.isRunning(),
-            serviceResponsive = YtmAccessibilityService.isResponsive(),
+            serviceResponsive = a11yResponsive(),
         )
     }
 
