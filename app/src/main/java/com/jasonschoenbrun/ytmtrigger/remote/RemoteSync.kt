@@ -241,27 +241,44 @@ object RemoteSync {
     // --- logs -----------------------------------------------------------
 
     /**
-     * Upload the most recent [days] log files so they can be read from the
-     * console. This is what removes the USB cable from the loop when
-     * something breaks while the phone is out of reach.
+     * Upload the most recent [days] log files, plus the structured self-test
+     * run records, so a failure can be diagnosed from the console. This is
+     * what removes the USB cable from the loop when something breaks while
+     * the phone is out of reach.
+     *
+     * The run records matter as much as the text logs: they carry the
+     * per-strategy attempt data, accessibility step traces and
+     * MediaSession/audio timelines that the plain log only summarises.
+     * Uploading only the logs would have left the richest diagnostics
+     * reachable solely over USB, which defeats the point.
      */
     suspend fun uploadLogs(context: Context, days: Int = 3): Int {
         val uid = RemoteGate.signedInUid(context) ?: return 0
-        val dir = File(context.filesDir, "logs")
-        val files = dir.listFiles()
+        val device = deviceDoc(context, uid)
+        var uploaded = 0
+
+        val logFiles = File(context.filesDir, "logs").listFiles()
             ?.filter { it.isFile && it.name.endsWith(".log") }
             ?.sortedByDescending { it.name }
             ?.take(days)
             .orEmpty()
-        if (files.isEmpty()) return 0
-        val device = deviceDoc(context, uid)
-        var uploaded = 0
-        for (f in files) {
+        // Prefix keeps run records distinguishable in the console's file list
+        // while reusing one collection and one viewer.
+        val runFiles = File(context.filesDir, "selftest-history").listFiles()
+            ?.filter { it.isFile && it.name.endsWith(".jsonl") }
+            ?.sortedByDescending { it.name }
+            ?.take(2)
+            .orEmpty()
+            .map { it to "runs-${it.name.removeSuffix(".jsonl")}" }
+
+        val targets = logFiles.map { it to it.name.removeSuffix(".log") } + runFiles
+        if (targets.isEmpty()) return 0
+        for ((f, docId) in targets) {
             try {
                 val text = f.readText()
                 val truncated = text.length > MAX_LOG_CHARS
                 val payload = if (truncated) text.takeLast(MAX_LOG_CHARS) else text
-                device.collection("logs").document(f.name.removeSuffix(".log")).set(
+                device.collection("logs").document(docId).set(
                     mapOf(
                         "content" to payload,
                         "sizeBytes" to f.length(),

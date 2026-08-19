@@ -47,19 +47,13 @@ class SelfTestReceiver : BroadcastReceiver() {
         val pending = goAsync()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scope.launch {
+            var needsUpload = false
             try {
                 val trigger = if (manual) SelfTestRunner.Trigger.Manual else SelfTestRunner.Trigger.Scheduled
                 val record = SelfTestRunner.run(context.applicationContext, trigger = trigger)
                 SelfTestRunStore.record(context.applicationContext, record)
                 handleRecord(context.applicationContext, record, repo)
-                // Push the outcome, and on failure the logs themselves, so a
-                // breakage is visible from the console without physically
-                // fetching the phone — which is the whole point of the remote
-                // channel. Upload before the sync so state reflects reality.
-                if (record.outcome is RunOutcome.AllFailed) {
-                    RemoteSync.uploadLogs(context.applicationContext, days = 2)
-                }
-                RemoteSync.syncOnce(context.applicationContext, reason = "self-test")
+                needsUpload = record.outcome is RunOutcome.AllFailed
             } catch (t: Throwable) {
                 Logger.e("SelfTestRecv", "Self-test crashed", t = t)
                 repo.update {
@@ -68,7 +62,17 @@ class SelfTestReceiver : BroadcastReceiver() {
                         lastSelfTestFailureReason = "Crash: ${t.message ?: t::class.simpleName}",
                     )
                 }
+                needsUpload = true
             } finally {
+                // Runs for crashes too, not just AllFailed. A crash is the case
+                // most in need of remote diagnosis, and leaving the push inside
+                // the try meant it was the one outcome that published nothing.
+                try {
+                    if (needsUpload) RemoteSync.uploadLogs(context.applicationContext, days = 2)
+                    RemoteSync.syncOnce(context.applicationContext, reason = "self-test")
+                } catch (t: Throwable) {
+                    Logger.w("SelfTestRecv", "Remote push after self-test failed", t = t)
+                }
                 pending.finish()
             }
         }
