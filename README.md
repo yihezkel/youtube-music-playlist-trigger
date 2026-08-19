@@ -83,10 +83,31 @@ Lets you change playlists and schedules, read the phone's logs, and trigger play
 ### Setup
 
 1. Create a Firebase project, then **Add app → Android** with package `com.jasonschoenbrun.ytmtrigger`.
-2. Download `google-services.json` into `app/`. It is gitignored on purpose.
-3. **Authentication → Sign-in method → enable Google.** Then **re-download `google-services.json`** — enabling Google is what adds the OAuth web client the phone needs to sign in. Without it, sign-in fails with `No default_web_client_id`.
-4. **Firestore Database → create** (production mode).
-5. Deploy rules and the console:
+2. **Register your signing certificate's SHA-1.** Google sign-in on Android is bound to the app's signing key, and without this the `oauth_client` array in `google-services.json` stays empty however many times you re-download it. Get the fingerprint:
+
+   ```sh
+   keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android
+   ```
+
+   On Windows, `keytool` ships with Android Studio's JDK:
+
+   ```powershell
+   & "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -list -v `
+       -keystore "$env:USERPROFILE\.android\debug.keystore" `
+       -alias androiddebugkey -storepass android
+   ```
+
+   Copy the `SHA1:` value into **Project settings → Your apps → Add fingerprint**. The debug key covers release builds too, because `app/build.gradle.kts` signs release with the debug config.
+3. **Authentication → Get started → Sign-in method → enable Google**, and set a support email.
+4. **Firestore Database → Create database** (production mode).
+5. **Re-download `google-services.json`** into `app/` — only now does it contain the OAuth clients. Verify before rebuilding:
+
+   ```sh
+   grep -c client_id app/google-services.json     # must be > 0
+   ```
+
+   If it is still empty, steps 2 and 3 did not both take effect. The file is gitignored on purpose.
+6. Deploy rules and the console:
 
    ```sh
    npm i -g firebase-tools
@@ -95,8 +116,20 @@ Lets you change playlists and schedules, read the phone's logs, and trigger play
    firebase deploy --only firestore:rules,hosting
    ```
 
-6. Rebuild the app, open it, and tap **Sign in with Google** on the Remote control card using the account that owns the project.
-7. Open the Hosting URL on any phone, sign in with the same account, and your device appears.
+   `firebase deploy` prints the Hosting URL, e.g. `https://<project-id>.web.app`.
+
+7. Rebuild the app, open it, and tap **Sign in with Google** on the Remote control card using the account that owns the project.
+8. Open the Hosting URL on any phone, sign in with the same account, and your device appears.
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| App says "Not configured" | No `google-services.json` at build time, or you rebuilt before adding it. Rebuild after copying the file in. |
+| Sign-in fails, log shows `No default_web_client_id` | `oauth_client` is empty — SHA-1 not registered (step 2) or Google provider not enabled (step 3). Re-download after doing both. |
+| Sign-in dialog opens then immediately cancels | SHA-1 mismatch: the installed APK was signed with a different key than the fingerprint you registered. |
+| Console shows "No devices yet" | The phone hasn't checked in. Open the app and tap **Sync now**. |
+| `PERMISSION_DENIED` in the console | Firestore rules not deployed, or you signed into the web page with a different Google account than the phone. |
 
 For tagged releases, add the file as a repository secret so CI keeps remote support:
 
