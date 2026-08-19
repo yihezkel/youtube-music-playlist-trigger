@@ -1,5 +1,6 @@
 package com.jasonschoenbrun.ytmtrigger.accessibility
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.database.ContentObserver
@@ -8,6 +9,7 @@ import android.os.Looper
 import android.provider.Settings
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import kotlinx.coroutines.delay
+import kotlin.system.exitProcess
 
 /**
  * Keeps the YTM Trigger Accessibility service enabled, including after Android
@@ -180,6 +182,9 @@ object A11yPermissionEnforcer {
             delay(pollIntervalMs)
         }
         if (YtmAccessibilityService.isRunning()) {
+            // Bound but inert. Try to recover in place; a process restart is
+            // not permitted here because a trigger or self-test is in flight.
+            if (recoverIfUnresponsive(context, allowProcessRestart = false)) return true
             Logger.w(
                 "A11yPerm",
                 "A11y service is bound but unresponsive — it cannot read the active window, " +
@@ -244,6 +249,182 @@ object A11yPermissionEnforcer {
     }
 
     /**
+     * Restart the process after a self-test failed with the accessibility
+     * service never doing anything.
+     *
+     * ## What is actually known
+     * Twice — 2026-08-14 18:35 and 2026-08-19 22:47, both shortly after the
+     * package was replaced and the service re-enabled — a self-test timed out
+     * on all three strategies with `ytmCameToForeground=false` and
+     * `a11yStarted=false`, meaning the service received no window event at
+     * all. Both times a later run, after the process had restarted, succeeded
+     * in a few seconds.
+     *
+     * ## What is not known
+     * The cause. Deliberate attempts to reproduce it all failed: reinstalling
+     * the package, reinstalling with the post-update restart suppressed, and
+     * dropping the service from `ENABLED_ACCESSIBILITY_SERVICES` so auto-heal
+     * rewrote it — every one of those was followed by a passing self-test. So
+     * this is not wired to package replacement or to the auto-heal write,
+     * because neither was shown to cause it.
+     *
+     * (An earlier round of testing appeared to reproduce it readily by opening
+     * an unrelated app and watching for events. That was a broken experiment:
+     * `accessibility_service_config.xml` sets
+     * `packageNames="com.google.android.apps.youtube.music"`, so the service
+     * is *supposed* to ignore every other app, and the absence of events meant
+     * nothing.)
+     *
+     * ## Why restarting here is still defensible
+     * This runs only once the run has already failed and the audible alert has
+     * already fired, so there is nothing left to interrupt, and the evidence
+     * has already been persisted and uploaded. A restart is the only thing
+     * ever observed to restore the service, and leaving the process in a state
+     * where the accessibility service does nothing means the next real
+     * scheduled trigger fails too. The guard on "no accessibility activity in
+     * any attempt" keeps it away from ordinary failures such as YouTube Music
+     * being slow or a layout change breaking the Play button, which a restart
+     * would not fix.
+     *
+     * @return true if a restart was armed and the caller should stop work.
+     */
+    fun restartAfterDeadRun(context: Context, noA11yActivity: Boolean): Boolean {
+        if (!noA11yActivity) return false
+        if (!isAccessibilityEnabled(context)) return false
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val last = prefs.getLong(KEY_LAST_RESTART, 0L)
+        val now = System.currentTimeMillis()
+        // A restart that did not help must not become a restart loop.
+        if (now - last < RESTART_COOLDOWN_MS) {
+            Logger.w(
+                "A11yPerm",
+                "Self-test failed with no accessibility activity, but a restart was already " +
+                    "tried recently — not restarting again",
+                mapOf("minsSinceLast" to ((now - last) / 60000).toString()),
+            )
+            return false
+        }
+        prefs.edit().putLong(KEY_LAST_RESTART, now).commit()
+        Logger.w(
+            "A11yPerm",
+            "Self-test failed with no accessibility activity at all — restarting the process, " +
+                "the only recovery ever observed for this state",
+        )
+        ProcessRestartReceiver.arm(context)
+        return true
+    }
+
+    /**
+     * Recover an accessibility service that is bound but not working.
+     *
+     * ## The failure this exists for
+     * After the package is replaced (`adb install -r`, or a release update),
+     * AccessibilityManagerService rebinds the service and `onServiceConnected`
+     * fires — but the binding is inert: no `AccessibilityEvent` is ever
+     * delivered and `rootInActiveWindow` returns null. Reproduced on
+     * 2026-08-14 and again on 2026-08-19, where a self-test immediately after
+     * reinstall timed out on all three strategies with zero window events,
+     * while a run a few minutes later — after the process had restarted —
+     * succeeded in 3.3s.
+     *
+     * Note this is *not* caused by the secure-settings auto-heal write: the
+     * 2026-08-19 reproduction kept the service listed in
+     * `ENABLED_ACCESSIBILITY_SERVICES` throughout, so [ensureEnabled] was a
+     * no-op and the binding was still dead. The package replacement itself is
+     * what breaks it.
+     *
+     * ## Why a ladder
+     * Rewriting the secure setting to drop and re-add the component was tested
+     * first and does **not** help: it produces a genuine unbind/rebind
+     * (`Service destroyed` then `Service connected`) and the new instance is
+     * just as inert, because the fault lives in the process, not the binding.
+     * So this escalates:
+     *
+     *  1. Recreate the component. An app may always change its own components,
+     *     and this makes the framework construct a fresh service instance.
+     *  2. Restart the process, which is the only thing observed to work.
+     *
+     * [allowProcessRestart] must be false while a trigger or self-test is in
+     * flight — killing the process there would abandon the very playback we
+     * are trying to start. Call it with true only from app startup, where
+     * nothing is in progress.
+     *
+     * @return true if the service is usable when this returns. When the
+     *   process is restarted this does not return at all.
+     */
+    suspend fun recoverIfUnresponsive(
+        context: Context,
+        allowProcessRestart: Boolean = false,
+    ): Boolean {
+        if (!YtmAccessibilityService.isRunning()) return false
+        if (YtmAccessibilityService.canReadActiveWindow()) return true
+
+        Logger.w(
+            "A11yPerm",
+            "A11y bound but unresponsive — starting recovery",
+            mapOf("allowProcessRestart" to allowProcessRestart.toString()),
+        )
+
+        // Rung 1: recreate the service component.
+        runCatching { recreateComponent(context) }
+            .onFailure { Logger.w("A11yPerm", "Component recreate failed", t = it) }
+        // Disabling a component drops it from the enabled list, so re-assert.
+        ensureEnabled(context)
+        if (awaitUsable(COMPONENT_RECOVERY_TIMEOUT_MS)) {
+            Logger.i("A11yPerm", "Recovered via component recreate")
+            return true
+        }
+
+        if (!allowProcessRestart) {
+            Logger.e(
+                "A11yPerm",
+                "A11y still unresponsive and a process restart is unsafe here; " +
+                    "playback will likely fail until the app restarts",
+            )
+            return false
+        }
+
+        Logger.w("A11yPerm", "Component recreate insufficient — restarting process")
+        ProcessRestartReceiver.arm(context)
+        // Give the logger's writer loop a moment to flush before we go, or the
+        // evidence for why we restarted is lost with the process.
+        delay(700)
+        exitProcess(0)
+    }
+
+    /**
+     * Disable then re-enable our own accessibility service component so the
+     * framework builds a new instance of it.
+     */
+    private suspend fun recreateComponent(context: Context) {
+        val pm = context.packageManager
+        val comp = ComponentName(context, YtmAccessibilityService::class.java)
+        pm.setComponentEnabledSetting(
+            comp,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        delay(600)
+        pm.setComponentEnabledSetting(
+            comp,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        Logger.i("A11yPerm", "Recreated A11y service component")
+    }
+
+    private suspend fun awaitUsable(timeoutMs: Long, pollIntervalMs: Long = 200L): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (YtmAccessibilityService.isRunning() &&
+                YtmAccessibilityService.canReadActiveWindow()
+            ) return true
+            delay(pollIntervalMs)
+        }
+        return false
+    }
+
+    /**
      * Registers a [ContentObserver] on the enabled-A11y-services secure
      * setting. Whenever the setting changes — typically because the user
      * toggled our service off in Settings, or Android rebooted us out of
@@ -294,5 +475,12 @@ object A11yPermissionEnforcer {
 
     @Volatile private var watching = false
 
+    private const val PREFS = "a11y_enforcer"
+    private const val KEY_LAST_RESTART = "lastProcessRestartMs"
+    /** Long enough that a restart which did not help cannot loop. */
+    private const val RESTART_COOLDOWN_MS = 6L * 60 * 60 * 1000
+
     const val DEFAULT_BIND_TIMEOUT_MS: Long = 4_000L
+    /** Long enough for the framework to tear down and rebuild the service. */
+    const val COMPONENT_RECOVERY_TIMEOUT_MS: Long = 6_000L
 }

@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Build
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
+import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
@@ -43,6 +44,11 @@ class YtmApp : Application() {
         } catch (t: Throwable) {
             Logger.e("App", "A11y enforcer setup failed", t = t)
         }
+        // NOTE: an earlier attempt restarted the process on every package
+        // replace, on the theory that updates leave the accessibility service
+        // bound but inert. That theory did not survive testing — see
+        // A11yPermissionEnforcer.restartAfterDeadRun — so recovery is now
+        // driven by observed failure rather than by a guess about its cause.
         // Same treatment for the notification listener, which is what lets
         // MediaSessionProbe see whether YT Music is really playing. Unlike
         // accessibility this cannot be self-granted, so we only record the

@@ -3,6 +3,7 @@ package com.jasonschoenbrun.ytmtrigger.selftest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.RunOutcome
 import com.jasonschoenbrun.ytmtrigger.diag.SelfTestRunRecord
@@ -48,12 +49,20 @@ class SelfTestReceiver : BroadcastReceiver() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scope.launch {
             var needsUpload = false
+            var deadService = false
             try {
                 val trigger = if (manual) SelfTestRunner.Trigger.Manual else SelfTestRunner.Trigger.Scheduled
                 val record = SelfTestRunner.run(context.applicationContext, trigger = trigger)
                 SelfTestRunStore.record(context.applicationContext, record)
                 handleRecord(context.applicationContext, record, repo)
                 needsUpload = record.outcome is RunOutcome.AllFailed
+                // A run where the accessibility service never started on any
+                // attempt means it received no window event at all, which is
+                // the signature of the dead-binding state. Recovery has to come
+                // after the upload below, so the evidence survives the restart.
+                deadService = record.outcome is RunOutcome.AllFailed &&
+                    record.attempts.isNotEmpty() &&
+                    record.attempts.all { it.a11yActionResult?.started != true }
             } catch (t: Throwable) {
                 Logger.e("SelfTestRecv", "Self-test crashed", t = t)
                 repo.update {
@@ -74,6 +83,19 @@ class SelfTestReceiver : BroadcastReceiver() {
                     Logger.w("SelfTestRecv", "Remote push after self-test failed", t = t)
                 }
                 pending.finish()
+                // Last, once the record and logs are safely persisted and
+                // uploaded: if the accessibility service did nothing at all,
+                // restart the process so the next scheduled trigger is not
+                // doomed too.
+                if (deadService &&
+                    A11yPermissionEnforcer.restartAfterDeadRun(
+                        context.applicationContext,
+                        noA11yActivity = true,
+                    )
+                ) {
+                    kotlinx.coroutines.delay(700)
+                    kotlin.system.exitProcess(0)
+                }
             }
         }
     }
