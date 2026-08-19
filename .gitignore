@@ -33,3 +33,9 @@ app/google-services.json
 .firebaserc
 .firebase/
 
+# Service-account private key for the log fetcher, and whatever it pulls down.
+# The key grants admin access to the Firebase project — never commit it.
+tools/service-account.json
+tools/node_modules/
+.remote-logs/
+

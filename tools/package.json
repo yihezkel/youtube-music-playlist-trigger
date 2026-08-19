@@ -1,0 +1,12 @@
+{
+  "name": "ytmtrigger-tools",
+  "private": true,
+  "type": "module",
+  "description": "Local maintenance scripts for YTM Trigger. Not part of the Android build.",
+  "scripts": {
+    "fetch": "node fetch-remote-logs.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2"
+  }
+}

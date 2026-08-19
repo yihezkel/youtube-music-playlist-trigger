@@ -150,6 +150,30 @@ Logs are also **uploaded automatically whenever a self-test fails**, so a breaka
 
 The phone applies remote changes on its next check-in: at app start, after every trigger and self-test, and on a 15-minute background poll. Commands are therefore not instant. True push would need FCM plus a server component to send it (Cloud Functions requires the paid Blaze plan), which isn't worth it for a personal device — so this deliberately trades a few minutes of latency for zero cost and no backend.
 
+### Pulling diagnostics without the phone
+
+`tools/fetch-remote-logs.mjs` downloads device state, config and uploaded logs
+(including the structured self-test run records) from Firestore to
+`.remote-logs/`, so the phone's health can be reviewed when it isn't present.
+
+The Firebase CLI has no document-read command, and its stored OAuth token
+belongs to a human login that `firebase logout` revokes, so this uses a
+service account — the supported mechanism for unattended reads.
+
+1. Firebase console → **Project settings → Service accounts → Generate new private key**.
+2. Save it as `tools/service-account.json` (gitignored — it grants admin access
+   to the project, so never commit it), or point `YTM_SERVICE_ACCOUNT` at it.
+3. Run it:
+
+   ```sh
+   cd tools && npm install
+   node fetch-remote-logs.mjs            # add --days N to widen the window
+   ```
+
+It prints a per-device summary — last check-in, last self-test success/failure,
+permission health — and writes `.remote-logs/<deviceId>/` plus a machine-readable
+`summary.json`.
+
 ### Privacy
 
 Everything lives under `users/{your-uid}/` in your own Firebase project, and the security rules reject any request whose UID doesn't match. Uploaded logs can contain playlist IDs and device diagnostics; nothing is public.
