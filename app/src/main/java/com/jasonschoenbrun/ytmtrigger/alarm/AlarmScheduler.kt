@@ -22,6 +22,8 @@ object AlarmScheduler {
     const val EXTRA_SCHEDULE_ID = "scheduleId"
     const val EXTRA_OCCURRENCE_MS = "occurrenceMs"
     const val EXTRA_MANUAL = "manual"
+    /** How long before a trigger the accessibility preflight runs. */
+    const val PREFLIGHT_LEAD_MIN = 6L
     private val FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
     fun rescheduleAll(context: Context, schedules: List<Schedule>) {
@@ -54,6 +56,7 @@ object AlarmScheduler {
             return
         }
         val am = context.getSystemService(AlarmManager::class.java) ?: return
+        schedulePreflight(context, schedule.id, nextMs)
         // H-fix-2: use setAlarmClock instead of setExactAndAllowWhileIdle.
         // The user-visible alarm-clock path is the highest-priority wakeup
         // available to apps and survives doze, restricted standby, and
@@ -131,6 +134,33 @@ object AlarmScheduler {
             ))
         } catch (se: SecurityException) {
             Logger.e("Alarm", "Immediate trigger denied", t = se)
+        }
+    }
+
+    /**
+     * Arm a wake-up [PREFLIGHT_LEAD_MIN] minutes before [triggerMs] so the
+     * accessibility service can be verified, and repaired if necessary, while
+     * there is still time to restart the process harmlessly.
+     */
+    private fun schedulePreflight(context: Context, scheduleId: String, triggerMs: Long) {
+        val at = triggerMs - PREFLIGHT_LEAD_MIN * 60_000L
+        if (at <= System.currentTimeMillis()) return
+        val am = context.getSystemService(AlarmManager::class.java) ?: return
+        val pi = PendingIntent.getBroadcast(
+            context,
+            "preflight:$scheduleId".hashCode(),
+            Intent(context, PreflightReceiver::class.java).setAction(PreflightReceiver.ACTION),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        try {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            Logger.i("Alarm", "Preflight scheduled", mapOf(
+                "id" to scheduleId,
+                "at" to FMT.format(Date(at)),
+                "leadMin" to PREFLIGHT_LEAD_MIN.toString(),
+            ))
+        } catch (se: SecurityException) {
+            Logger.w("Alarm", "Preflight alarm denied", t = se)
         }
     }
 

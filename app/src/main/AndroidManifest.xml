@@ -129,6 +129,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".alarm.PreflightReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".alarm.BootReceiver"
             android:exported="true">
             <intent-filter>

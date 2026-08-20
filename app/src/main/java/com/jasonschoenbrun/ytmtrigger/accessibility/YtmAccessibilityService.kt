@@ -81,9 +81,12 @@ class YtmAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
-        // Liveness marker: proves AccessibilityManagerService is actually
-        // delivering to us. See isResponsive().
+        // Liveness markers: prove AccessibilityManagerService is actually
+        // delivering to us, and when it last did. The gap between "connected"
+        // and "last event" is the measurement that tells us how long a
+        // binding survives before going quiet.
         sawEventSinceConnect.set(true)
+        lastEventAtMs.set(System.currentTimeMillis())
         // D-fix-3: log every window-state change at debug, even when there's
         // no pending action, so we can correlate logs with what the user saw.
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
@@ -825,6 +828,7 @@ class YtmAccessibilityService : AccessibilityService() {
         private val instance = AtomicReference<YtmAccessibilityService?>(null)
         private val sawEventSinceConnect = java.util.concurrent.atomic.AtomicBoolean(false)
         private val connectedAtMs = java.util.concurrent.atomic.AtomicLong(0L)
+        private val lastEventAtMs = java.util.concurrent.atomic.AtomicLong(0L)
         private val pending = AtomicReference<PostLaunchAction?>(null)
         private val actionDone = OneShot()
         private val lastActionResult = AtomicReference<A11yActionResult?>(null)
@@ -873,6 +877,14 @@ class YtmAccessibilityService : AccessibilityService() {
          * calling it there blocks until the ~5s timeout and returns null.
          */
         fun canReadActiveWindow(): Boolean = currentForegroundPackage() != null
+
+        /** Milliseconds since `onServiceConnected`, or null if never bound. */
+        fun msSinceConnected(): Long? =
+            connectedAtMs.get().takeIf { it > 0 }?.let { System.currentTimeMillis() - it }
+
+        /** Milliseconds since the last delivered event, or null if none yet. */
+        fun msSinceLastEvent(): Long? =
+            lastEventAtMs.get().takeIf { it > 0 }?.let { System.currentTimeMillis() - it }
 
         /**
          * The package that owns the current foreground window, as seen by the

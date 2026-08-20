@@ -66,6 +66,14 @@ class YtmApp : Application() {
         } catch (t: Throwable) {
             Logger.e("App", "Remote sync setup failed", t = t)
         }
+        // Instrumentation for the intermittent dead-binding fault: sample
+        // accessibility liveness every 15 minutes so the moment it stops is
+        // recorded, instead of only being discovered by a six-hourly self-test.
+        try {
+            com.jasonschoenbrun.ytmtrigger.accessibility.A11yHealthWorker.ensureScheduled(this)
+        } catch (t: Throwable) {
+            Logger.e("App", "A11y health worker setup failed", t = t)
+        }
         // Re-arm all schedules at app start (covers update-triggered restarts)
         appScope.launch {
             try {

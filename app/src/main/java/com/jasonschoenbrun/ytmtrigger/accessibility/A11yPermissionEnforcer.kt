@@ -293,28 +293,58 @@ object A11yPermissionEnforcer {
      */
     fun restartAfterDeadRun(context: Context, noA11yActivity: Boolean): Boolean {
         if (!noA11yActivity) return false
+        return requestRestart(context, reason = "self-test found no accessibility activity", respectTriggerProximity = true)
+    }
+
+    /**
+     * Repair the accessibility service ahead of a scheduled trigger.
+     *
+     * Called from a preflight alarm a few minutes before playback is due, so
+     * that a binding which has gone quiet during hours of idle is replaced
+     * *before* it matters rather than after the music has already failed to
+     * start. Trigger proximity is deliberately ignored here — being close to
+     * a trigger is the entire reason this runs — but a restart is still
+     * refused while playback is actually in progress.
+     *
+     * @return true if a restart was armed and the caller should exit.
+     */
+    suspend fun preflightRepair(context: Context): Boolean {
+        if (ensureEnabledAndBound(context)) {
+            Logger.i("A11yPerm", "Preflight: accessibility healthy")
+            return false
+        }
+        Logger.w("A11yPerm", "Preflight: accessibility not usable ahead of a scheduled trigger")
+        return requestRestart(context, reason = "preflight before scheduled trigger", respectTriggerProximity = false)
+    }
+
+    private fun requestRestart(
+        context: Context,
+        reason: String,
+        respectTriggerProximity: Boolean,
+    ): Boolean {
         if (!isAccessibilityEnabled(context)) return false
 
         // Killing the process while a trigger is starting kills the playback
         // too. This is not hypothetical: on 2026-08-20 the 11:58 self-test
         // finished at 12:00:17, the 12:00 trigger started at 12:00:19, and the
         // restart armed by that failure landed at 12:00:21 — the music never
-        // played. A failed self-test is not worth sacrificing the actual
-        // scheduled playback for, so defer whenever one is running or close.
+        // played.
         if (PlaybackTriggerService.isRunning()) {
-            Logger.w("A11yPerm", "Deferring restart: a playback trigger is in progress")
+            Logger.w("A11yPerm", "Deferring restart: a playback trigger is in progress", mapOf("reason" to reason))
             return false
         }
-        val minsToTrigger = runCatching {
-            AlarmScheduler.minutesToNextTrigger(ScheduleRepository.get(context).all())
-        }.getOrNull()
-        if (minsToTrigger != null && minsToTrigger <= TRIGGER_PROXIMITY_MIN) {
-            Logger.w(
-                "A11yPerm",
-                "Deferring restart: a scheduled trigger is imminent",
-                mapOf("minsToTrigger" to minsToTrigger.toString()),
-            )
-            return false
+        if (respectTriggerProximity) {
+            val minsToTrigger = runCatching {
+                AlarmScheduler.minutesToNextTrigger(ScheduleRepository.get(context).all())
+            }.getOrNull()
+            if (minsToTrigger != null && minsToTrigger <= TRIGGER_PROXIMITY_MIN) {
+                Logger.w(
+                    "A11yPerm",
+                    "Deferring restart: a scheduled trigger is imminent",
+                    mapOf("minsToTrigger" to minsToTrigger.toString(), "reason" to reason),
+                )
+                return false
+            }
         }
 
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -324,17 +354,19 @@ object A11yPermissionEnforcer {
         if (now - last < RESTART_COOLDOWN_MS) {
             Logger.w(
                 "A11yPerm",
-                "Self-test failed with no accessibility activity, but a restart was already " +
-                    "tried recently — not restarting again",
-                mapOf("minsSinceLast" to ((now - last) / 60000).toString()),
+                "Restart wanted but one was tried recently — not restarting again",
+                mapOf(
+                    "minsSinceLast" to ((now - last) / 60000).toString(),
+                    "reason" to reason,
+                ),
             )
             return false
         }
         prefs.edit().putLong(KEY_LAST_RESTART, now).commit()
         Logger.w(
             "A11yPerm",
-            "Self-test failed with no accessibility activity at all — restarting the process, " +
-                "the only recovery ever observed for this state",
+            "Restarting the process — the only recovery ever observed for a dead binding",
+            mapOf("reason" to reason),
         )
         ProcessRestartReceiver.arm(context)
         return true
