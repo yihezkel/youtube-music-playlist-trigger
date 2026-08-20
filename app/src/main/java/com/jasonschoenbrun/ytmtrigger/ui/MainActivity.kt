@@ -1292,6 +1292,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var skipFirst by remember(settings.defaultSkipFirstTrack) {
         mutableStateOf(settings.defaultSkipFirstTrack)
     }
+    var skipAds by remember(settings.skipAds) {
+        mutableStateOf(settings.skipAds)
+    }
     var selfTestEnabled by remember(settings.selfTestEnabled) {
         mutableStateOf(settings.selfTestEnabled)
     }
@@ -1318,6 +1321,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             defaultEnableShuffle = enableShuffle,
                             defaultSkipFirstTrack = skipFirst,
                             selfTestEnabled = selfTestEnabled,
+                            skipAds = skipAds,
                             israeliObservance = !useDiasporaDates,
                             selfTestPlaylistUrl = selfTestUrlText.trim().ifBlank { null },
                         )
@@ -1382,6 +1386,18 @@ fun SettingsScreen(onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Enable self-test", Modifier.weight(1f))
                 Switch(checked = selfTestEnabled, onCheckedChange = { selfTestEnabled = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Skip ads automatically")
+                    Text(
+                        "Presses YouTube Music's skip button as soon as a skippable ad allows it. " +
+                            "Only matters for tracks you haven't uploaded yourself.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = skipAds, onCheckedChange = { skipAds = it })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

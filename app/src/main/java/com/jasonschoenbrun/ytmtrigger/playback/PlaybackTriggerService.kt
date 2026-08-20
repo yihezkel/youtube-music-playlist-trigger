@@ -42,6 +42,7 @@ class PlaybackTriggerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val scheduleId = intent?.getStringExtra(AlarmScheduler.EXTRA_SCHEDULE_ID)
         val manual = intent?.getBooleanExtra(AlarmScheduler.EXTRA_MANUAL, false) == true
+        active.set(true)
         Logger.i("PlaybackSvc", "onStartCommand", mapOf(
             "scheduleId" to (scheduleId ?: "null"),
             "manual" to manual.toString(),
@@ -397,6 +398,7 @@ class PlaybackTriggerService : Service() {
 
     override fun onDestroy() {
         Logger.i("PlaybackSvc", "onDestroy")
+        active.set(false)
         currentJob?.cancel()
         scope.cancel()
         releaseScreenWake()
@@ -412,6 +414,11 @@ class PlaybackTriggerService : Service() {
         const val MAX_ATTEMPTS = 3
         const val PLAYBACK_TIMEOUT_MS = 25_000L
         const val WAKE_LOCK_MS = 60_000L
+
+        private val active = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** True while a trigger is actually launching and verifying playback. */
+        fun isRunning(): Boolean = active.get()
 
         fun startManual(context: Context, scheduleId: String) {
             val intent = Intent(context, PlaybackTriggerService::class.java).apply {

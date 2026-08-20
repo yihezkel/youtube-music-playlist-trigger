@@ -7,6 +7,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.A11yActionResult
 import com.jasonschoenbrun.ytmtrigger.diag.A11yStep
 import com.jasonschoenbrun.ytmtrigger.log.EvalFix
@@ -47,6 +48,13 @@ class YtmAccessibilityService : AccessibilityService() {
     /** C-fix-1: serialise runAction so a debounced event can never start a
      *  second worker while the first is still pressing buttons. */
     private val actionMutex = Mutex()
+    /** Serialises ad-skip work without blocking on [actionMutex], which the
+     *  post-launch action holds for many seconds while it presses buttons. */
+    private val adMutex = Mutex()
+    private var adJob: Job? = null
+    @Volatile private var lastAdCheckMs: Long = 0L
+    @Volatile private var adCooldownUntilMs: Long = 0L
+    @Volatile private var lastAdDumpMs: Long = 0L
     /** C-fix-2: timestamp of the last window-state event we acted on. */
     @Volatile private var lastEventActedMs: Long = 0L
 
@@ -85,6 +93,9 @@ class YtmAccessibilityService : AccessibilityService() {
                 "text" to event.text.joinToString("|").take(120),
             ))
         }
+        // Ads can start at any point in a queue, not only right after launch,
+        // so this runs independently of any pending post-launch action.
+        maybeSkipAd(event)
         if (pending.get() == null) return
         // B-fix-1: only events from YT Music ever start the worker.
         if (event.packageName?.toString() != YT_MUSIC_PKG) return
@@ -477,6 +488,127 @@ class YtmAccessibilityService : AccessibilityService() {
 
     private fun rootOrNull(): AccessibilityNodeInfo? = try { rootInActiveWindow } catch (_: Throwable) { null }
 
+    // --- ad skipping ----------------------------------------------------
+
+    /**
+     * Cheap gate run on every YT Music event. Does no node inspection and no
+     * settings lookup, because this executes on the main thread for every
+     * content change YouTube Music emits — and it emits a lot while playing.
+     * All real work happens on [scope].
+     */
+    private fun maybeSkipAd(event: AccessibilityEvent) {
+        if (event.packageName?.toString() != YT_MUSIC_PKG) return
+        val now = System.currentTimeMillis()
+        if (now < adCooldownUntilMs) return
+        if (now - lastAdCheckMs < AD_CHECK_INTERVAL_MS) return
+        lastAdCheckMs = now
+        if (adJob?.isActive == true) return
+        adJob = scope.launch { adMutex.withLock { trySkipAd() } }
+    }
+
+    /**
+     * Press YouTube Music's skip-ad control the moment it appears.
+     *
+     * Skippable ads only become skippable after a countdown, so there is no
+     * single moment to look: the control is polled off the stream of content
+     * changes the app is already emitting, throttled to
+     * [AD_CHECK_INTERVAL_MS].
+     */
+    private suspend fun trySkipAd() {
+        if (!SettingsRepository.get(this).current().skipAds) return
+        val root = rootOrNull() ?: return
+        val skip = findSkipAdNode(root)
+        if (skip == null) {
+            reportAdCandidatesIfAdShowing(root)
+            return
+        }
+        EvalFix.start("AD-skip", mapOf("id" to (skip.viewIdResourceName ?: "")))
+        val ok = performClickOrTap(skip)
+        EvalFix.end("AD-skip", success = ok)
+        // The control stays in the tree for a moment after being pressed, and
+        // without this it was observed pressing six times in 2.6s. The extra
+        // taps land wherever the player redraws next, which is how a stray tap
+        // ends up hitting an unrelated control.
+        adCooldownUntilMs = System.currentTimeMillis() + AD_SKIP_COOLDOWN_MS
+        Logger.i("A11y", "Skip-ad pressed", mapOf(
+            "ok" to ok.toString(),
+            "id" to (skip.viewIdResourceName ?: ""),
+            "desc" to (skip.contentDescription?.toString() ?: ""),
+            "text" to (skip.text?.toString() ?: ""),
+            "cooldownMs" to AD_SKIP_COOLDOWN_MS.toString(),
+        ))
+    }
+
+    /**
+     * Locate the skip control.
+     *
+     * The exact identifiers YouTube Music uses are not documented and change
+     * between releases, so several shapes are accepted. Matching is kept
+     * deliberately tight: a bare "skip" substring would also match the
+     * next-track control, and clicking that during a song would skip the
+     * user's music rather than an advert — so known player controls are
+     * excluded explicitly and free text must look like "skip"/"skip ad".
+     */
+    private fun findSkipAdNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        for (id in SKIP_AD_IDS) {
+            val n = findById(root, id)
+            if (n != null && n.isVisibleToUser) return n
+        }
+        // Indexed native search covering both text and content description.
+        // Deliberately the only fallback: a full tree walk here would run
+        // twice a second for the entire duration of playback.
+        val byText = try { root.findAccessibilityNodeInfosByText("Skip") } catch (_: Throwable) { null }
+        return byText?.firstOrNull { it.isVisibleToUser && looksLikeSkipAd(it) }
+    }
+
+    private fun looksLikeSkipAd(n: AccessibilityNodeInfo): Boolean {
+        val id = n.viewIdResourceName?.substringAfterLast('/')?.lowercase().orEmpty()
+        if (id in EXCLUDED_CONTROL_IDS) return false
+        if (id.contains("skip") && id.contains("ad")) return true
+        val label = ((n.contentDescription?.toString() ?: "") + " " + (n.text?.toString() ?: ""))
+            .trim().lowercase()
+        if (label.isEmpty()) return false
+        // "Next track" and friends must never match.
+        if (label.contains("next")) return false
+        return label.contains("skip ad") || SKIP_LABEL_REGEX.matches(label)
+    }
+
+    /**
+     * When an advert appears to be on screen but no known control matched,
+     * record the nearby candidates once in a while.
+     *
+     * This exists because the identifiers can only really be learned from a
+     * real advert on a real device; without it a miss would be silent and
+     * there would be nothing to improve the matcher from. Rate-limited hard,
+     * since it walks the tree.
+     */
+    private fun reportAdCandidatesIfAdShowing(root: AccessibilityNodeInfo) {
+        val now = System.currentTimeMillis()
+        if (now - lastAdDumpMs < AD_DUMP_INTERVAL_MS) return
+        // Stamp before walking, not after a match: otherwise the walk itself
+        // would repeat every check interval for the whole of playback, since
+        // the common case is that no advert is present.
+        lastAdDumpMs = now
+        val candidates = mutableListOf<String>()
+        var adIndicator = false
+        walk(root) { n ->
+            val id = n.viewIdResourceName?.substringAfterLast('/').orEmpty()
+            val label = ((n.contentDescription?.toString() ?: "") + " " +
+                (n.text?.toString() ?: "")).trim()
+            val hay = "$id $label".lowercase()
+            if (AD_INDICATOR_REGEX.containsMatchIn(hay)) {
+                adIndicator = true
+                if (candidates.size < 12) {
+                    candidates += "id=$id label=${label.take(40)} click=${n.isClickable} vis=${n.isVisibleToUser}"
+                }
+            }
+        }
+        if (!adIndicator) return
+        Logger.w("A11y", "Ad appears to be showing but no skip control matched", mapOf(
+            "candidates" to candidates.joinToString(" | "),
+        ))
+    }
+
     /**
      * Identify what package owns the current foreground window.
      * Used by [ensureForegroundYtm] (B-fix-2/3/4) and the L-fix-1
@@ -643,6 +775,47 @@ class YtmAccessibilityService : AccessibilityService() {
         const val SYSTEMUI_PKG = "com.android.systemui"
         /** C-fix-2: ignore window events within 250ms of the last one acted on. */
         const val EVENT_DEBOUNCE_MS = 250L
+
+        /** How often the ad watcher may inspect the tree. */
+        const val AD_CHECK_INTERVAL_MS = 500L
+        /**
+         * Quiet period after a press.
+         *
+         * Long enough that the control can disappear before the next check —
+         * without it, six presses landed in 2.6s — but short enough that the
+         * second advert of a pod is still skipped promptly, which is the
+         * common case when this fires at all.
+         */
+        const val AD_SKIP_COOLDOWN_MS = 2_000L
+        /** How often an unmatched-ad report may be logged. */
+        const val AD_DUMP_INTERVAL_MS = 5L * 60 * 1000
+
+        /** Resource ids seen on skip controls, most specific first. */
+        private val SKIP_AD_IDS = listOf(
+            "skip_ad_button",
+            "ad_skip_button",
+            "skip_ads_button",
+            "player_ad_skip_button",
+        )
+
+        /** Player controls that must never be mistaken for a skip-ad button. */
+        private val EXCLUDED_CONTROL_IDS = setOf(
+            "player_control_next_button",
+            "player_control_previous_button",
+            "mini_player_play_pause_replay_button",
+            "playback_queue_shuffle_button_view",
+        )
+
+        /** Matches a standalone "Skip", "Skip ad" or "Skip ads" label. */
+        private val SKIP_LABEL_REGEX = Regex("^skip(\\s+ads?)?$")
+
+        /**
+         * Words suggesting an advert is on screen, for the diagnostic report.
+         * Deliberately not a bare "ad": that matched the Premium upsell's
+         * "Play your heart out, ad-free …" and reported an advert that was not
+         * there. Resource ids use underscores, so those are matched instead.
+         */
+        private val AD_INDICATOR_REGEX = Regex("skip|advert|sponsor|\\bad_|_ad\\b")
         /** B-fix-3: wait this long before declaring YT Music actually displaced. */
         const val FOREGROUND_GRACE_MS = 1_000L
         /** B-fix-4: wait this long for YT Music to come back after restore. */

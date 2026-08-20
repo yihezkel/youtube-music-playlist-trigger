@@ -22,8 +22,8 @@ android {
         applicationId = "com.jasonschoenbrun.ytmtrigger"
         minSdk = 34
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.5.0"
+        versionCode = 9
+        versionName = "0.6.0"
         // Lets the app tell at runtime whether it was built with a Firebase
         // config, without probing for generated resources.
         buildConfigField("boolean", "HAS_FIREBASE", hasFirebaseConfig.toString())

@@ -152,6 +152,17 @@ object AlarmScheduler {
         return PendingIntent.getBroadcast(context, reqCode, intent, flags)
     }
 
+    /**
+     * Minutes until the soonest enabled schedule fires, or null if none.
+     */
+    fun minutesToNextTrigger(schedules: List<Schedule>): Long? {
+        val now = System.currentTimeMillis()
+        return schedules.filter { it.enabled }
+            .mapNotNull { computeNextTriggerMs(it) }
+            .minOrNull()
+            ?.let { (it - now) / 60000 }
+    }
+
     fun computeNextTriggerMs(schedule: Schedule, now: LocalDateTime = LocalDateTime.now()): Long? {
         val time = schedule.localTime()
         val days = schedule.daysOfWeek.map { DayOfWeek.of(it) }.toSet()

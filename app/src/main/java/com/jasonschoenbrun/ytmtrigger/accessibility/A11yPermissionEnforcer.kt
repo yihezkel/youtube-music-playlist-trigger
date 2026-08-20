@@ -7,7 +7,10 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
+import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
 import kotlinx.coroutines.delay
 import kotlin.system.exitProcess
 
@@ -291,6 +294,29 @@ object A11yPermissionEnforcer {
     fun restartAfterDeadRun(context: Context, noA11yActivity: Boolean): Boolean {
         if (!noA11yActivity) return false
         if (!isAccessibilityEnabled(context)) return false
+
+        // Killing the process while a trigger is starting kills the playback
+        // too. This is not hypothetical: on 2026-08-20 the 11:58 self-test
+        // finished at 12:00:17, the 12:00 trigger started at 12:00:19, and the
+        // restart armed by that failure landed at 12:00:21 — the music never
+        // played. A failed self-test is not worth sacrificing the actual
+        // scheduled playback for, so defer whenever one is running or close.
+        if (PlaybackTriggerService.isRunning()) {
+            Logger.w("A11yPerm", "Deferring restart: a playback trigger is in progress")
+            return false
+        }
+        val minsToTrigger = runCatching {
+            AlarmScheduler.minutesToNextTrigger(ScheduleRepository.get(context).all())
+        }.getOrNull()
+        if (minsToTrigger != null && minsToTrigger <= TRIGGER_PROXIMITY_MIN) {
+            Logger.w(
+                "A11yPerm",
+                "Deferring restart: a scheduled trigger is imminent",
+                mapOf("minsToTrigger" to minsToTrigger.toString()),
+            )
+            return false
+        }
+
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val last = prefs.getLong(KEY_LAST_RESTART, 0L)
         val now = System.currentTimeMillis()
@@ -479,6 +505,8 @@ object A11yPermissionEnforcer {
     private const val KEY_LAST_RESTART = "lastProcessRestartMs"
     /** Long enough that a restart which did not help cannot loop. */
     private const val RESTART_COOLDOWN_MS = 6L * 60 * 60 * 1000
+    /** Never restart within this many minutes of a scheduled trigger. */
+    private const val TRIGGER_PROXIMITY_MIN = 10L
 
     const val DEFAULT_BIND_TIMEOUT_MS: Long = 4_000L
     /** Long enough for the framework to tear down and rebuild the service. */

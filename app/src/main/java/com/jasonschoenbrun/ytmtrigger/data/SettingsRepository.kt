@@ -25,6 +25,9 @@ data class AppSettings(
     val defaultSkipFirstTrack: Boolean = true,
     /** Run a non-destructive end-to-end self-test every 6 hours. */
     val selfTestEnabled: Boolean = true,
+    /** Press YouTube Music's skip button as soon as a skippable ad allows it.
+     *  Only relevant for playlist entries that aren't user uploads. */
+    val skipAds: Boolean = true,
     /** Israeli observance = single-day Yom Tov (default). When false the
      *  Diaspora two-day table is used. UI exposes the inverse as
      *  "Use Diaspora dates" so the default-OFF semantics read naturally. */

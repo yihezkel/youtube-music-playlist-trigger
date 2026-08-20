@@ -82,6 +82,7 @@
       <label><input type="checkbox" id="shuffle" /> Shuffle</label>
       <label><input type="checkbox" id="skip" /> Skip first track</label>
       <label><input type="checkbox" id="selfTestEnabled" /> Self-test</label>
+      <label><input type="checkbox" id="skipAds" /> Skip ads</label>
       <label><input type="checkbox" id="israeli" /> Israel Yom Tov dates</label>
     </div>
   </div>
@@ -229,6 +230,7 @@ async function loadConfig() {
   $('shuffle').checked = conf.defaultEnableShuffle !== false;
   $('skip').checked = conf.defaultSkipFirstTrack !== false;
   $('selfTestEnabled').checked = conf.selfTestEnabled !== false;
+  $('skipAds').checked = conf.skipAds !== false;
   $('israeli').checked = conf.israeliObservance !== false;
   schedules = conf.schedules || [];
   renderSchedules();
@@ -305,6 +307,7 @@ $('save').onclick = async () => {
     defaultEnableShuffle: $('shuffle').checked,
     defaultSkipFirstTrack: $('skip').checked,
     selfTestEnabled: $('selfTestEnabled').checked,
+    skipAds: $('skipAds').checked,
     israeliObservance: $('israeli').checked,
     selfTestPlaylistUrl: $('selfTestUrl').value.trim() || null,
     schedules: [...document.querySelectorAll('.sched')].map(d => d._read()),

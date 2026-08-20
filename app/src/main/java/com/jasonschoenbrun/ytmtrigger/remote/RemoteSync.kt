@@ -97,6 +97,7 @@ object RemoteSync {
                 defaultEnableShuffle = config.defaultEnableShuffle ?: s.defaultEnableShuffle,
                 defaultSkipFirstTrack = config.defaultSkipFirstTrack ?: s.defaultSkipFirstTrack,
                 selfTestEnabled = config.selfTestEnabled ?: s.selfTestEnabled,
+                skipAds = config.skipAds ?: s.skipAds,
                 israeliObservance = config.israeliObservance ?: s.israeliObservance,
                 selfTestPlaylistUrl = config.selfTestPlaylistUrl ?: s.selfTestPlaylistUrl,
             )
@@ -146,6 +147,7 @@ object RemoteSync {
             defaultEnableShuffle = s.defaultEnableShuffle,
             defaultSkipFirstTrack = s.defaultSkipFirstTrack,
             selfTestEnabled = s.selfTestEnabled,
+            skipAds = s.skipAds,
             israeliObservance = s.israeliObservance,
             selfTestPlaylistUrl = s.selfTestPlaylistUrl,
             schedules = ScheduleRepository.get(context).all(),

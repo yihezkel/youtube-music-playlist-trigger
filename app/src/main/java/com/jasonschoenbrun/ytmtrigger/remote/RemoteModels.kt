@@ -20,6 +20,7 @@ data class RemoteConfig(
     val defaultEnableShuffle: Boolean? = null,
     val defaultSkipFirstTrack: Boolean? = null,
     val selfTestEnabled: Boolean? = null,
+    val skipAds: Boolean? = null,
     val israeliObservance: Boolean? = null,
     val selfTestPlaylistUrl: String? = null,
     /** Full replacement for the schedule list when present. */

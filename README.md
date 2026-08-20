@@ -2,7 +2,7 @@
 
 Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at a scheduled time, opens YouTube Music, and plays a randomly chosen playlist — over Bluetooth or the built-in speaker.
 
-**Current version: 0.5.0** — see [Releases](../../releases) for the APK.
+**Current version: 0.6.0** — see [Releases](../../releases) for the APK.
 
 ## What it does
 
@@ -15,15 +15,25 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   - Dismisses Premium upsells / "Try X" / "Maybe later" dialogs automatically.
   - Skips if a phone call is active.
   - Retries up to 3 times with backoff on verification failure.
+  - Falls back through three independent launch strategies — the `https` deep
+    link, launcher-then-deep-link, and the `vnd.youtube.music://` scheme, which
+    enters through a different activity than the other two.
   - Dumps the YouTube Music window tree to logs on failure.
+- **Automatic ad skipping** — presses YouTube Music's skip control as soon as a
+  skippable ad allows it, anywhere in the queue rather than only after launch.
+  Matters once playlists contain tracks you didn't upload yourself. Matching is
+  deliberately narrow so the next-track button can never be mistaken for it, and
+  when an ad appears that it can't match, it logs the on-screen candidates so
+  the matcher can be improved from real data. Toggle in **Default settings**.
 - **6-hourly background self-test** that silently confirms the whole flow still works.
   Plays an audible TTS + alarm tone ("YouTube Music Bluetooth phone isn't working and needs attention") if the test fails three different ways in a row.
   - Volume is forced to 0 during the test.
   - Skips on Shabat (Friday 17:30 → Saturday 21:30 local) and Yom Tov.
   - Yom Tov dates default to **Israel** (single-day). Toggle "Use Diaspora dates" in Default settings for two-day observance.
-  - Every run is persisted as a **structured forensic record** (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, intent dispatch result, accessibility step trace with latencies, and MediaSession / audio-active timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
-- **Accessibility auto-heal** — if Android ever disables the accessibility service, the app re-enables it automatically (on launch, on boot, before every trigger and self-test, plus a live settings watcher). Requires a one-time `WRITE_SECURE_SETTINGS` grant; see setup below.
-- **Manual trigger** from the home screen or a home-screen widget.
+  - Every run is persisted as a **structured forensic record** (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, real intent dispatch result, accessibility step trace with latencies, and MediaSession / audio-active timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
+- **Accessibility resilience** — if Android disables the accessibility service, the app re-enables it automatically (on launch, on boot, before every trigger and self-test, plus a live settings watcher). If a self-test fails with the service having done nothing at all, the app restarts its own process, which is the only recovery observed for that state. Requires a one-time `WRITE_SECURE_SETTINGS` grant; see setup below.
+- **Remote control** — change playlists and schedules, trigger playback, and read the phone's logs from a browser. Optional; see below.
+- **Manual trigger** from a **Play now** button on each schedule, or from a home-screen widget.
 - **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
 - **Persistent logs** with in-app viewer, level filter, search, copy/share. 14-day retention. Diagnostic "EvalFix" markers let speculative fixes be evaluated and pruned over time.
 
@@ -48,7 +58,7 @@ The home screen shows a red "Setup needed" card whenever a required permission i
 
 1. **Exact alarms** — required for schedules to fire on time.
 2. **Notifications** — required for the foreground service that drives playback.
-3. **YTM Trigger Helper Accessibility service** — required to press Play, enable shuffle, skip the first track, and dismiss upsells.
+3. **YTM Trigger Helper Accessibility service** — required to press Play, enable shuffle, skip the first track, skip ads, and dismiss upsells.
 4. **Disable battery optimization** for this app.
 5. **Vendor-specific** — open **Self-test** for steps to disable your phone's vendor restriction system (Samsung "Sleeping apps", Xiaomi "Auto-start", Huawei "Protected apps", etc.). These cannot be detected from inside the app.
 6. **Accessibility auto-heal (recommended)** — grant once over adb so the app can re-enable its own accessibility service if Android turns it off:
@@ -70,7 +80,8 @@ Then add at least one schedule from the **Schedules** screen.
 
 ## Configuration
 
-- **Default settings** screen sets the playlists, volume, shuffle, skip-first-track, and self-test options that new schedules inherit.
+- **Default settings** screen sets the playlists, volume, shuffle, skip-first-track, ad-skipping, and self-test options that new schedules inherit.
+- **Schedules** screen lists every schedule with its next fire time, an enable switch, and a **Play now** button.
 - **Self-test** screen shows the live setup checklist, the last self-test success / failure / skip timestamps, a "Run now" button, and "Export last 20 runs (JSON)" for full per-run forensics. Tap "Stop alert" if the failure alarm is sounding.
 - **Logs** screen shows everything the app has done; level filter and free-text search are at the top, with copy-to-clipboard and share-as-file in the toolbar.
 
@@ -139,7 +150,7 @@ base64 -w0 app/google-services.json      # paste into secret GOOGLE_SERVICES_JSO
 
 ### What you can do remotely
 
-- Edit default playlists, volume, shuffle/skip, self-test options and full schedules
+- Edit default playlists, volume, shuffle/skip, ad-skipping, self-test options and full schedules
 - **Play now**, **Run self-test**, **Request logs**
 - Read uploaded logs in the browser
 - See device health: accessibility, MediaSession probe, battery exemption, last self-test result
