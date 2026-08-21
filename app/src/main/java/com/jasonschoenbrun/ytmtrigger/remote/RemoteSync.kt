@@ -14,6 +14,7 @@ import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
+import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
 import com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver
 import kotlinx.coroutines.tasks.await
 import kotlinx.serialization.encodeToString
@@ -114,9 +115,10 @@ object RemoteSync {
                 s.copy(lastPickedPlaylistIds = existing[s.id]?.lastPickedPlaylistIds ?: emptyList())
             } else s
         }
-        val keepIds = merged.map { it.id }.toSet()
-        existing.keys.filterNot { it in keepIds }.forEach { repo.delete(it) }
-        merged.forEach { repo.upsert(it) }
+        // One atomic replacement, which also drops any schedule the console
+        // removed. Deleting those separately and then upserting each survivor
+        // raced with itself and silently dropped all but the last one's edits.
+        repo.replaceAll(merged)
         AlarmScheduler.rescheduleAll(context, merged)
         Logger.i("Remote", "Rescheduled after remote config", mapOf(
             "count" to merged.count { it.enabled }.toString(),
@@ -239,6 +241,7 @@ object RemoteSync {
             SelfTestReceiver.fireManual(context)
             true
         }
+        RemoteCommands.STOP_NOW -> PlaybackStopper.stop(context, reason = "remote stop")
         RemoteCommands.UPLOAD_LOGS -> {
             uploadLogs(context, days = arg?.toIntOrNull() ?: 3)
             true

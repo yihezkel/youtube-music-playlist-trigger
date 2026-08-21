@@ -67,6 +67,7 @@
     <h2>Actions</h2>
     <div class="row">
       <button id="btnPlay">Play now</button>
+      <button id="btnStop" class="sec">Stop</button>
       <button id="btnSelfTest" class="sec">Run self-test</button>
       <button id="btnLogs" class="sec">Request logs</button>
     </div>
@@ -148,7 +149,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const $ = (id) => document.getElementById(id);
-const DAYS = [['Mon',1],['Tue',2],['Wed',3],['Thu',4],['Fri',5],['Sat',6],['Sun',7]];
+// Sunday first, matching the app. Values stay ISO (Mon=1 … Sun=7).
+const DAYS = [['Su',7],['M',1],['Tu',2],['W',3],['Th',4],['F',5],['\u05E9',6]];
 let uid = null, deviceId = null, schedules = [], currentRevision = 0, loadedOk = false;
 
 function toast(msg) {
@@ -313,11 +315,15 @@ function renderSchedules() {
     div.className = 'sched';
     const hh = String(Math.floor((s.timeMinutes ?? 450) / 60)).padStart(2, '0');
     const mm = String((s.timeMinutes ?? 450) % 60).padStart(2, '0');
+    const stop = s.stopTimeMinutes == null ? '' :
+      `${String(Math.floor(s.stopTimeMinutes / 60)).padStart(2, '0')}:${String(s.stopTimeMinutes % 60).padStart(2, '0')}`;
     div.innerHTML = `
       <div class="row">
         <input type="text" data-f="name" placeholder="Name" value="${esc(s.name || '')}" />
         <input type="time" data-f="time" value="${hh}:${mm}" style="flex:0 0 130px" />
       </div>
+      <label>Stop time (optional — leave blank to play until stopped)</label>
+      <input type="time" data-f="stop" value="${stop}" style="flex:0 0 130px" />
       <label>Days</label>
       <div class="days">${DAYS.map(([n, v]) =>
         `<label><input type="checkbox" data-day="${v}" ${(s.daysOfWeek || []).includes(v) ? 'checked' : ''}/>${n}</label>`).join('')}</div>
@@ -336,12 +342,17 @@ function renderSchedules() {
     div._read = () => {
       const days = [...div.querySelectorAll('[data-day]')].filter(c => c.checked).map(c => +c.dataset.day);
       const [h, m] = div.querySelector('[data-f=time]').value.split(':').map(Number);
+      // An empty <input type=time> yields '', which must stay null rather than
+      // becoming 00:00 — midnight is a legitimate stop time.
+      const stopRaw = div.querySelector('[data-f=stop]').value;
+      const [sh, sm] = stopRaw ? stopRaw.split(':').map(Number) : [null, null];
       return {
         ...s,
         name: div.querySelector('[data-f=name]').value || 'Schedule',
         enabled: div.querySelector('[data-f=enabled]').checked,
         daysOfWeek: days,
         timeMinutes: (h * 60 + m) || 0,
+        stopTimeMinutes: stopRaw ? sh * 60 + sm : null,
         playlistUrls: div.querySelector('[data-f=playlists]').value.split('\n').map(x => x.trim()).filter(Boolean),
       };
     };
@@ -353,7 +364,7 @@ $('addSched').onclick = () => {
   schedules = [...document.querySelectorAll('.sched')].map(d => d._read());
   schedules.push({
     id: crypto.randomUUID(), name: 'New', enabled: true,
-    daysOfWeek: [1, 2, 3, 4, 5], timeMinutes: 7 * 60 + 30,
+    daysOfWeek: [1, 2, 3, 4, 5], timeMinutes: 7 * 60 + 30, stopTimeMinutes: null,
     playlistUrls: [], targetVolumePercent: null, autoStopMinutes: null,
     enableShuffle: true, skipFirstTrack: true, lastPickedPlaylistIds: [],
   });
@@ -391,6 +402,7 @@ async function sendCommand(type, arg) {
   toast(`Queued "${type}"`);
 }
 $('btnPlay').onclick = () => sendCommand('playNow', schedules[0]?.id);
+$('btnStop').onclick = () => sendCommand('stopNow');
 $('btnSelfTest').onclick = () => sendCommand('runSelfTest');
 $('btnLogs').onclick = () => sendCommand('uploadLogs', '3');
 

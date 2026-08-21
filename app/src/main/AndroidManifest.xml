@@ -121,6 +121,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".alarm.StopReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".selftest.SelfTestReceiver"
             android:exported="false" />
 

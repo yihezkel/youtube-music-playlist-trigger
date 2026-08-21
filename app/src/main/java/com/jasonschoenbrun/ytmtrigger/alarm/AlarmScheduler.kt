@@ -28,6 +28,7 @@ object AlarmScheduler {
      * forward it fails closed and nothing plays.
      */
     const val EXTRA_OVERRIDE_CALENDAR = "overrideCalendar"
+    const val ACTION_STOP = "com.jasonschoenbrun.ytmtrigger.STOP"
     /** How long before a trigger the accessibility preflight runs. */
     const val PREFLIGHT_LEAD_MIN = 6L
     private val FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -39,7 +40,7 @@ object AlarmScheduler {
         }
         // C-fix-3: cancel previous before re-arming all so we never have two
         // pending intents for the same schedule (which could double-fire).
-        for (s in schedules) cancel(context, s.id)
+        for (s in schedules) { cancel(context, s.id); if (!s.enabled) cancelStop(context, s.id) }
         for (s in schedules) if (s.enabled) scheduleNext(context, s)
     }
 
@@ -175,6 +176,53 @@ object AlarmScheduler {
         pi.cancel()
         Logger.d("Alarm", "Cancelled", mapOf("id" to scheduleId))
     }
+
+    /**
+     * Arm this schedule's stop time, if it has one.
+     *
+     * Called when playback actually starts rather than from [scheduleNext],
+     * because [scheduleNext] runs again the moment a trigger fires: computing
+     * the stop from the *next* occurrence would immediately cancel the stop
+     * belonging to the playback that just began.
+     *
+     * A stop time at or before the start time means the next day, so an
+     * overnight schedule stops in the morning rather than never.
+     */
+    fun scheduleStop(context: Context, schedule: Schedule) {
+        cancelStop(context, schedule.id)
+        val stopTime = schedule.stopLocalTime() ?: return
+        val now = LocalDateTime.now()
+        var stop = LocalDateTime.of(now.toLocalDate(), stopTime)
+        if (!stop.isAfter(now)) stop = stop.plusDays(1)
+        val at = stop.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val am = context.getSystemService(AlarmManager::class.java) ?: return
+        try {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, stopPendingIntent(context, schedule.id))
+            Logger.i("Alarm", "Stop scheduled", mapOf(
+                "id" to schedule.id,
+                "name" to schedule.name,
+                "at" to FMT.format(Date(at)),
+                "inMin" to ((at - System.currentTimeMillis()) / 60000).toString(),
+            ))
+        } catch (se: SecurityException) {
+            Logger.w("Alarm", "Stop alarm denied", t = se)
+        }
+    }
+
+    fun cancelStop(context: Context, scheduleId: String) {
+        val pi = stopPendingIntent(context, scheduleId)
+        context.getSystemService(AlarmManager::class.java)?.cancel(pi)
+    }
+
+    private fun stopPendingIntent(context: Context, scheduleId: String): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            "stop:$scheduleId".hashCode(),
+            Intent(context, StopReceiver::class.java)
+                .setAction(ACTION_STOP)
+                .putExtra(EXTRA_SCHEDULE_ID, scheduleId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
     private fun pendingIntent(context: Context, scheduleId: String, occurrenceMs: Long, create: Boolean): PendingIntent? {
         val intent = Intent(context, TriggerReceiver::class.java).apply {

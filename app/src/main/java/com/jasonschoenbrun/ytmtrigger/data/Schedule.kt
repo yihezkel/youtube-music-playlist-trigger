@@ -14,6 +14,12 @@ data class Schedule(
     val daysOfWeek: Set<Int> = setOf(1, 2, 3, 4, 5),
     /** Minutes since midnight, 0..1439 */
     val timeMinutes: Int = 7 * 60 + 30,
+    /**
+     * Clock time at which to pause playback, or null for "play until stopped".
+     * Null by default. When it is at or before [timeMinutes] it is treated as
+     * belonging to the following day, so an overnight schedule works.
+     */
+    val stopTimeMinutes: Int? = null,
     val playlistUrls: List<String> = emptyList(),
     val targetVolumePercent: Int? = null,
     val autoStopMinutes: Int? = null,
@@ -22,6 +28,8 @@ data class Schedule(
     val lastPickedPlaylistIds: List<String> = emptyList(),
 ) {
     fun localTime(): LocalTime = LocalTime.of(timeMinutes / 60, timeMinutes % 60)
+    fun stopLocalTime(): LocalTime? =
+        stopTimeMinutes?.let { LocalTime.of(it / 60, it % 60) }
     fun dayOfWeekSet(): Set<DayOfWeek> = daysOfWeek.map { DayOfWeek.of(it) }.toSet()
 
     companion object {

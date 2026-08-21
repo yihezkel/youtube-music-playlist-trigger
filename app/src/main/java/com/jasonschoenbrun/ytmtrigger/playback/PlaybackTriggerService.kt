@@ -131,6 +131,8 @@ class PlaybackTriggerService : Service() {
                 postFailure("No playlists configured for '${schedule.name}'")
                 return
             }
+            // Arm the stop time now that playback is actually going ahead.
+            AlarmScheduler.scheduleStop(this, schedule)
             updateNotification("Launching ${schedule.name}…")
 
             // Set volume if requested. Falls back to global default if the

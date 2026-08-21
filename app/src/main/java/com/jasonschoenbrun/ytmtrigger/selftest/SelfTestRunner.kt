@@ -28,6 +28,7 @@ import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionProbe
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
+import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
 import com.jasonschoenbrun.ytmtrigger.playback.YtmLauncher
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
@@ -510,58 +511,17 @@ object SelfTestRunner {
     }
 
     /**
-     * Pause YT Music. We try two mechanisms in order:
+     * Pause YT Music.
      *
-     *  1. [MediaController.TransportControls.pause] — only works if the user
-     *     has granted us the notification-listener permission (so we can list
-     *     active media sessions). Most reliable when available.
-     *  2. Fallback: [AudioManager.dispatchMediaKeyEvent] with
-     *     [KeyEvent.KEYCODE_MEDIA_PAUSE]. Works without any special permission
-     *     and routes to whichever app currently owns audio focus — which is
-     *     YT Music since it just started playing.
+     * The two-mechanism implementation now lives in [PlaybackStopper] so the
+     * per-schedule stop time and the console's stop command pause playback the
+     * same way this does.
      *
      * The worst case (both paths fail) is that the user hears at most a
      * fraction of a second of audio at volume 0 before the volume restore
      * undoes the silencing.
      */
     private fun stopYtMusic(context: Context) {
-        if (tryMediaControllerPause(context)) return
-        val am = context.getSystemService(AudioManager::class.java) ?: return
-        try {
-            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
-            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE))
-            Logger.i("SelfTest", "Pause dispatched via KEYCODE_MEDIA_PAUSE")
-        } catch (t: Throwable) {
-            Logger.w("SelfTest", "Pause dispatch failed", t = t)
-        }
-    }
-
-    /** Returns true if a pause was successfully sent via MediaController. */
-    private fun tryMediaControllerPause(context: Context): Boolean {
-        val mgr = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
-            ?: return false
-        val listenerComp = ComponentName(context, MediaSessionListenerService::class.java)
-        val sessions: List<MediaController> = try {
-            mgr.getActiveSessions(listenerComp)
-        } catch (t: Throwable) {
-            // SecurityException when notif listener isn't granted — fall back.
-            return false
-        }
-        val ytm = sessions.firstOrNull { it.packageName == MediaSessionListenerService.YT_MUSIC_PKG }
-            ?: return false
-        val state = ytm.playbackState?.state
-        val pausable = state == PlaybackState.STATE_PLAYING ||
-            state == PlaybackState.STATE_BUFFERING ||
-            state == PlaybackState.STATE_FAST_FORWARDING ||
-            state == PlaybackState.STATE_REWINDING
-        if (!pausable) return false
-        return try {
-            ytm.transportControls.pause()
-            Logger.i("SelfTest", "Pause sent via MediaController")
-            true
-        } catch (t: Throwable) {
-            Logger.w("SelfTest", "MediaController pause failed", t = t)
-            false
-        }
+        PlaybackStopper.stop(context, reason = "self-test")
     }
 }

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -86,9 +88,18 @@ class SettingsRepository private constructor(private val context: Context) {
 
     fun current(): AppSettings = _flow.value
 
+    /**
+     * Serialized for the same reason as [com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository]:
+     * [transform] reads the current value, then persist suspends before storing
+     * it, so two concurrent updates would otherwise both read the old settings
+     * and the second would drop the first's changes.
+     */
+    private val mutex = Mutex()
+
     fun update(transform: (AppSettings) -> AppSettings) = scope.launch {
-        val updated = transform(_flow.value)
-        persist(updated)
+        val updated = mutex.withLock {
+            transform(_flow.value).also { persist(it) }
+        }
         Logger.i("Settings", "Updated settings", mapOf(
             "defaultPlaylistCount" to updated.defaultPlaylistUrls.size.toString(),
             "defaultVolume" to (updated.defaultVolumePercent?.toString() ?: "null"),

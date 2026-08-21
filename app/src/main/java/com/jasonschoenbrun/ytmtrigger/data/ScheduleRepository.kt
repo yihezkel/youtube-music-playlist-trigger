@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -24,6 +26,18 @@ class ScheduleRepository private constructor(private val context: Context) {
     private val _flow = MutableStateFlow<List<Schedule>>(emptyList())
     val flow: StateFlow<List<Schedule>> = _flow.asStateFlow()
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
+
+    /**
+     * Serializes every read-modify-write below.
+     *
+     * Each mutation reads [_flow], then suspends inside `dataStore.edit`
+     * before writing the result back. Without this lock two mutations issued
+     * close together both read the pre-update list and the second silently
+     * discards the first. That is not hypothetical: applying a remote config
+     * upserts one schedule per call, and an 8 ms gap between two of them was
+     * enough to lose the first schedule's edits entirely.
+     */
+    private val mutex = Mutex()
 
     init {
         // Load synchronously on first access so alarm-rearm at boot has data.
@@ -42,28 +56,44 @@ class ScheduleRepository private constructor(private val context: Context) {
     fun byId(id: String): Schedule? = _flow.value.find { it.id == id }
 
     fun upsert(schedule: Schedule) = scope.launch {
-        val list = _flow.value.toMutableList()
-        val idx = list.indexOfFirst { it.id == schedule.id }
-        if (idx >= 0) list[idx] = schedule else list.add(schedule)
-        persist(list)
+        mutex.withLock {
+            val list = _flow.value.toMutableList()
+            val idx = list.indexOfFirst { it.id == schedule.id }
+            if (idx >= 0) list[idx] = schedule else list.add(schedule)
+            persist(list)
+        }
         Logger.i("Repo", "Upsert schedule", mapOf("id" to schedule.id, "name" to schedule.name, "enabled" to schedule.enabled.toString()))
     }
 
+    /**
+     * Replace the whole list in one atomic step.
+     *
+     * The remote-config path needs this: expressing "here is the new set of
+     * schedules" as a delete-then-upsert-each loop is what exposed the lost
+     * update above, and it is also simply the wrong shape for a wholesale
+     * replacement.
+     */
+    fun replaceAll(schedules: List<Schedule>) = scope.launch {
+        mutex.withLock { persist(schedules) }
+        Logger.i("Repo", "Replaced schedules", mapOf("count" to schedules.size.toString()))
+    }
+
     fun delete(id: String) = scope.launch {
-        val list = _flow.value.filterNot { it.id == id }
-        persist(list)
+        mutex.withLock { persist(_flow.value.filterNot { it.id == id }) }
         Logger.i("Repo", "Delete schedule", mapOf("id" to id))
     }
 
     fun recordPlayed(scheduleId: String, playlistId: String) = scope.launch {
-        val list = _flow.value.map {
-            if (it.id != scheduleId) it
-            else {
-                val keep = (listOf(playlistId) + it.lastPickedPlaylistIds).distinct().take(3)
-                it.copy(lastPickedPlaylistIds = keep)
+        mutex.withLock {
+            val list = _flow.value.map {
+                if (it.id != scheduleId) it
+                else {
+                    val keep = (listOf(playlistId) + it.lastPickedPlaylistIds).distinct().take(3)
+                    it.copy(lastPickedPlaylistIds = keep)
+                }
             }
+            persist(list)
         }
-        persist(list)
     }
 
     private suspend fun persist(list: List<Schedule>) {

@@ -65,6 +65,7 @@ data class FailureEntry(
 /** Commands the console can queue for the device. */
 object RemoteCommands {
     const val PLAY_NOW = "playNow"
+    const val STOP_NOW = "stopNow"
     const val RUN_SELF_TEST = "runSelfTest"
     const val UPLOAD_LOGS = "uploadLogs"
 

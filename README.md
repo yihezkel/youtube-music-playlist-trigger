@@ -7,6 +7,10 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 ## What it does
 
 - **Scheduled triggers**: per-schedule day-of-week + time picker. Multiple schedules supported.
+- **Optional stop time** per schedule — leave it blank (the default) to play until stopped,
+  or set a clock time to pause automatically. A stop time at or before the start time means
+  the next day, so an overnight schedule stops in the morning. The console has a **Stop**
+  button for the same thing on demand.
 - **Random playlist pick** with a rolling "don't repeat last 3" history.
 - **Named playlists** — anywhere a playlist URL is accepted (app and web console) you can
   add a name in brackets after it:
@@ -102,6 +106,8 @@ Then add at least one schedule from the **Schedules** screen.
   `…?list=PLKNLlLCOCLas [Quora]`. Accepted everywhere a URL is — both here and in the web
   console — and shown instead of the raw URL.
 - **Schedules** screen lists every schedule with its next fire time, an enable switch, and a **Play now** button.
+- **Days of week** run Sunday-first (`Su M Tu W Th F ש`), as the week is counted in Israel.
+  The stored values remain ISO (Monday = 1 … Sunday = 7); only the display changes.
 - **Self-test** screen shows the live setup checklist, the last self-test success / failure / skip timestamps, a "Run now" button, and "Export last 20 runs (JSON)" for full per-run forensics. Tap "Stop alert" if the failure alarm is sounding.
 - **Logs** screen shows everything the app has done; level filter and free-text search are at the top, with copy-to-clipboard and share-as-file in the toolbar.
 
@@ -171,7 +177,7 @@ base64 -w0 app/google-services.json      # paste into secret GOOGLE_SERVICES_JSO
 ### What you can do remotely
 
 - Edit default playlists, volume, shuffle/skip, ad-skipping, self-test options and full schedules
-- **Play now**, **Run self-test**, **Request logs**
+- **Play now**, **Stop**, **Run self-test**, **Request logs**
 - Read uploaded logs in the browser
 - See device health: accessibility, MediaSession probe, battery exemption, last self-test result
 - See **failures in the last week** (chart + one sentence each) at the bottom of the page

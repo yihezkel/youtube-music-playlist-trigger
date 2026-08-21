@@ -554,6 +554,14 @@ private fun ScheduleCard(
                         fontWeight = FontWeight.Light,
                         color = titleColor,
                     )
+                    schedule.stopTimeMinutes?.let {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "→ %02d:%02d".format(it / 60, it % 60),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = cs.onSurfaceVariant,
+                        )
+                    }
                     Spacer(Modifier.width(12.dp))
                     Switch(checked = schedule.enabled, onCheckedChange = onToggle)
                 }
@@ -634,14 +642,22 @@ private fun ScheduleCard(
     }
 }
 
+/**
+ * Sunday first, as the week is counted in Israel. Two letters where one would
+ * be ambiguous, and a shin for Shabat.
+ *
+ * The values stay ISO (Monday = 1 … Sunday = 7) because that is what
+ * [Schedule.daysOfWeek] and every scheduling calculation use; only the order
+ * and the labels shown here change.
+ */
 private val DAYS_DISPLAY = listOf(
+    DayOfWeek.SUNDAY to "Su",
     DayOfWeek.MONDAY to "M",
-    DayOfWeek.TUESDAY to "T",
+    DayOfWeek.TUESDAY to "Tu",
     DayOfWeek.WEDNESDAY to "W",
-    DayOfWeek.THURSDAY to "T",
+    DayOfWeek.THURSDAY to "Th",
     DayOfWeek.FRIDAY to "F",
-    DayOfWeek.SATURDAY to "S",
-    DayOfWeek.SUNDAY to "S",
+    DayOfWeek.SATURDAY to "\u05E9",
 )
 
 @Composable
@@ -701,6 +717,7 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
     var skipFirst by remember { mutableStateOf(initial.skipFirstTrack) }
     var volPctText by remember { mutableStateOf(initial.targetVolumePercent?.toString().orEmpty()) }
     var stopMinText by remember { mutableStateOf(initial.autoStopMinutes?.toString().orEmpty()) }
+    var stopTimeMin by remember { mutableStateOf(initial.stopTimeMinutes) }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -726,6 +743,7 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                             skipFirstTrack = skipFirst,
                             targetVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
                             autoStopMinutes = stopMinText.toIntOrNull()?.coerceAtLeast(1),
+                            stopTimeMinutes = stopTimeMin,
                         )
                         repo.upsert(updated)
                         val all = repo.all().toMutableList()
@@ -779,6 +797,51 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                     onConfirm = { h, m ->
                         timeMin = h * 60 + m
                         showTimePicker = false
+                    },
+                )
+            }
+
+            // Optional stop time. Empty by default; "Clear" puts it back to
+            // empty so a schedule can go back to playing until stopped.
+            var showStopPicker by remember { mutableStateOf(false) }
+            ElevatedCard(
+                onClick = { showStopPicker = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.StopCircle, null)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Stop time (optional)", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            stopTimeMin?.let { "%02d:%02d".format(it / 60, it % 60) } ?: "—",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Light,
+                            color = if (stopTimeMin == null) MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (stopTimeMin != null && stopTimeMin!! <= timeMin) {
+                            Text(
+                                "Next day",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (stopTimeMin != null) {
+                        TextButton(onClick = { stopTimeMin = null }) { Text("Clear") }
+                    }
+                    TextButton(onClick = { showStopPicker = true }) { Text("Change") }
+                }
+            }
+            if (showStopPicker) {
+                TimePickerDialog(
+                    initialHour = (stopTimeMin ?: timeMin) / 60,
+                    initialMinute = (stopTimeMin ?: timeMin) % 60,
+                    onDismiss = { showStopPicker = false },
+                    onConfirm = { h, m ->
+                        stopTimeMin = h * 60 + m
+                        showStopPicker = false
                     },
                 )
             }
