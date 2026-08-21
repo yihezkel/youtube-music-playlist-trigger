@@ -46,6 +46,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jasonschoenbrun.ytmtrigger.BuildConfig
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
+import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
 import com.jasonschoenbrun.ytmtrigger.data.PlaylistUrl
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
@@ -56,6 +57,7 @@ import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
+import java.time.LocalDateTime
 import java.util.Date
 import java.util.Locale
 
@@ -374,6 +376,23 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
     val ctx = LocalContext.current
     val repo = remember { ScheduleRepository.get(ctx) }
     val schedules by repo.flow.collectAsStateWithLifecycle()
+    val settings by SettingsRepository.get(ctx).flow.collectAsStateWithLifecycle()
+
+    fun play(s: Schedule, overrideCalendar: Boolean) {
+        Logger.i("UI", "Manual trigger", mapOf(
+            "scheduleId" to s.id,
+            "overrideCalendar" to overrideCalendar.toString(),
+        ))
+        PlaybackTriggerService.startManual(ctx, s.id, overrideCalendar)
+        // B-fix-5: bow out of MainActivity so it can't sit on
+        // top of YT Music once the launch intent fires.
+        (ctx as? android.app.Activity)?.finish()
+    }
+
+    // Non-null while the user is being asked to confirm playing during
+    // Shabat / Yom Tov. Holds the reason so the dialog can name the day.
+    var confirmPlay by remember { mutableStateOf<Pair<Schedule, String>?>(null) }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("Schedules") }, navigationIcon = {
             IconButton(onClick = { onNav(Screen.Home) }) { Icon(Icons.Default.ArrowBack, null) }
@@ -398,15 +417,26 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(schedules, key = { it.id }) { s ->
+                    // A disabled schedule would not have fired anyway, so it
+                    // gets no warning.
+                    val wouldHitChag = s.enabled && HebrewCalendarChecker.blockedOccurrences(
+                        AlarmScheduler.occurrencesWithin(s, days = 7),
+                        settings.israeliObservance,
+                    ).isNotEmpty()
                     ScheduleCard(
                         schedule = s,
+                        calendarWarning = if (wouldHitChag) CHAG_SCHEDULE_WARNING else null,
                         onClick = { onNav(Screen.Edit(s.id)) },
                         onPlay = {
-                            Logger.i("UI", "Manual trigger", mapOf("scheduleId" to s.id))
-                            PlaybackTriggerService.startManual(ctx, s.id)
-                            // B-fix-5: bow out of MainActivity so it can't sit on
-                            // top of YT Music once the launch intent fires.
-                            (ctx as? android.app.Activity)?.finish()
+                            val cal = HebrewCalendarChecker.check(
+                                LocalDateTime.now(),
+                                settings.israeliObservance,
+                            )
+                            if (cal.skip) {
+                                confirmPlay = s to (cal.reason ?: "Shabat/Yom Tov")
+                            } else {
+                                play(s, overrideCalendar = false)
+                            }
                         },
                         onToggle = { newEnabled ->
                             repo.upsert(s.copy(enabled = newEnabled))
@@ -420,12 +450,42 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
             }
         }
     }
+
+    confirmPlay?.let { (schedule, reason) ->
+        AlertDialog(
+            onDismissRequest = { confirmPlay = null },
+            icon = { Icon(Icons.Default.Warning, null) },
+            title = { Text("It's $reason") },
+            text = {
+                Text(
+                    "Music is not supposed to play on Shabat or Yom Tov. " +
+                        "Play \"${schedule.name}\" anyway?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmPlay = null
+                    play(schedule, overrideCalendar = true)
+                }) { Text("Play anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmPlay = null }) { Text("Cancel") }
+            },
+        )
+    }
 }
+
+/** Exact wording requested by the user; kept in one place so both the card
+ *  and any future surface stay identical. */
+private const val CHAG_SCHEDULE_WARNING =
+    "Warning: This schedule would've caused music to play (but it won't) " +
+        "on Shabat/Yom Tov over the next week."
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScheduleCard(
     schedule: Schedule,
+    calendarWarning: String?,
     onClick: () -> Unit,
     onPlay: () -> Unit,
     onToggle: (Boolean) -> Unit,
@@ -531,6 +591,23 @@ private fun ScheduleCard(
                     Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Play now", fontWeight = FontWeight.SemiBold)
+                }
+                calendarWarning?.let { warning ->
+                    Surface(
+                        color = cs.errorContainer,
+                        contentColor = cs.onErrorContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(Modifier.padding(12.dp)) {
+                            Icon(
+                                Icons.Default.Warning, null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(warning, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
         }

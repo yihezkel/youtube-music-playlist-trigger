@@ -22,6 +22,12 @@ object AlarmScheduler {
     const val EXTRA_SCHEDULE_ID = "scheduleId"
     const val EXTRA_OCCURRENCE_MS = "occurrenceMs"
     const val EXTRA_MANUAL = "manual"
+    /**
+     * Set only after the user has explicitly confirmed a Shabat / Yom Tov
+     * warning. Absent means "not confirmed", so any path that forgets to
+     * forward it fails closed and nothing plays.
+     */
+    const val EXTRA_OVERRIDE_CALENDAR = "overrideCalendar"
     /** How long before a trigger the accessibility preflight runs. */
     const val PREFLIGHT_LEAD_MIN = 6L
     private val FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -193,8 +199,7 @@ object AlarmScheduler {
             ?.let { (it - now) / 60000 }
     }
 
-    fun computeNextTriggerMs(schedule: Schedule, now: LocalDateTime = LocalDateTime.now()): Long? {
-        val time = schedule.localTime()
+    fun computeNextTriggerMs(schedule: Schedule, now: LocalDateTime = LocalDateTime.now()): Long? {        val time = schedule.localTime()
         val days = schedule.daysOfWeek.map { DayOfWeek.of(it) }.toSet()
         if (days.isEmpty()) return null
         var probe: LocalDate = now.toLocalDate()
@@ -205,5 +210,32 @@ object AlarmScheduler {
             if (dt.isAfter(now)) return dt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
         return null
+    }
+
+    /**
+     * Every occurrence of [schedule] in the next [days] days, in order.
+     *
+     * Used by the UI to warn when a schedule would otherwise have fired during
+     * Shabat or Yom Tov. Unlike [computeNextTriggerMs] this does not stop at
+     * the first hit, because a weekly warning has to consider all of them.
+     */
+    fun occurrencesWithin(
+        schedule: Schedule,
+        days: Long,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): List<LocalDateTime> {
+        val wanted = schedule.daysOfWeek.map { DayOfWeek.of(it) }.toSet()
+        if (wanted.isEmpty()) return emptyList()
+        val time = schedule.localTime()
+        val end = now.plusDays(days)
+        val out = mutableListOf<LocalDateTime>()
+        var day = now.toLocalDate()
+        while (true) {
+            val at = LocalDateTime.of(day, time)
+            if (at.isAfter(end)) break
+            if (day.dayOfWeek in wanted && at.isAfter(now)) out += at
+            day = day.plusDays(1)
+        }
+        return out
     }
 }

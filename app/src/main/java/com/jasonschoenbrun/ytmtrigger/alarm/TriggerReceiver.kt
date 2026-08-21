@@ -35,6 +35,12 @@ class TriggerReceiver : BroadcastReceiver() {
                 val svc = Intent(context, PlaybackTriggerService::class.java).apply {
                     putExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, scheduleId)
                     putExtra(AlarmScheduler.EXTRA_MANUAL, manual)
+                    // Forwarded so a confirmed override survives the hop
+                    // through the alarm; absent means "not confirmed".
+                    putExtra(
+                        AlarmScheduler.EXTRA_OVERRIDE_CALENDAR,
+                        intent.getBooleanExtra(AlarmScheduler.EXTRA_OVERRIDE_CALENDAR, false),
+                    )
                 }
                 context.startForegroundService(svc)
                 Logger.i("TriggerReceiver", "Started PlaybackTriggerService", mapOf("id" to scheduleId))

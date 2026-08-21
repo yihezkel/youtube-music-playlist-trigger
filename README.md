@@ -7,6 +7,20 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 ## What it does
 
 - **Scheduled triggers**: per-schedule day-of-week + time picker. Multiple schedules supported.
+- **Never plays on Shabat or Yom Tov.** Every path that can start playback —
+  scheduled alarm, home-screen widget, in-app **Play now**, and the remote
+  console — passes through one gate in `PlaybackTriggerService.onStartCommand`,
+  placed before the screen is even woken so nothing observable happens. A
+  scheduled trigger can never override it; a manual one can, but only after the
+  app shows a warning dialog and you confirm. The override travels as an
+  explicit intent extra, so any path that forgets to pass it fails closed.
+  Blocked triggers are logged, are **not** recorded as failures, and the
+  schedule is still re-armed for its next occurrence.
+  - Windows are the same conservative approximations the self-test uses: Shabat
+    = Friday 17:30 → Saturday 21:30 local, Yom Tov from a hardcoded table
+    (2026-2030), defaulting to **Israel** single-day observance.
+  - Any schedule that would otherwise have fired inside one of those windows in
+    the coming week shows a warning on its card in the Schedules screen.
 - **Random playlist pick** with a rolling "don't repeat last 3" history.
 - **End-to-end launch flow** via deep-link intent + AccessibilityService:
   - Wakes the screen and dismisses the keyguard.
@@ -28,8 +42,8 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 - **6-hourly background self-test** that silently confirms the whole flow still works.
   Plays an audible TTS + alarm tone ("YouTube Music Bluetooth phone isn't working and needs attention") if the test fails three different ways in a row.
   - Volume is forced to 0 during the test.
-  - Skips on Shabat (Friday 17:30 → Saturday 21:30 local) and Yom Tov.
-  - Yom Tov dates default to **Israel** (single-day). Toggle "Use Diaspora dates" in Default settings for two-day observance.
+  - Skips on Shabat (Friday 17:30 → Saturday 21:30 local) and Yom Tov. A manual **Run now** deliberately bypasses this, since tapping it is an explicit request to test the setup.
+  - Yom Tov dates default to **Israel** (single-day). Toggle "Use Diaspora dates" in Default settings for two-day observance. The same setting governs the playback gate.
   - Every run is persisted as a **structured forensic record** (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, real intent dispatch result, accessibility step trace with latencies, and MediaSession / audio-active timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
 - **Accessibility resilience** — if Android disables the accessibility service, the app re-enables it automatically (on launch, on boot, before every trigger and self-test, plus a live settings watcher). If a self-test fails with the service having done nothing at all, the app restarts its own process, which is the only recovery observed for that state. Requires a one-time `WRITE_SECURE_SETTINGS` grant; see setup below.
 - **Remote control** — change playlists and schedules, trigger playback, and read the phone's logs from a browser. Optional; see below.

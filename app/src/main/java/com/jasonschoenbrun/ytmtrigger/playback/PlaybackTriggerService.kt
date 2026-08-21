@@ -11,11 +11,13 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.jasonschoenbrun.ytmtrigger.YtmApp
 import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
+import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
@@ -31,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 
 class PlaybackTriggerService : Service() {
 
@@ -43,10 +46,13 @@ class PlaybackTriggerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val scheduleId = intent?.getStringExtra(AlarmScheduler.EXTRA_SCHEDULE_ID)
         val manual = intent?.getBooleanExtra(AlarmScheduler.EXTRA_MANUAL, false) == true
+        val overrideCalendar =
+            intent?.getBooleanExtra(AlarmScheduler.EXTRA_OVERRIDE_CALENDAR, false) == true
         active.set(true)
         Logger.i("PlaybackSvc", "onStartCommand", mapOf(
             "scheduleId" to (scheduleId ?: "null"),
             "manual" to manual.toString(),
+            "overrideCalendar" to overrideCalendar.toString(),
         ))
 
         startForeground(NOTIFICATION_ID, buildNotification("Starting playback…"))
@@ -56,6 +62,34 @@ class PlaybackTriggerService : Service() {
             stopSelfSafe()
             return START_NOT_STICKY
         }
+
+        // Shabat / Yom Tov gate. Deliberately the very first thing after the
+        // mandatory startForeground and before runFlow, because runFlow's first
+        // act is to wake the screen - a visible side effect that must not
+        // happen on Shabat. Scheduled triggers can never override; a manual
+        // one can, but only when the caller has already shown the user the
+        // warning and had it confirmed.
+        val cal = HebrewCalendarChecker.check(
+            LocalDateTime.now(),
+            SettingsRepository.get(this).current().israeliObservance,
+        )
+        if (cal.skip && !overrideCalendar) {
+            val reason = cal.reason ?: "Shabat/Yom Tov"
+            // Not a failure: nothing is broken, so this must not reach
+            // FailureLog or the alert path.
+            Logger.i("PlaybackSvc", "Blocked by calendar", mapOf(
+                "scheduleId" to scheduleId,
+                "manual" to manual.toString(),
+                "reason" to reason,
+            ))
+            if (manual) {
+                Toast.makeText(this, "Not playing - it's $reason.", Toast.LENGTH_LONG).show()
+            }
+            active.set(false)
+            stopSelfSafe()
+            return START_NOT_STICKY
+        }
+
         // C-fix-3: cancel any in-flight previous attempt before starting a new one.
         currentJob?.cancel()
         currentJob = scope.launch { runFlow(scheduleId, manual) }
@@ -424,10 +458,11 @@ class PlaybackTriggerService : Service() {
         /** True while a trigger is actually launching and verifying playback. */
         fun isRunning(): Boolean = active.get()
 
-        fun startManual(context: Context, scheduleId: String) {
+        fun startManual(context: Context, scheduleId: String, overrideCalendar: Boolean = false) {
             val intent = Intent(context, PlaybackTriggerService::class.java).apply {
                 putExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, scheduleId)
                 putExtra(AlarmScheduler.EXTRA_MANUAL, true)
+                putExtra(AlarmScheduler.EXTRA_OVERRIDE_CALENDAR, overrideCalendar)
             }
             context.startForegroundService(intent)
         }
