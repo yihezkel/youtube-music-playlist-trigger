@@ -22,9 +22,12 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   A scheduled trigger can never override this; a manual one can, but only after a
   confirmation dialog. Blocked triggers aren't counted as failures, and the schedule is
   still re-armed for next time.
-  - Shabat = Friday 17:30 → Saturday 21:30 local. Yom Tov comes from a built-in table
-    (2026-2030), **Israel** single-day by default; "Use Diaspora dates" in Default
-    settings switches to two-day observance. Both windows are deliberately wide.
+  - Shabat = from 40 minutes before sunset on Friday to 42 minutes after sunset on Saturday;
+    Yom Tov comes from a built-in table (2026-2030), **Israel** single-day by default
+    ("Use Diaspora dates" in Default settings switches it). Sunset is computed locally
+    from your coordinates — no network, no location permission — so the window tracks the
+    seasons. Coordinates and both offsets are editable in **Default settings**, which also
+    shows the resulting window ("Next Shabat: Fri 21 Aug, 18:38 → Sat 22 Aug, 19:59").
   - A schedule that *would* have fired inside one of those windows in the coming week is
     flagged on its card in the Schedules screen.
 - **End-to-end launch flow** via deep-link intent + AccessibilityService:
@@ -47,8 +50,7 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   Plays an audible TTS + alarm tone ("YouTube Music Bluetooth phone isn't working and needs attention") if the test fails three different ways in a row.
   - Volume is forced to 0 during the test.
   - Skipped automatically on Shabat and Yom Tov. A manual **Run now** asks for
-    confirmation first rather than being silently blocked.
-  - Every run is persisted as a **structured forensic record** (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, real intent dispatch result, accessibility step trace with latencies, and MediaSession / audio-active timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
+    confirmation first rather than being silently blocked.  - Every run is persisted as a **structured forensic record** (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, real intent dispatch result, accessibility step trace with latencies, and MediaSession / audio-active timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
 - **Failures in the last week** — a 7-day bar chart plus one sentence per failure, at the
   bottom of the Self-test screen and of the web console, or "No failures in the last week!"
   when there were none.

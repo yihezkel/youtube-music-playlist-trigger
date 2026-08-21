@@ -13,6 +13,7 @@ import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.accessibility.PostLaunchAction
 import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
+import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.data.PlaylistUrl
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.A11yActionResult
@@ -79,7 +80,7 @@ object SelfTestRunner {
         //    explicitly tapped "Run now" they want to test the setup,
         //    regardless of what day it is.
         if (!manual) {
-            val cal = HebrewCalendarChecker.check(LocalDateTime.now(), settings.israeliObservance)
+            val cal = HebrewCalendarChecker.check(LocalDateTime.now(), settings.calendarConfig())
             if (cal.skip) {
                 val reason = cal.reason ?: "Shabat/Yom Tov"
                 Logger.i("SelfTest", "Skipped (calendar)", mapOf("reason" to reason, "runId" to runId))

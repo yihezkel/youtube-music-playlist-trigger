@@ -18,6 +18,7 @@ import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
+import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
@@ -71,7 +72,7 @@ class PlaybackTriggerService : Service() {
         // warning and had it confirmed.
         val cal = HebrewCalendarChecker.check(
             LocalDateTime.now(),
-            SettingsRepository.get(this).current().israeliObservance,
+            SettingsRepository.get(this).current().calendarConfig(),
         )
         if (cal.skip && !overrideCalendar) {
             val reason = cal.reason ?: "Shabat/Yom Tov"

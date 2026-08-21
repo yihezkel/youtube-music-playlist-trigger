@@ -101,6 +101,10 @@ object RemoteSync {
                 selfTestEnabled = config.selfTestEnabled ?: s.selfTestEnabled,
                 skipAds = config.skipAds ?: s.skipAds,
                 israeliObservance = config.israeliObservance ?: s.israeliObservance,
+                latitude = config.latitude ?: s.latitude,
+                longitude = config.longitude ?: s.longitude,
+                shabatStartOffsetMin = config.shabatStartOffsetMin ?: s.shabatStartOffsetMin,
+                shabatEndOffsetMin = config.shabatEndOffsetMin ?: s.shabatEndOffsetMin,
                 selfTestPlaylistUrl = config.selfTestPlaylistUrl ?: s.selfTestPlaylistUrl,
             )
         }
@@ -152,6 +156,10 @@ object RemoteSync {
             selfTestEnabled = s.selfTestEnabled,
             skipAds = s.skipAds,
             israeliObservance = s.israeliObservance,
+            latitude = s.latitude,
+            longitude = s.longitude,
+            shabatStartOffsetMin = s.shabatStartOffsetMin,
+            shabatEndOffsetMin = s.shabatEndOffsetMin,
             selfTestPlaylistUrl = s.selfTestPlaylistUrl,
             schedules = ScheduleRepository.get(context).all(),
         )

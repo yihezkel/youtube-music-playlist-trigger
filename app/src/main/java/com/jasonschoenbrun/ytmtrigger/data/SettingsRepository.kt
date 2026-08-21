@@ -34,6 +34,13 @@ data class AppSettings(
      *  Diaspora two-day table is used. UI exposes the inverse as
      *  "Use Diaspora dates" so the default-OFF semantics read naturally. */
     val israeliObservance: Boolean = true,
+    /** Where sunset is computed. Defaults to Jerusalem. */
+    val latitude: Double = 31.7683,
+    val longitude: Double = 35.2137,
+    /** Minutes before sunset that Shabat / Yom Tov starts (candle lighting). */
+    val shabatStartOffsetMin: Int = 40,
+    /** Minutes after sunset that it ends (nightfall). */
+    val shabatEndOffsetMin: Int = 42,
     /** Playlist URL the self-test uses (must be a valid YT Music playlist).
      *  When null, the self-test picks the first default playlist. */
     val selfTestPlaylistUrl: String? = null,

@@ -6,6 +6,17 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
+/** Build the calendar config from stored settings, in one place so no caller
+ *  can accidentally use a different location or offsets. */
+fun com.jasonschoenbrun.ytmtrigger.data.AppSettings.calendarConfig(): HebrewCalendarChecker.Config =
+    HebrewCalendarChecker.Config(
+        israeliObservance = israeliObservance,
+        latitude = latitude,
+        longitude = longitude,
+        startOffsetMin = shabatStartOffsetMin,
+        endOffsetMin = shabatEndOffsetMin,
+    )
+
 /**
  * Decides when playback and the self-test must stay silent: Shabat and Yom Tov.
  *
@@ -13,11 +24,11 @@ import java.time.LocalTime
  * which made it look like a self-test concern and hid the fact that scheduled
  * playback had no calendar gate at all.
  *
- * Day windows are conservative approximations of sunset/nightfall to avoid
- * needing the device's geo location. Shabat = Friday 17:30 -> Saturday 21:30
- * local. Yom Tov windows are hardcoded from Hebcal dates and span "sunset of
- * day before" (17:30) to "nightfall of last day" (21:30). The windows are
- * intentionally wide; a missed trigger is far better than music playing on chag.
+ * Day windows are anchored to real sunset at the configured location rather
+ * than to fixed clock times, because sunset in Israel moves by over three
+ * hours across the year. Shabat runs from [Config.startOffsetMin] before
+ * sunset on Friday to [Config.endOffsetMin] after sunset on Saturday; Yom Tov
+ * windows span sunset of the day before to nightfall of the last day.
  *
  * Date table covers 2026-2030. After that the windows stop matching unless the
  * table is updated (a fall-open default per user request: "if anything is
@@ -25,49 +36,78 @@ import java.time.LocalTime
  */
 object HebrewCalendarChecker {
 
-    private val DAY_START: LocalTime = LocalTime.of(17, 30)
-    private val DAY_END: LocalTime = LocalTime.of(21, 30)
+    /**
+     * Everything the windows depend on. Bundled so callers cannot pass the
+     * observance flag and forget the location, which would silently fall back
+     * to a different sunset.
+     */
+    data class Config(
+        val israeliObservance: Boolean,
+        val latitude: Double,
+        val longitude: Double,
+        /** Minutes before sunset that Shabat / Yom Tov begins. */
+        val startOffsetMin: Int,
+        /** Minutes after sunset that it ends (nightfall). */
+        val endOffsetMin: Int,
+    )
 
-    data class Window(val name: String, val startDay: LocalDate, val endDay: LocalDate) {
-        fun contains(now: LocalDateTime): Boolean {
-            val startInst = LocalDateTime.of(startDay, DAY_START)
-            val endInst = LocalDateTime.of(endDay, DAY_END)
-            return !now.isBefore(startInst) && !now.isAfter(endInst)
-        }
-    }
+    /**
+     * Used only when sunset cannot be computed at all (polar latitudes). Wide
+     * on purpose: over-blocking is the safe direction.
+     */
+    private val FALLBACK_START: LocalTime = LocalTime.of(16, 0)
+    private val FALLBACK_END: LocalTime = LocalTime.of(21, 30)
+
+    data class Window(val name: String, val startDay: LocalDate, val endDay: LocalDate)
 
     /** Result for callers; includes the matching window name when applicable. */
     data class Result(val skip: Boolean, val reason: String?)
+
+    /** When the block begins on [day]: that day's sunset less the offset. */
+    fun startOf(day: LocalDate, cfg: Config): LocalDateTime =
+        SolarCalculator.sunset(day, cfg.latitude, cfg.longitude)
+            ?.minusMinutes(cfg.startOffsetMin.toLong())
+            ?: LocalDateTime.of(day, FALLBACK_START)
+
+    /** When the block ends on [day]: that day's sunset plus the offset. */
+    fun endOf(day: LocalDate, cfg: Config): LocalDateTime =
+        SolarCalculator.sunset(day, cfg.latitude, cfg.longitude)
+            ?.plusMinutes(cfg.endOffsetMin.toLong())
+            ?: LocalDateTime.of(day, FALLBACK_END)
 
     /**
      * Pure evaluation with no logging, safe to call in a loop (the schedule
      * warning tests every occurrence in the coming week on each recomposition).
      */
-    fun evaluate(at: LocalDateTime, israeliObservance: Boolean): Result {
-        // Shabat: Friday DAY_START (sunset) -> Saturday DAY_END (nightfall).
-        if (at.dayOfWeek == DayOfWeek.FRIDAY && !at.toLocalTime().isBefore(DAY_START)) {
+    fun evaluate(at: LocalDateTime, cfg: Config): Result {
+        val day = at.toLocalDate()
+        // Shabat: sunset Friday -> nightfall Saturday.
+        if (at.dayOfWeek == DayOfWeek.FRIDAY && !at.isBefore(startOf(day, cfg))) {
             return Result(true, "Shabat (Friday evening)")
         }
-        if (at.dayOfWeek == DayOfWeek.SATURDAY && !at.toLocalTime().isAfter(DAY_END)) {
+        if (at.dayOfWeek == DayOfWeek.SATURDAY && !at.isAfter(endOf(day, cfg))) {
             return Result(true, "Shabat (Saturday)")
         }
-        val table = if (israeliObservance) YOM_TOV_ISRAEL else YOM_TOV_DIASPORA
-        val hit = table.firstOrNull { it.contains(at) }
+        // Yom Tov: sunset of the day before -> nightfall of the last day.
+        val table = if (cfg.israeliObservance) YOM_TOV_ISRAEL else YOM_TOV_DIASPORA
+        val hit = table.firstOrNull {
+            !at.isBefore(startOf(it.startDay, cfg)) && !at.isAfter(endOf(it.endDay, cfg))
+        }
         if (hit != null) return Result(true, "Yom Tov: ${hit.name}")
         return Result(false, null)
     }
 
     /** [evaluate], plus a warning when the hardcoded table has run out. */
-    fun check(now: LocalDateTime, israeliObservance: Boolean): Result {
-        val result = evaluate(now, israeliObservance)
+    fun check(now: LocalDateTime, cfg: Config): Result {
+        val result = evaluate(now, cfg)
         if (!result.skip) {
-            val maxYear = (if (israeliObservance) YOM_TOV_ISRAEL else YOM_TOV_DIASPORA)
+            val maxYear = (if (cfg.israeliObservance) YOM_TOV_ISRAEL else YOM_TOV_DIASPORA)
                 .maxOf { it.endDay.year }
             if (now.year > maxYear) {
                 Logger.w("HebrewCal", "Yom Tov table exhausted; please update YOM_TOV_*", mapOf(
                     "currentYear" to now.year.toString(),
                     "tableMaxYear" to maxYear.toString(),
-                    "israeliObservance" to israeliObservance.toString(),
+                    "israeliObservance" to cfg.israeliObservance.toString(),
                 ))
             }
         }
@@ -83,10 +123,17 @@ object HebrewCalendarChecker {
      */
     fun blockedOccurrences(
         occurrences: List<LocalDateTime>,
-        israeliObservance: Boolean,
+        cfg: Config,
     ): List<Pair<LocalDateTime, String>> = occurrences.mapNotNull { at ->
-        val r = evaluate(at, israeliObservance)
+        val r = evaluate(at, cfg)
         if (r.skip) at to (r.reason ?: "Shabat/Yom Tov") else null
+    }
+
+    /** The coming Shabat window, for display in settings. */
+    fun nextShabatWindow(from: LocalDate, cfg: Config): Pair<LocalDateTime, LocalDateTime> {
+        var friday = from
+        while (friday.dayOfWeek != DayOfWeek.FRIDAY) friday = friday.plusDays(1)
+        return startOf(friday, cfg) to endOf(friday.plusDays(1), cfg)
     }
 
     // Diaspora Yom Tov windows (2026-2030). Each row = [start day, end day].

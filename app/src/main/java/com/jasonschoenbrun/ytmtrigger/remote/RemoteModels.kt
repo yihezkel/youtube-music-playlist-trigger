@@ -22,6 +22,10 @@ data class RemoteConfig(
     val selfTestEnabled: Boolean? = null,
     val skipAds: Boolean? = null,
     val israeliObservance: Boolean? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val shabatStartOffsetMin: Int? = null,
+    val shabatEndOffsetMin: Int? = null,
     val selfTestPlaylistUrl: String? = null,
     /** Full replacement for the schedule list when present. */
     val schedules: List<Schedule>? = null,

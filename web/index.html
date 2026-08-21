@@ -101,6 +101,15 @@ https://music.youtube.com/playlist?list=ID [My playlist]"></textarea>
       <label><input type="checkbox" id="skipAds" /> Skip ads</label>
       <label><input type="checkbox" id="israeli" /> Israel Yom Tov dates</label>
     </div>
+    <div class="row" style="margin-top:10px">
+      <div style="flex:1 1 100px"><label>Latitude</label><input type="number" step="0.0001" id="lat" /></div>
+      <div style="flex:1 1 100px"><label>Longitude</label><input type="number" step="0.0001" id="lon" /></div>
+      <div style="flex:1 1 120px"><label>Start: min before sunset</label><input type="number" id="startOff" min="0" max="180" /></div>
+      <div style="flex:1 1 120px"><label>End: min after sunset</label><input type="number" id="endOff" min="0" max="180" /></div>
+    </div>
+    <div class="hint">Shabat and Yom Tov are blocked from <em>start</em> minutes before sunset
+      until <em>end</em> minutes after sunset, computed for these coordinates — so the window
+      tracks the seasons instead of assuming a fixed clock time.</div>
   </div>
 
   <div class="card">
@@ -292,6 +301,10 @@ async function loadConfig() {
   $('playlists').value = (conf.defaultPlaylistUrls || []).join('\n');
   $('volume').value = conf.defaultVolumePercent ?? 100;
   $('selfTestUrl').value = conf.selfTestPlaylistUrl || '';
+  $('lat').value = conf.latitude ?? 31.7683;
+  $('lon').value = conf.longitude ?? 35.2137;
+  $('startOff').value = conf.shabatStartOffsetMin ?? 40;
+  $('endOff').value = conf.shabatEndOffsetMin ?? 42;
   $('shuffle').checked = conf.defaultEnableShuffle !== false;
   $('skip').checked = conf.defaultSkipFirstTrack !== false;
   $('selfTestEnabled').checked = conf.selfTestEnabled !== false;
@@ -384,6 +397,10 @@ $('save').onclick = async () => {
     skipAds: $('skipAds').checked,
     israeliObservance: $('israeli').checked,
     selfTestPlaylistUrl: $('selfTestUrl').value.trim() || null,
+    latitude: parseFloat($('lat').value),
+    longitude: parseFloat($('lon').value),
+    shabatStartOffsetMin: parseInt($('startOff').value, 10),
+    shabatEndOffsetMin: parseInt($('endOff').value, 10),
     schedules: [...document.querySelectorAll('.sched')].map(d => d._read()),
   };
   await setDoc(cfgRef(), {

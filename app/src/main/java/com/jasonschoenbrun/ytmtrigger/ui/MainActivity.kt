@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jasonschoenbrun.ytmtrigger.BuildConfig
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
+import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.data.PlaylistUrl
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
@@ -57,6 +58,7 @@ import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Date
 import java.util.Locale
@@ -421,7 +423,7 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
                     // gets no warning.
                     val wouldHitChag = s.enabled && HebrewCalendarChecker.blockedOccurrences(
                         AlarmScheduler.occurrencesWithin(s, days = 7),
-                        settings.israeliObservance,
+                        settings.calendarConfig(),
                     ).isNotEmpty()
                     ScheduleCard(
                         schedule = s,
@@ -430,7 +432,7 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
                         onPlay = {
                             val cal = HebrewCalendarChecker.check(
                                 LocalDateTime.now(),
-                                settings.israeliObservance,
+                                settings.calendarConfig(),
                             )
                             if (cal.skip) {
                                 confirmPlay = s to (cal.reason ?: "Shabat/Yom Tov")
@@ -1311,7 +1313,7 @@ private fun BackgroundSelfTestCard() {
                     onClick = {
                         val cal = HebrewCalendarChecker.check(
                             LocalDateTime.now(),
-                            s.israeliObservance,
+                            s.calendarConfig(),
                         )
                         if (cal.skip) {
                             confirmSelfTest = cal.reason ?: "Shabat/Yom Tov"
@@ -1612,6 +1614,14 @@ fun SettingsScreen(onBack: () -> Unit) {
     var selfTestUrlText by remember(settings.selfTestPlaylistUrl) {
         mutableStateOf(settings.selfTestPlaylistUrl.orEmpty())
     }
+    var latText by remember(settings.latitude) { mutableStateOf(settings.latitude.toString()) }
+    var lonText by remember(settings.longitude) { mutableStateOf(settings.longitude.toString()) }
+    var startOffText by remember(settings.shabatStartOffsetMin) {
+        mutableStateOf(settings.shabatStartOffsetMin.toString())
+    }
+    var endOffText by remember(settings.shabatEndOffsetMin) {
+        mutableStateOf(settings.shabatEndOffsetMin.toString())
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -1628,6 +1638,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                             selfTestEnabled = selfTestEnabled,
                             skipAds = skipAds,
                             israeliObservance = !useDiasporaDates,
+                            latitude = latText.toDoubleOrNull()?.coerceIn(-90.0, 90.0) ?: it.latitude,
+                            longitude = lonText.toDoubleOrNull()?.coerceIn(-180.0, 180.0) ?: it.longitude,
+                            shabatStartOffsetMin = startOffText.toIntOrNull()?.coerceIn(0, 180)
+                                ?: it.shabatStartOffsetMin,
+                            shabatEndOffsetMin = endOffText.toIntOrNull()?.coerceIn(0, 180)
+                                ?: it.shabatEndOffsetMin,
                             selfTestPlaylistUrl = selfTestUrlText.trim().ifBlank { null },
                         )
                     }
@@ -1715,6 +1731,56 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                 }
                 Switch(checked = useDiasporaDates, onCheckedChange = { useDiasporaDates = it })
+            }
+
+            // Sunset-based Shabat window. Shown live so the effect of a change
+            // is visible without waiting for a Friday.
+            Text("Shabat / Yom Tov times", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = latText, onValueChange = { latText = it },
+                    label = { Text("Latitude") }, modifier = Modifier.weight(1f), singleLine = true,
+                )
+                OutlinedTextField(
+                    value = lonText, onValueChange = { lonText = it },
+                    label = { Text("Longitude") }, modifier = Modifier.weight(1f), singleLine = true,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = startOffText,
+                    onValueChange = { startOffText = it.filter { c -> c.isDigit() } },
+                    label = { Text("Start: min before sunset") },
+                    modifier = Modifier.weight(1f), singleLine = true,
+                )
+                OutlinedTextField(
+                    value = endOffText,
+                    onValueChange = { endOffText = it.filter { c -> c.isDigit() } },
+                    label = { Text("End: min after sunset") },
+                    modifier = Modifier.weight(1f), singleLine = true,
+                )
+            }
+            run {
+                val preview = HebrewCalendarChecker.Config(
+                    israeliObservance = !useDiasporaDates,
+                    latitude = latText.toDoubleOrNull() ?: settings.latitude,
+                    longitude = lonText.toDoubleOrNull() ?: settings.longitude,
+                    startOffsetMin = startOffText.toIntOrNull() ?: settings.shabatStartOffsetMin,
+                    endOffsetMin = endOffText.toIntOrNull() ?: settings.shabatEndOffsetMin,
+                )
+                val (from, to) = HebrewCalendarChecker.nextShabatWindow(LocalDate.now(), preview)
+                val f = java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, HH:mm", Locale.US)
+                Text(
+                    "Next Shabat: ${f.format(from)} → ${f.format(to)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    "Computed from real sunset at the coordinates above, so it tracks " +
+                        "the seasons instead of assuming a fixed clock time.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             OutlinedTextField(
                 value = selfTestUrlText,
