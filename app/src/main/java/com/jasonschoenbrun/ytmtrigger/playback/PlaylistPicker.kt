@@ -23,11 +23,17 @@ object PlaylistPicker {
         Logger.i("Picker", "Picked playlist", mapOf(
             "scheduleId" to schedule.id,
             "playlistId" to picked.second,
+            "name" to (PlaylistUrl.label(picked.first) ?: "-"),
             "candidateCount" to candidates.size.toString(),
             "totalPool" to pool.size.toString(),
         ))
-        return Choice(url = picked.first, playlistId = picked.second)
+        // Hand back the bare URL: callers must never receive the display name.
+        return Choice(
+            url = PlaylistUrl.url(picked.first),
+            playlistId = picked.second,
+            label = PlaylistUrl.label(picked.first),
+        )
     }
 
-    data class Choice(val url: String, val playlistId: String)
+    data class Choice(val url: String, val playlistId: String, val label: String? = null)
 }

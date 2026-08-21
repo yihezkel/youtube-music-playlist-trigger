@@ -7,21 +7,22 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 ## What it does
 
 - **Scheduled triggers**: per-schedule day-of-week + time picker. Multiple schedules supported.
-- **Never plays on Shabat or Yom Tov.** Every path that can start playback —
-  scheduled alarm, home-screen widget, in-app **Play now**, and the remote
-  console — passes through one gate in `PlaybackTriggerService.onStartCommand`,
-  placed before the screen is even woken so nothing observable happens. A
-  scheduled trigger can never override it; a manual one can, but only after the
-  app shows a warning dialog and you confirm. The override travels as an
-  explicit intent extra, so any path that forgets to pass it fails closed.
-  Blocked triggers are logged, are **not** recorded as failures, and the
-  schedule is still re-armed for its next occurrence.
-  - Windows are the same conservative approximations the self-test uses: Shabat
-    = Friday 17:30 → Saturday 21:30 local, Yom Tov from a hardcoded table
-    (2026-2030), defaulting to **Israel** single-day observance.
-  - Any schedule that would otherwise have fired inside one of those windows in
-    the coming week shows a warning on its card in the Schedules screen.
 - **Random playlist pick** with a rolling "don't repeat last 3" history.
+- **Named playlists** — anywhere a playlist URL is accepted (app and web console) you can
+  add a name in brackets after it:
+  `https://music.youtube.com/playlist?list=PLKNLlLCOCLas&si=txZZ [Quora]`.
+  Lists then show the name with the URL underneath. The name is cosmetic — playback always
+  uses the playlist ID — so labelled and bare URLs are interchangeable.
+- **Never plays on Shabat or Yom Tov.** Every path that can start playback — scheduled
+  alarm, home-screen widget, in-app **Play now**, and the remote console — is blocked.
+  A scheduled trigger can never override this; a manual one can, but only after a
+  confirmation dialog. Blocked triggers aren't counted as failures, and the schedule is
+  still re-armed for next time.
+  - Shabat = Friday 17:30 → Saturday 21:30 local. Yom Tov comes from a built-in table
+    (2026-2030), **Israel** single-day by default; "Use Diaspora dates" in Default
+    settings switches to two-day observance. Both windows are deliberately wide.
+  - A schedule that *would* have fired inside one of those windows in the coming week is
+    flagged on its card in the Schedules screen.
 - **End-to-end launch flow** via deep-link intent + AccessibilityService:
   - Wakes the screen and dismisses the keyguard.
   - Presses Play on the playlist page.
@@ -33,29 +34,25 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
     link, launcher-then-deep-link, and the `vnd.youtube.music://` scheme, which
     enters through a different activity than the other two.
   - Dumps the YouTube Music window tree to logs on failure.
-- **Automatic ad skipping** — presses YouTube Music's skip control as soon as a
-  skippable ad allows it, anywhere in the queue rather than only after launch.
-  Matters once playlists contain tracks you didn't upload yourself. Matching is
-  deliberately narrow so the next-track button can never be mistaken for it, and
-  when an ad appears that it can't match, it logs the on-screen candidates so
-  the matcher can be improved from real data. Toggle in **Default settings**.
+- **Automatic ad skipping** — presses YouTube Music's skip control as soon as a skippable
+  ad allows it, anywhere in the queue. Matters once playlists contain tracks you didn't
+  upload yourself. Matching is deliberately narrow so the next-track button can never be
+  mistaken for it; unmatched ads log their on-screen candidates so the matcher can be
+  improved from real data. Toggle in **Default settings**.
 - **6-hourly background self-test** that silently confirms the whole flow still works.
   Plays an audible TTS + alarm tone ("YouTube Music Bluetooth phone isn't working and needs attention") if the test fails three different ways in a row.
   - Volume is forced to 0 during the test.
-  - Skips on Shabat (Friday 17:30 → Saturday 21:30 local) and Yom Tov. A manual **Run now** deliberately bypasses this, since tapping it is an explicit request to test the setup.
-  - Yom Tov dates default to **Israel** (single-day). Toggle "Use Diaspora dates" in Default settings for two-day observance. The same setting governs the playback gate.
+  - Skipped automatically on Shabat and Yom Tov. A manual **Run now** asks for
+    confirmation first rather than being silently blocked.
   - Every run is persisted as a **structured forensic record** (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, real intent dispatch result, accessibility step trace with latencies, and MediaSession / audio-active timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
+- **Failures in the last week** — a 7-day bar chart plus one sentence per failure, at the
+  bottom of the Self-test screen and of the web console, or "No failures in the last week!"
+  when there were none.
 - **Accessibility resilience** — if Android disables the accessibility service, the app re-enables it automatically (on launch, on boot, before every trigger and self-test, plus a live settings watcher). If a self-test fails with the service having done nothing at all, the app restarts its own process, which is the only recovery observed for that state. Requires a one-time `WRITE_SECURE_SETTINGS` grant; see setup below.
 - **Remote control** — change playlists and schedules, trigger playback, and read the phone's logs from a browser. Optional; see below.
 - **Manual trigger** from a **Play now** button on each schedule, or from a home-screen widget.
 - **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
 - **Persistent logs** with in-app viewer, level filter, search, copy/share. 14-day retention. Diagnostic "EvalFix" markers let speculative fixes be evaluated and pruned over time.
-- **Failures in the last week** — a 7-day bar chart plus one sentence per failure, at the
-  bottom of the Self-test screen and of the web console. Says "No failures in the last
-  week!" when there were none. Self-test failures are derived from the 90-day self-test
-  history rather than written twice, so the panel has real history from the moment it
-  ships; trigger failures are recorded to `filesDir/failures/YYYY-MM.jsonl` (60-day
-  retention). Chart and list share one calendar-day window, so they always agree.
 
 ## Install
 
@@ -101,6 +98,9 @@ Then add at least one schedule from the **Schedules** screen.
 ## Configuration
 
 - **Default settings** screen sets the playlists, volume, shuffle, skip-first-track, ad-skipping, and self-test options that new schedules inherit.
+- **Playlist URLs** may carry an optional name in brackets, e.g.
+  `…?list=PLKNLlLCOCLas [Quora]`. Accepted everywhere a URL is — both here and in the web
+  console — and shown instead of the raw URL.
 - **Schedules** screen lists every schedule with its next fire time, an enable switch, and a **Play now** button.
 - **Self-test** screen shows the live setup checklist, the last self-test success / failure / skip timestamps, a "Run now" button, and "Export last 20 runs (JSON)" for full per-run forensics. Tap "Stop alert" if the failure alarm is sounding.
 - **Logs** screen shows everything the app has done; level filter and free-text search are at the top, with copy-to-clipboard and share-as-file in the toolbar.
@@ -212,7 +212,13 @@ Everything lives under `users/{your-uid}/` in your own Firebase project, and the
 
 ## Privacy / data
 
-Everything is local. No network calls beyond what YouTube Music itself makes. Logs stay on the device until you share them.
+Playback, logs and schedules are entirely local: nothing leaves the device, and logs stay
+there until you share them (14-day retention).
+
+The **remote control feature is the one exception**, and only if you set it up. It syncs
+your settings, schedules, health and logs to *your own* Firebase project under
+`users/{your-uid}/`, where the security rules reject any request whose UID doesn't match.
+Without `app/google-services.json` none of that code has anywhere to talk to.
 
 ## License
 

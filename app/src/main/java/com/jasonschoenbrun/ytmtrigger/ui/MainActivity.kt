@@ -481,6 +481,26 @@ private const val CHAG_SCHEDULE_WARNING =
     "Warning: This schedule would've caused music to play (but it won't) " +
         "on Shabat/Yom Tov over the next week."
 
+/**
+ * One playlist entry. Shows the name on top when the entry carries one, with
+ * the URL underneath in a dimmer style, so a labelled list stays scannable
+ * without hiding what actually gets launched.
+ */
+@Composable
+private fun PlaylistEntryText(entry: String, modifier: Modifier = Modifier) {
+    val name = PlaylistUrl.label(entry)
+    Column(modifier) {
+        if (name != null) {
+            Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            PlaylistUrl.url(entry),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScheduleCard(
@@ -780,13 +800,13 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
             Text("Playlists", style = MaterialTheme.typography.titleSmall)
             for ((i, u) in urls.withIndex()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(u, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    PlaylistEntryText(u, Modifier.weight(1f))
                     IconButton(onClick = { urls.removeAt(i) }) { Icon(Icons.Default.Delete, null) }
                 }
             }
             OutlinedTextField(
                 value = newUrl, onValueChange = { newUrl = it },
-                label = { Text("Add playlist URL (https://music.youtube.com/playlist?list=...)") },
+                label = { Text("Add playlist URL — optionally \"…list=ID [Name]\"") },
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     IconButton(onClick = {
@@ -1183,6 +1203,10 @@ private fun BackgroundSelfTestCard() {
     val repo = remember { SettingsRepository.get(ctx) }
     val s by repo.flow.collectAsStateWithLifecycle()
     val fmt = SimpleDateFormat("EEE MMM d, HH:mm:ss", Locale.US)
+    // Non-null while the user is confirming a self-test during Shabat / Yom Tov.
+    // The self-test starts real playback (muted), so it gets the same
+    // confirmation as a manual Play now rather than running silently on chag.
+    var confirmSelfTest by remember { mutableStateOf<String?>(null) }
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Background self-test", style = MaterialTheme.typography.titleMedium)
@@ -1222,8 +1246,16 @@ private fun BackgroundSelfTestCard() {
             ) {
                 FilledTonalButton(
                     onClick = {
-                        Logger.i("UI", "Manual self-test requested")
-                        com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver.fireManual(ctx)
+                        val cal = HebrewCalendarChecker.check(
+                            LocalDateTime.now(),
+                            s.israeliObservance,
+                        )
+                        if (cal.skip) {
+                            confirmSelfTest = cal.reason ?: "Shabat/Yom Tov"
+                        } else {
+                            Logger.i("UI", "Manual self-test requested")
+                            com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver.fireManual(ctx)
+                        }
                     },
                     modifier = Modifier.weight(1f),
                 ) {
@@ -1268,6 +1300,30 @@ private fun BackgroundSelfTestCard() {
                 Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Export last 20 runs (JSON)")
             }
         }
+    }
+
+    confirmSelfTest?.let { reason ->
+        AlertDialog(
+            onDismissRequest = { confirmSelfTest = null },
+            icon = { Icon(Icons.Default.Warning, null) },
+            title = { Text("It's $reason") },
+            text = {
+                Text(
+                    "The self-test starts YouTube Music playing (muted) to prove the " +
+                        "setup still works. Run it anyway?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSelfTest = null
+                    Logger.i("UI", "Manual self-test requested", mapOf("calendarOverride" to "true"))
+                    com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver.fireManual(ctx)
+                }) { Text("Run anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSelfTest = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -1533,13 +1589,13 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text("Default playlists", style = MaterialTheme.typography.titleSmall)
             for ((i, u) in urls.withIndex()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(u, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    PlaylistEntryText(u, Modifier.weight(1f))
                     IconButton(onClick = { urls.removeAt(i) }) { Icon(Icons.Default.Delete, null) }
                 }
             }
             OutlinedTextField(
                 value = newUrl, onValueChange = { newUrl = it },
-                label = { Text("Add playlist URL") },
+                label = { Text("Add playlist URL — optionally \"…list=ID [Name]\"") },
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     IconButton(onClick = {
