@@ -20,6 +20,7 @@ import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.DiagnosticsSnapshot
+import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.EvalFix
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.ui.MainActivity
@@ -350,6 +351,9 @@ class PlaybackTriggerService : Service() {
     }
 
     private fun postFailure(msg: String) {
+        // Every path that reaches here means the music did not play, which is
+        // exactly what the failure list is for.
+        FailureLog.record(this, FailureLog.KIND_TRIGGER, msg)
         val nm = getSystemService(NotificationManager::class.java) ?: return
         val openApp = PendingIntent.getActivity(
             this, 0,

@@ -50,6 +50,16 @@ data class RemoteState(
     val scheduleCount: Int,
     /** Config revision the device has actually applied. */
     val appliedConfigRevision: Long,
+    /** Last seven days of failures, newest first, for the console's chart. */
+    val recentFailures: List<FailureEntry> = emptyList(),
+)
+
+/** A failure as shown to a person: when, which subsystem, and one sentence. */
+@Serializable
+data class FailureEntry(
+    val atMs: Long,
+    val kind: String,
+    val reason: String,
 )
 
 /** Commands the console can queue for the device. */

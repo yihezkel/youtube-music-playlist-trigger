@@ -36,6 +36,12 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 - **Manual trigger** from a **Play now** button on each schedule, or from a home-screen widget.
 - **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
 - **Persistent logs** with in-app viewer, level filter, search, copy/share. 14-day retention. Diagnostic "EvalFix" markers let speculative fixes be evaluated and pruned over time.
+- **Failures in the last week** — a 7-day bar chart plus one sentence per failure, at the
+  bottom of the Self-test screen and of the web console. Says "No failures in the last
+  week!" when there were none. Self-test failures are derived from the 90-day self-test
+  history rather than written twice, so the panel has real history from the moment it
+  ships; trigger failures are recorded to `filesDir/failures/YYYY-MM.jsonl` (60-day
+  retention). Chart and list share one calendar-day window, so they always agree.
 
 ## Install
 
@@ -154,6 +160,7 @@ base64 -w0 app/google-services.json      # paste into secret GOOGLE_SERVICES_JSO
 - **Play now**, **Run self-test**, **Request logs**
 - Read uploaded logs in the browser
 - See device health: accessibility, MediaSession probe, battery exemption, last self-test result
+- See **failures in the last week** (chart + one sentence each) at the bottom of the page
 
 Logs are also **uploaded automatically whenever a self-test fails**, so a breakage shows up in the console without you touching the phone.
 

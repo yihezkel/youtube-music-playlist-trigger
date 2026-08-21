@@ -50,6 +50,7 @@ import com.jasonschoenbrun.ytmtrigger.data.PlaylistUrl
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
+import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.LogLevel
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
@@ -986,6 +987,114 @@ fun SelfTestScreen(onBack: () -> Unit) {
                     advice = advice,
                     osLevelOk = bgStatus.value?.osLevelOk == true,
                 )
+            }
+
+            RecentFailuresCard()
+        }
+    }
+}
+
+/**
+ * Last week's failures — self-tests and real triggers alike — with a per-day
+ * bar chart and one plain sentence each.
+ *
+ * The data existed before but not in an answerable form: self-test outcomes
+ * were buried in forensic records, trigger failures only in notification text,
+ * and settings kept just the single latest failure.
+ */
+@Composable
+private fun RecentFailuresCard() {
+    val ctx = LocalContext.current
+    // Recomputed whenever this screen is composed; failures are rare enough
+    // that polling would be pointless.
+    val entries = remember { FailureLog.recent(ctx, days = 7) }
+    val counts = remember(entries) { FailureLog.dailyCounts(entries, days = 7) }
+    val cs = MaterialTheme.colorScheme
+
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = SurfaceElevated),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "Failures in the last week",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (entries.isEmpty()) {
+                Text(
+                    "No failures in the last week!",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.primary,
+                    fontWeight = FontWeight.Medium,
+                )
+            } else {
+                val max = (counts.maxOrNull() ?: 0).coerceAtLeast(1)
+                val dayFmt = SimpleDateFormat("EEE", Locale.US)
+                val dayMs = 24L * 60 * 60 * 1000
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    counts.forEachIndexed { i, c ->
+                        val label = dayFmt.format(Date(System.currentTimeMillis() - (6 - i) * dayMs))
+                        // Every column is the same height, with the bar bottom
+                        // aligned inside a fixed box. Letting the column grow
+                        // with the bar pushed the day labels out of view.
+                        Column(
+                            Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                if (c > 0) c.toString() else "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cs.onSurfaceVariant,
+                            )
+                            Box(
+                                Modifier.fillMaxWidth().height(44.dp),
+                                contentAlignment = Alignment.BottomCenter,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        // Always leave a sliver so empty days
+                                        // read as "nothing here", not "no chart".
+                                        .height((4 + (40 * c / max)).dp)
+                                        .background(
+                                            if (c > 0) cs.error else cs.outlineVariant,
+                                            RoundedCornerShape(4.dp),
+                                        )
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cs.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                val stampFmt = SimpleDateFormat("EEE d MMM, HH:mm", Locale.US)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (e in entries.take(12)) {
+                        Column {
+                            Text(
+                                "${stampFmt.format(Date(e.atMs))} · ${e.kind}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cs.onSurfaceVariant,
+                            )
+                            Text(e.reason, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    if (entries.size > 12) {
+                        Text(
+                            "…and ${entries.size - 12} more",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = cs.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }

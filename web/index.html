@@ -31,6 +31,14 @@
   .muted { color:var(--dim); font-size:13px; }
   pre { background:#0e0f15; border:1px solid var(--line); border-radius:9px; padding:10px; overflow:auto; max-height:60vh; font-size:12px; }
   .sched { border:1px solid var(--line); border-radius:11px; padding:11px; margin-bottom:10px; background:#171923; }
+  .chart { display:flex; align-items:flex-end; gap:6px; height:84px; margin:6px 0 12px; }
+  .chart .col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+  .chart .bar { width:100%; border-radius:4px; background:var(--accent); }
+  .chart .bar.zero { background:#333747; }
+  .chart .cap, .chart .day { font-size:11px; color:var(--dim); }
+  .fail { border-left:3px solid var(--accent); padding:6px 0 6px 10px; margin-bottom:10px; }
+  .fail .when { font-size:12px; color:var(--dim); }
+  .none { color:var(--ok); font-weight:600; }
   #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:18px; background:#2a2d3a;
     border:1px solid var(--line); padding:9px 14px; border-radius:10px; opacity:0; transition:opacity .2s; }
   #toast.show { opacity:1; }
@@ -109,6 +117,11 @@
     </div>
     <pre id="logView" hidden></pre>
   </div>
+
+  <div class="card">
+    <h2>Failures in the last week</h2>
+    <div id="failures"></div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -180,7 +193,13 @@ async function loadDevice() {
 async function loadState() {
   const s = await getDoc(devRef());
   const el = $('state');
-  if (!s.exists()) { el.textContent = 'No state reported yet.'; return; }
+  if (!s.exists()) {
+    el.textContent = 'No state reported yet.';
+    // Deliberately not "no failures": we simply have not heard from the phone,
+    // and claiming all-clear on missing data would be worse than saying so.
+    $('failures').innerHTML = '<div class="muted">No data reported by the phone yet.</div>';
+    return;
+  }
   let st = {};
   try { st = JSON.parse(s.data().json || '{}'); } catch {}
   const when = (ms) => ms ? new Date(ms).toLocaleString() : '\u2014';
@@ -197,6 +216,43 @@ async function loadState() {
     <div class="kv"><span>Last skip</span><span>${when(st.lastSelfTestSkipMs)} ${esc(st.lastSelfTestSkipReason || '')}</span></div>
     <div class="kv"><span>Schedules</span><span>${st.scheduleCount ?? '\u2014'}</span></div>
     <div class="kv"><span>Applied config revision</span><span>${st.appliedConfigRevision ?? '\u2014'}</span></div>`;
+  renderFailures(st.recentFailures || []);
+}
+
+/**
+ * Last week's failures, from whatever the device last reported. Mirrors the
+ * Self-test screen in the app so both answer the same question the same way.
+ */
+function renderFailures(list) {
+  const host = $('failures');
+  if (!list.length) {
+    host.innerHTML = '<div class="none">No failures in the last week!</div>';
+    return;
+  }
+  const dayMs = 86400000;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const counts = [];
+  for (let i = 6; i >= 0; i--) {
+    const from = start.getTime() - i * dayMs;
+    counts.push({
+      n: list.filter(e => e.atMs >= from && e.atMs < from + dayMs).length,
+      label: new Date(from).toLocaleDateString(undefined, { weekday: 'short' }),
+    });
+  }
+  const max = Math.max(1, ...counts.map(c => c.n));
+  const chart = `<div class="chart">${counts.map(c => `
+    <div class="col">
+      <div class="cap">${c.n || ''}</div>
+      <div class="bar ${c.n ? '' : 'zero'}" style="height:${6 + Math.round(46 * c.n / max)}px"></div>
+      <div class="day">${c.label}</div>
+    </div>`).join('')}</div>`;
+  const items = list.slice(0, 20).map(e => `
+    <div class="fail">
+      <div class="when">${new Date(e.atMs).toLocaleString()} &middot; ${esc(e.kind)}</div>
+      <div>${esc(e.reason)}</div>
+    </div>`).join('');
+  const more = list.length > 20 ? `<div class="muted">&hellip;and ${list.length - 20} more</div>` : '';
+  host.innerHTML = chart + items + more;
 }
 
 async function loadConfig() {

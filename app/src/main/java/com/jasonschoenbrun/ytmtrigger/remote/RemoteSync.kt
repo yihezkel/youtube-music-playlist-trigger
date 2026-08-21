@@ -11,6 +11,7 @@ import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
+import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
 import com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver
@@ -187,6 +188,9 @@ object RemoteSync {
             lastSelfTestSkipReason = settings.lastSelfTestSkipReason,
             scheduleCount = ScheduleRepository.get(context).all().size,
             appliedConfigRevision = prefs(context).getLong(KEY_APPLIED_REVISION, -1L),
+            recentFailures = FailureLog.recent(context, days = 7).take(30).map {
+                FailureEntry(atMs = it.atMs, kind = it.kind, reason = it.reason)
+            },
         )
         device.set(
             mapOf(
