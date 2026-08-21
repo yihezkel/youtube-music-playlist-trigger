@@ -136,6 +136,32 @@ object HebrewCalendarChecker {
         return startOf(friday, cfg) to endOf(friday.plusDays(1), cfg)
     }
 
+    /**
+     * When the next Shabat or Yom Tov window begins strictly after [from], and
+     * what it is. Null only if the Yom Tov table has run out and somehow no
+     * Friday follows.
+     *
+     * Used to mute the phone shortly before the window opens, so callers must
+     * pass a [from] beyond a window they have already handled or they will
+     * simply be handed the same one again.
+     */
+    fun nextWindowStart(from: LocalDateTime, cfg: Config): Pair<LocalDateTime, String>? {
+        val candidates = mutableListOf<Pair<LocalDateTime, String>>()
+        val today = from.toLocalDate()
+        for (i in 0..7L) {
+            val day = today.plusDays(i)
+            if (day.dayOfWeek != DayOfWeek.FRIDAY) continue
+            val start = startOf(day, cfg)
+            if (start.isAfter(from)) { candidates += start to "Shabat"; break }
+        }
+        val table = if (cfg.israeliObservance) YOM_TOV_ISRAEL else YOM_TOV_DIASPORA
+        table.map { startOf(it.startDay, cfg) to it.name }
+            .filter { it.first.isAfter(from) }
+            .minByOrNull { it.first }
+            ?.let { candidates += it }
+        return candidates.minByOrNull { it.first }
+    }
+
     // Diaspora Yom Tov windows (2026-2030). Each row = [start day, end day].
     // Two-day Yom Tov for Pesach 1-2 and 7-8, Shavuot, Rosh Hashanah, Sukkot 1-2,
     // and Shmini Atzeret/Simchat Torah. Yom Kippur is one day.

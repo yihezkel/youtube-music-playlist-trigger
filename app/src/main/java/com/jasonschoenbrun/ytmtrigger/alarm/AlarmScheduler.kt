@@ -6,11 +6,15 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
+import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
+import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
+import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.log.EvalFix
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.ui.MainActivity
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -29,6 +33,9 @@ object AlarmScheduler {
      */
     const val EXTRA_OVERRIDE_CALENDAR = "overrideCalendar"
     const val ACTION_STOP = "com.jasonschoenbrun.ytmtrigger.STOP"
+    const val ACTION_SHABAT_PREP = "com.jasonschoenbrun.ytmtrigger.SHABAT_PREP"
+    /** How long before Shabat / Yom Tov the phone is stopped and muted. */
+    const val SHABAT_PREP_LEAD_MIN = 15L
     /** How long before a trigger the accessibility preflight runs. */
     const val PREFLIGHT_LEAD_MIN = 6L
     private val FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -42,6 +49,50 @@ object AlarmScheduler {
         // pending intents for the same schedule (which could double-fire).
         for (s in schedules) { cancel(context, s.id); if (!s.enabled) cancelStop(context, s.id) }
         for (s in schedules) if (s.enabled) scheduleNext(context, s)
+        // Independent of any schedule, but this is the one place every caller
+        // already goes through: boot, app start, edits and remote config.
+        scheduleShabatPrep(context)
+    }
+
+    /**
+     * Arm the pre-Shabat / pre-Yom Tov mute, [SHABAT_PREP_LEAD_MIN] minutes
+     * before the window opens.
+     *
+     * @param fromMs look for the first window starting after this instant.
+     *   Callers that have just handled a window must pass a time beyond it.
+     */
+    fun scheduleShabatPrep(context: Context, fromMs: Long = System.currentTimeMillis()) {
+        val cfg = SettingsRepository.get(context).current().calendarConfig()
+        val from = Instant.ofEpochMilli(fromMs).atZone(ZoneId.systemDefault()).toLocalDateTime()
+        val next = HebrewCalendarChecker.nextWindowStart(from, cfg) ?: run {
+            Logger.w("Alarm", "No upcoming Shabat/Yom Tov window found")
+            return
+        }
+        val at = next.first.minusMinutes(SHABAT_PREP_LEAD_MIN)
+            .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val pi = PendingIntent.getBroadcast(
+            context,
+            "shabatPrep".hashCode(),
+            Intent(context, ShabatPrepReceiver::class.java)
+                .setAction(ACTION_SHABAT_PREP)
+                .putExtra(ShabatPrepReceiver.EXTRA_WHAT, next.second),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val alarms = context.getSystemService(AlarmManager::class.java) ?: return
+        try {
+            // A time already in the past fires straight away, which is what we
+            // want if the app starts inside the lead-in.
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            Logger.i("Alarm", "Shabat prep scheduled", mapOf(
+                "what" to next.second,
+                "windowStart" to FMT.format(Date(
+                    next.first.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())),
+                "muteAt" to FMT.format(Date(at)),
+                "leadMin" to SHABAT_PREP_LEAD_MIN.toString(),
+            ))
+        } catch (se: SecurityException) {
+            Logger.w("Alarm", "Shabat prep alarm denied", t = se)
+        }
     }
 
     fun scheduleNext(context: Context, schedule: Schedule) {

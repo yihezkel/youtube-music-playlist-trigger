@@ -30,6 +30,12 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
     shows the resulting window ("Next Shabat: Fri 21 Aug, 18:38 → Sat 22 Aug, 19:59").
   - A schedule that *would* have fired inside one of those windows in the coming week is
     flagged on its card in the Schedules screen.
+  - **15 minutes before each window opens** the app stops anything playing and sets the
+    media volume to 0, so nothing can make noise once it begins — including playback it
+    didn't start, or YouTube Music autoplaying on from a queue. The volume is not restored
+    afterwards; the next scheduled trigger sets it from its own schedule. (If a schedule
+    has no volume configured and there is no default, it will stay muted — the level it
+    muted from is written to the log.)
 - **End-to-end launch flow** via deep-link intent + AccessibilityService:
   - Wakes the screen and dismisses the keyguard.
   - Presses Play on the playlist page.
