@@ -28,6 +28,10 @@ object PlaybackStopper {
 
     /** @return true if a pause was dispatched by either mechanism. */
     fun stop(context: Context, reason: String): Boolean {
+        // Our own podcast player first: it is the one thing we control
+        // directly, and it publishes a session the loop below would otherwise
+        // have to find among everything else playing.
+        com.jasonschoenbrun.ytmtrigger.podcast.PodcastPlayerService.stop(context)
         if (tryMediaController(context, reason)) return true
         val am = context.getSystemService(AudioManager::class.java) ?: return false
         return try {

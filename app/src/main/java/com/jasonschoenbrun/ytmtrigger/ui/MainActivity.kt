@@ -48,7 +48,10 @@ import com.jasonschoenbrun.ytmtrigger.BuildConfig
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
 import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
+import com.jasonschoenbrun.ytmtrigger.data.MediaEntries
+import com.jasonschoenbrun.ytmtrigger.data.MediaKind
 import com.jasonschoenbrun.ytmtrigger.data.PlaylistUrl
+import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
@@ -720,6 +723,9 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
     var volPctText by remember { mutableStateOf(initial.targetVolumePercent?.toString().orEmpty()) }
     var stopMinText by remember { mutableStateOf(initial.autoStopMinutes?.toString().orEmpty()) }
     var stopTimeMin by remember { mutableStateOf(initial.stopTimeMinutes) }
+    var podcastRandom by remember {
+        mutableStateOf(initial.podcastEpisodeMode == PodcastEpisodeMode.Random)
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -746,6 +752,8 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                             targetVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
                             autoStopMinutes = stopMinText.toIntOrNull()?.coerceAtLeast(1),
                             stopTimeMinutes = stopTimeMin,
+                            podcastEpisodeMode = if (podcastRandom) PodcastEpisodeMode.Random
+                                                 else PodcastEpisodeMode.Latest,
                         )
                         repo.upsert(updated)
                         val all = repo.all().toMutableList()
@@ -871,15 +879,37 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
             }
             OutlinedTextField(
                 value = newUrl, onValueChange = { newUrl = it },
-                label = { Text("Add playlist URL — optionally \"…list=ID [Name]\"") },
+                label = { Text("Add playlist, song or podcast URL - optionally \"... [Name]\"") },
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     IconButton(onClick = {
                         val v = newUrl.text.trim()
-                        if (PlaylistUrl.isValid(v)) { urls.add(v); newUrl = TextFieldValue("") }
+                        if (MediaEntries.isValid(v)) { urls.add(v); newUrl = TextFieldValue("") }
                     }) { Icon(Icons.Default.Add, null) }
                 }
             )
+            // Only meaningful when the schedule contains a podcast, so it is
+            // hidden otherwise rather than adding a control that does nothing.
+            if (urls.any {
+                    val k = MediaEntries.parse(it).kind
+                    k == MediaKind.PodcastFeed || k == MediaKind.SpotifyShow
+                }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Podcasts: play a random episode")
+                        Text(
+                            if (podcastRandom)
+                                "Off would play the newest episode each time."
+                            else
+                                "Currently plays the newest episode.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = podcastRandom, onCheckedChange = { podcastRandom = it })
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Enable shuffle after launch", Modifier.weight(1f))
                 Switch(checked = enableShuffle, onCheckedChange = { enableShuffle = it })
@@ -1674,12 +1704,12 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             OutlinedTextField(
                 value = newUrl, onValueChange = { newUrl = it },
-                label = { Text("Add playlist URL — optionally \"…list=ID [Name]\"") },
+                label = { Text("Add playlist, song or podcast URL - optionally \"... [Name]\"") },
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     IconButton(onClick = {
                         val v = newUrl.text.trim()
-                        if (PlaylistUrl.isValid(v)) { urls.add(v); newUrl = TextFieldValue("") }
+                        if (MediaEntries.isValid(v)) { urls.add(v); newUrl = TextFieldValue("") }
                     }) { Icon(Icons.Default.Add, null) }
                 }
             )

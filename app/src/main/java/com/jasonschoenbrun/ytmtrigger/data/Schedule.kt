@@ -6,8 +6,7 @@ import java.time.LocalTime
 import java.util.UUID
 
 @Serializable
-data class Schedule(
-    val id: String = UUID.randomUUID().toString(),
+data class Schedule(    val id: String = UUID.randomUUID().toString(),
     val name: String = "Morning",
     val enabled: Boolean = true,
     /** ISO day-of-week numbers: 1=Monday .. 7=Sunday */
@@ -25,6 +24,12 @@ data class Schedule(
     val autoStopMinutes: Int? = null,
     val enableShuffle: Boolean = true,
     val skipFirstTrack: Boolean = true,
+    /**
+     * Which episode to play when an entry is a podcast. Random by default so a
+     * daily schedule works through the back catalogue instead of replaying the
+     * newest episode until another is published.
+     */
+    val podcastEpisodeMode: PodcastEpisodeMode = PodcastEpisodeMode.Random,
     val lastPickedPlaylistIds: List<String> = emptyList(),
 ) {
     fun localTime(): LocalTime = LocalTime.of(timeMinutes / 60, timeMinutes % 60)
@@ -43,6 +48,10 @@ data class Schedule(
     }
 }
 
+/** Which episode of a podcast a schedule should play. */
+@Serializable
+enum class PodcastEpisodeMode { Random, Latest }
+
 /**
  * A playlist entry is a URL, optionally followed by a display name in square
  * brackets:
@@ -50,8 +59,11 @@ data class Schedule(
  *     https://music.youtube.com/playlist?list=PLKNLlLCOCLas&si=txZZ [Quora]
  *
  * The name is purely cosmetic - nothing is ever launched by URL, only by the
- * extracted playlist id - but every accessor here tolerates both forms so a
- * labelled entry can be used anywhere a bare URL was.
+ * extracted id - but every accessor here tolerates both forms so a labelled
+ * entry can be used anywhere a bare URL was.
+ *
+ * Kept as the playlist-shaped view of an entry; [MediaEntries] classifies the
+ * wider set (songs, podcast feeds, Spotify shows).
  */
 object PlaylistUrl {
     private val ID_REGEX = Regex("[?&]list=([A-Za-z0-9_-]+)")

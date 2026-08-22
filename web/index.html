@@ -110,6 +110,13 @@ https://music.youtube.com/playlist?list=ID [My playlist]"></textarea>
     <div class="hint">Shabat and Yom Tov are blocked from <em>start</em> minutes before sunset
       until <em>end</em> minutes after sunset, computed for these coordinates — so the window
       tracks the seasons instead of assuming a fixed clock time.</div>
+    <div class="row" style="margin-top:10px">
+      <div style="flex:1 1 200px"><label>Spotify client ID</label><input type="text" id="spotifyId" autocomplete="off" /></div>
+      <div style="flex:1 1 200px"><label>Spotify client secret</label><input type="password" id="spotifySecret" autocomplete="off" /></div>
+    </div>
+    <div class="hint">Optional. Used only to list a podcast show's episodes so one can be
+      picked at random; playback never uses it. Stored in your own Firebase project under
+      your own account, and never written to the app's logs.</div>
   </div>
 
   <div class="card">
@@ -305,6 +312,8 @@ async function loadConfig() {
   $('lon').value = conf.longitude ?? 35.2137;
   $('startOff').value = conf.shabatStartOffsetMin ?? 40;
   $('endOff').value = conf.shabatEndOffsetMin ?? 42;
+  $('spotifyId').value = conf.spotifyClientId || '';
+  $('spotifySecret').value = conf.spotifyClientSecret || '';
   $('shuffle').checked = conf.defaultEnableShuffle !== false;
   $('skip').checked = conf.defaultSkipFirstTrack !== false;
   $('selfTestEnabled').checked = conf.selfTestEnabled !== false;
@@ -341,7 +350,10 @@ function renderSchedules() {
       <div class="days">${DAYS.map(([n, v]) =>
         `<label><input type="checkbox" data-day="${v}" ${(s.daysOfWeek || []).includes(v) ? 'checked' : ''}/>${n}</label>`).join('')}</div>
       <label>Playlist URLs (one per line; blank = use defaults)</label>
-      <textarea data-f="playlists" placeholder="…?list=ID [Optional name]">${esc((s.playlistUrls || []).join('\n'))}</textarea>
+      <textarea data-f="playlists" placeholder="playlist, song or podcast URL - optionally [Name]">${esc((s.playlistUrls || []).join('\n'))}</textarea>
+      <label style="display:flex;align-items:center;gap:6px;color:var(--fg);margin-top:8px">
+        <input type="checkbox" data-f="podcastRandom" ${s.podcastEpisodeMode !== 'Latest' ? 'checked' : ''}/>
+        Podcasts: play a random episode (off = newest)</label>
       <div class="row" style="margin-top:8px">
         <label style="display:flex;align-items:center;gap:6px;color:var(--fg)">
           <input type="checkbox" data-f="enabled" ${s.enabled !== false ? 'checked' : ''}/> Enabled</label>
@@ -366,6 +378,7 @@ function renderSchedules() {
         daysOfWeek: days,
         timeMinutes: (h * 60 + m) || 0,
         stopTimeMinutes: stopRaw ? sh * 60 + sm : null,
+        podcastEpisodeMode: div.querySelector('[data-f=podcastRandom]').checked ? 'Random' : 'Latest',
         playlistUrls: div.querySelector('[data-f=playlists]').value.split('\n').map(x => x.trim()).filter(Boolean),
       };
     };
@@ -378,6 +391,7 @@ $('addSched').onclick = () => {
   schedules.push({
     id: crypto.randomUUID(), name: 'New', enabled: true,
     daysOfWeek: [1, 2, 3, 4, 5], timeMinutes: 7 * 60 + 30, stopTimeMinutes: null,
+    podcastEpisodeMode: 'Random',
     playlistUrls: [], targetVolumePercent: null, autoStopMinutes: null,
     enableShuffle: true, skipFirstTrack: true, lastPickedPlaylistIds: [],
   });
@@ -401,6 +415,8 @@ $('save').onclick = async () => {
     longitude: parseFloat($('lon').value),
     shabatStartOffsetMin: parseInt($('startOff').value, 10),
     shabatEndOffsetMin: parseInt($('endOff').value, 10),
+    spotifyClientId: $('spotifyId').value.trim() || null,
+    spotifyClientSecret: $('spotifySecret').value.trim() || null,
     schedules: [...document.querySelectorAll('.sched')].map(d => d._read()),
   };
   await setDoc(cfgRef(), {

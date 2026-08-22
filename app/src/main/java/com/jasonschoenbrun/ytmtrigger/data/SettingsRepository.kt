@@ -44,6 +44,15 @@ data class AppSettings(
     /** Playlist URL the self-test uses (must be a valid YT Music playlist).
      *  When null, the self-test picks the first default playlist. */
     val selfTestPlaylistUrl: String? = null,
+    /**
+     * Spotify Web API client credentials, used only to list a show's episodes
+     * so one can be picked at random. Playback itself never uses them.
+     *
+     * Stored in the app's private DataStore and, when remote control is set
+     * up, in your own Firestore project under your own uid. Never logged.
+     */
+    val spotifyClientId: String? = null,
+    val spotifyClientSecret: String? = null,
     /** Timestamp (epoch ms) of the last successful self-test, or 0. */
     val lastSelfTestSuccessMs: Long = 0,
     /** Strategy name (A/B/C) that succeeded in the last successful test. */

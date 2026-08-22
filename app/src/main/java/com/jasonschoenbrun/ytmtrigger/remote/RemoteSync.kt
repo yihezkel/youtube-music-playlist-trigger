@@ -106,6 +106,8 @@ object RemoteSync {
                 shabatStartOffsetMin = config.shabatStartOffsetMin ?: s.shabatStartOffsetMin,
                 shabatEndOffsetMin = config.shabatEndOffsetMin ?: s.shabatEndOffsetMin,
                 selfTestPlaylistUrl = config.selfTestPlaylistUrl ?: s.selfTestPlaylistUrl,
+                spotifyClientId = config.spotifyClientId ?: s.spotifyClientId,
+                spotifyClientSecret = config.spotifyClientSecret ?: s.spotifyClientSecret,
             )
         }
         val incoming = config.schedules ?: return
@@ -161,6 +163,8 @@ object RemoteSync {
             shabatStartOffsetMin = s.shabatStartOffsetMin,
             shabatEndOffsetMin = s.shabatEndOffsetMin,
             selfTestPlaylistUrl = s.selfTestPlaylistUrl,
+            spotifyClientId = s.spotifyClientId,
+            spotifyClientSecret = s.spotifyClientSecret,
             schedules = ScheduleRepository.get(context).all(),
         )
         device.collection("data").document("reported").set(

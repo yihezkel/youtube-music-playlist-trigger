@@ -7,6 +7,25 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 ## What it does
 
 - **Scheduled triggers**: per-schedule day-of-week + time picker. Multiple schedules supported.
+- **Plays playlists, songs and podcasts.** An entry can be:
+  - a YouTube Music **playlist**, album or radio mix (`…/playlist?list=…`, or a `watch` link
+    that carries a `list=`);
+  - a single YouTube Music **song** (`…/watch?v=…`) — these deep-link straight into playback,
+    so they never need the Play button pressed;
+  - a **podcast**, given either an RSS feed URL or a Spotify show link.
+  `www.youtube.com` links are rewritten to `music.youtube.com` automatically — as-is they
+  open the YouTube app, not YouTube Music.
+- **Podcasts play from the show's RSS feed**, which the app plays itself in a small
+  foreground service with its own media session (so the stop time, the pre-Shabat mute and
+  the console's Stop button all work on it unchanged). A Spotify show link is resolved to
+  that feed automatically via the show's title. Feeds are cached for 12 hours, and a stale
+  cache is preferred to failing a trigger.
+  - **Random episode by default**, or newest — a per-schedule switch, shown only when the
+    schedule actually contains a podcast.
+  - Spotify's own API is deliberately not used: it requires a **Premium** account and its
+    public page exposes only 12 episodes, whereas the feed for the same show carries the
+    full back catalogue (384 episodes, in the case this was built against).
+  - Spotify **originals and exclusives** have no public feed and cannot be played.
 - **Optional stop time** per schedule — leave it blank (the default) to play until stopped,
   or set a clock time to pause automatically. A stop time at or before the start time means
   the next day, so an overnight schedule stops in the morning. The console has a **Stop**

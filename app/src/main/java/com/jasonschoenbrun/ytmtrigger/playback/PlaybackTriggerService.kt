@@ -22,6 +22,13 @@ import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
+import com.jasonschoenbrun.ytmtrigger.data.MediaEntries
+import com.jasonschoenbrun.ytmtrigger.data.MediaEntry
+import com.jasonschoenbrun.ytmtrigger.data.MediaKind
+import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
+import com.jasonschoenbrun.ytmtrigger.podcast.PodcastCatalog
+import com.jasonschoenbrun.ytmtrigger.podcast.PodcastPlayerService
+import com.jasonschoenbrun.ytmtrigger.podcast.SpotifyFeedResolver
 import com.jasonschoenbrun.ytmtrigger.diag.DiagnosticsSnapshot
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.EvalFix
@@ -35,6 +42,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
+import kotlin.random.Random
 
 class PlaybackTriggerService : Service() {
 
@@ -134,6 +142,18 @@ class PlaybackTriggerService : Service() {
             }
             // Arm the stop time now that playback is actually going ahead.
             AlarmScheduler.scheduleStop(this, schedule)
+
+            // Podcasts and single tracks don't go through the YT Music
+            // playlist flow at all: a feed is played by us, and a track
+            // deep-link starts playing on its own.
+            // Carry the label across: choice.url is already stripped of it.
+            val entry = MediaEntries.parse(choice.url).copy(label = choice.label)
+            if (entry.kind == MediaKind.PodcastFeed || entry.kind == MediaKind.SpotifyShow) {
+                val played = playPodcast(schedule, entry)
+                if (!played) postFailure("Could not play podcast for '${schedule.name}'")
+                return
+            }
+
             updateNotification("Launching ${schedule.name}…")
 
             // Set volume if requested. Falls back to global default if the
@@ -249,7 +269,7 @@ class PlaybackTriggerService : Service() {
             LaunchStrategy.LauncherThenDeepLink -> YtmLauncher.Strategy.LauncherThenDeepLink
             LaunchStrategy.CustomScheme -> YtmLauncher.Strategy.CustomScheme
         }
-        val launchId = YtmLauncher.launch(this, choice.playlistId, mapped)
+        val launchId = YtmLauncher.launch(this, choice.playlistId, mapped, isTrack = choice.kind == MediaKind.YtmTrack)
         // The real startActivity happens in KeyguardDismissActivity, so check
         // what it reported. Without this a failed launch looks identical to a
         // successful one that simply didn't start playing, and we'd burn the
@@ -430,11 +450,57 @@ class PlaybackTriggerService : Service() {
         nm.notify(NOTIFICATION_ID, buildNotification(text))
     }
 
-    private fun stopSelfSafe() {
-        try {
+    private fun stopSelfSafe() {        try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Throwable) {}
         stopSelf()
+    }
+
+    /**
+     * Resolve an episode and hand it to [PodcastPlayerService].
+     *
+     * Safe to do network I/O here: this runs inside the service's coroutine
+     * scope on [Dispatchers.Default], not on the main thread.
+     */
+    private suspend fun playPodcast(schedule: Schedule, entry: MediaEntry): Boolean {
+        val feedUrl = when (entry.kind) {
+            MediaKind.PodcastFeed -> entry.id
+            MediaKind.SpotifyShow -> SpotifyFeedResolver.feedForShow(this, entry.id) ?: run {
+                Logger.e("PlaybackSvc", "No RSS feed found for Spotify show", mapOf(
+                    "show" to entry.id, "name" to entry.displayName,
+                ))
+                return false
+            }
+            else -> return false
+        }
+        val episodes = PodcastCatalog.episodes(this, feedUrl)
+        if (episodes.isEmpty()) {
+            Logger.e("PlaybackSvc", "Feed produced no episodes", mapOf("feed" to feedUrl))
+            return false
+        }
+        val chosen = when (schedule.podcastEpisodeMode) {
+            PodcastEpisodeMode.Latest -> episodes.first()
+            PodcastEpisodeMode.Random -> episodes[Random.nextInt(episodes.size)]
+        }
+        Logger.i("PlaybackSvc", "Podcast episode chosen", mapOf(
+            "podcast" to entry.displayName,
+            "mode" to schedule.podcastEpisodeMode.name,
+            "episodes" to episodes.size.toString(),
+            "title" to chosen.title,
+        ))
+        updateNotification("Playing ${entry.displayName}…")
+        PodcastPlayerService.start(this, chosen.audioUrl, chosen.title)
+        // Verify rather than assume, mirroring the YT Music path.
+        val deadline = System.currentTimeMillis() + PLAYBACK_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (PodcastPlayerService.isPlaying()) {
+                Logger.i("PlaybackSvc", "Podcast playback verified", mapOf("title" to chosen.title))
+                return true
+            }
+            delay(500)
+        }
+        Logger.e("PlaybackSvc", "Podcast did not start in time", mapOf("title" to chosen.title))
+        return false
     }
 
     override fun onDestroy() {

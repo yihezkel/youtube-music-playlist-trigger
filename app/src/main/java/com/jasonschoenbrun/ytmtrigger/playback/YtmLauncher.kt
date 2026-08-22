@@ -40,16 +40,24 @@ object YtmLauncher {
     private val lastResult = AtomicReference<LaunchResult?>(null)
 
     /**
-     * Launch YT Music using [strategy] for the playlist identified by
-     * [playlistId]. The intent is wrapped in [KeyguardDismissActivity] so the
-     * screen wakes & the keyguard is dismissed.
+     * Launch YT Music using [strategy] for [id].
+     *
+     * [isTrack] selects a `watch?v=` URL instead of `playlist?list=`. That
+     * matters beyond the URL shape: a track deep-link starts playing by
+     * itself, so the Play button never has to be found or pressed.
      *
      * Returns a launch id to pass to [awaitResult].
      */
-    fun launch(context: Context, playlistId: String, strategy: Strategy): Long {
+    fun launch(
+        context: Context,
+        id: String,
+        strategy: Strategy,
+        isTrack: Boolean = false,
+    ): Long {
         val launchId = seq.incrementAndGet()
         lastResult.set(null)
-        val httpsUri = Uri.parse("https://music.youtube.com/playlist?list=$playlistId")
+        val path = if (isTrack) "watch?v=$id" else "playlist?list=$id"
+        val httpsUri = Uri.parse("https://music.youtube.com/$path")
         val launch: Intent = when (strategy) {
             Strategy.DeepLink -> Intent(Intent.ACTION_VIEW, httpsUri).apply {
                 setPackage(YT_MUSIC_PKG)
@@ -87,7 +95,7 @@ object YtmLauncher {
                 // deep-link (.activities.MusicActivity vs
                 // .deeplink.MusicServiceDeepLinkActivity), so it is a genuinely
                 // independent path rather than a near-duplicate.
-                val customUri = Uri.parse("vnd.youtube.music://playlist?list=$playlistId")
+                val customUri = Uri.parse("vnd.youtube.music://$path")
                 Intent(Intent.ACTION_VIEW, customUri).apply {
                     setPackage(YT_MUSIC_PKG)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
