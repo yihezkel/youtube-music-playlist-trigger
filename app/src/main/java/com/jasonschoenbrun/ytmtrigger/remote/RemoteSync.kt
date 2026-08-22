@@ -108,6 +108,10 @@ object RemoteSync {
                 selfTestPlaylistUrl = config.selfTestPlaylistUrl ?: s.selfTestPlaylistUrl,
                 spotifyClientId = config.spotifyClientId ?: s.spotifyClientId,
                 spotifyClientSecret = config.spotifyClientSecret ?: s.spotifyClientSecret,
+                keepScreenOnWhilePlaying = config.keepScreenOnWhilePlaying
+                    ?: s.keepScreenOnWhilePlaying,
+                dimWhileKeepingScreenOn = config.dimWhileKeepingScreenOn
+                    ?: s.dimWhileKeepingScreenOn,
             )
         }
         val incoming = config.schedules ?: return
@@ -165,6 +169,8 @@ object RemoteSync {
             selfTestPlaylistUrl = s.selfTestPlaylistUrl,
             spotifyClientId = s.spotifyClientId,
             spotifyClientSecret = s.spotifyClientSecret,
+            keepScreenOnWhilePlaying = s.keepScreenOnWhilePlaying,
+            dimWhileKeepingScreenOn = s.dimWhileKeepingScreenOn,
             schedules = ScheduleRepository.get(context).all(),
         )
         device.collection("data").document("reported").set(

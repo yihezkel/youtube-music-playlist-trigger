@@ -59,6 +59,7 @@ import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.LogLevel
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
+import com.jasonschoenbrun.ytmtrigger.screen.ScreenAwake
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -1645,6 +1646,15 @@ fun SettingsScreen(onBack: () -> Unit) {
         mutableStateOf(settings.selfTestPlaylistUrl.orEmpty())
     }
     var latText by remember(settings.latitude) { mutableStateOf(settings.latitude.toString()) }
+    var keepScreenOn by remember(settings.keepScreenOnWhilePlaying) {
+        mutableStateOf(settings.keepScreenOnWhilePlaying)
+    }
+    var dimScreen by remember(settings.dimWhileKeepingScreenOn) {
+        mutableStateOf(settings.dimWhileKeepingScreenOn)
+    }
+    // Re-read on every recomposition: the user may have just returned from the
+    // system settings screen where they granted it.
+    val overlayOk = ScreenAwake.canDrawOverlays(ctx)
     var lonText by remember(settings.longitude) { mutableStateOf(settings.longitude.toString()) }
     var startOffText by remember(settings.shabatStartOffsetMin) {
         mutableStateOf(settings.shabatStartOffsetMin.toString())
@@ -1668,6 +1678,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                             selfTestEnabled = selfTestEnabled,
                             skipAds = skipAds,
                             israeliObservance = !useDiasporaDates,
+                            keepScreenOnWhilePlaying = keepScreenOn,
+                            dimWhileKeepingScreenOn = dimScreen,
                             latitude = latText.toDoubleOrNull()?.coerceIn(-90.0, 90.0) ?: it.latitude,
                             longitude = lonText.toDoubleOrNull()?.coerceIn(-180.0, 180.0) ?: it.longitude,
                             shabatStartOffsetMin = startOffText.toIntOrNull()?.coerceIn(0, 180)
@@ -1749,6 +1761,48 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                 }
                 Switch(checked = skipAds, onCheckedChange = { skipAds = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Keep screen on while music plays")
+                    Text(
+                        "Free-tier YouTube Music pauses anything you didn't upload once the " +
+                            "screen sleeps. This holds the screen only while playing, so the " +
+                            "developer \"Stay awake\" option can be turned off." +
+                            if (!overlayOk) "  Needs \"Display over other apps\"." else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (!overlayOk) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = keepScreenOn, onCheckedChange = { keepScreenOn = it })
+            }
+            if (keepScreenOn && !overlayOk) {
+                FilledTonalButton(
+                    onClick = {
+                        ctx.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${ctx.packageName}"),
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Grant \"Display over other apps\"") }
+            }
+            if (keepScreenOn) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Dim the screen while holding it on")
+                        Text(
+                            "Keeps it technically on but practically black, which is what " +
+                                "makes an hour of playback safe for the panel.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = dimScreen, onCheckedChange = { dimScreen = it })
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

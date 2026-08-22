@@ -53,6 +53,17 @@ data class AppSettings(
      */
     val spotifyClientId: String? = null,
     val spotifyClientSecret: String? = null,
+    /**
+     * Hold the screen awake while YouTube Music is playing.
+     *
+     * Free-tier YouTube Music pauses anything you did not upload as soon as
+     * the screen sleeps, which is why the developer "Stay awake" option gets
+     * turned on. This replaces that with a hold lasting only as long as
+     * playback does.
+     */
+    val keepScreenOnWhilePlaying: Boolean = true,
+    /** Pin brightness near zero while the screen is held, to avoid burn-in. */
+    val dimWhileKeepingScreenOn: Boolean = true,
     /** Timestamp (epoch ms) of the last successful self-test, or 0. */
     val lastSelfTestSuccessMs: Long = 0,
     /** Strategy name (A/B/C) that succeeded in the last successful test. */

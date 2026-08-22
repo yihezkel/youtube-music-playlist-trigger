@@ -29,6 +29,8 @@ data class RemoteConfig(
     val selfTestPlaylistUrl: String? = null,
     val spotifyClientId: String? = null,
     val spotifyClientSecret: String? = null,
+    val keepScreenOnWhilePlaying: Boolean? = null,
+    val dimWhileKeepingScreenOn: Boolean? = null,
     /** Full replacement for the schedule list when present. */
     val schedules: List<Schedule>? = null,
 )

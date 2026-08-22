@@ -26,6 +26,17 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
     public page exposes only 12 episodes, whereas the feed for the same show carries the
     full back catalogue (384 episodes, in the case this was built against).
   - Spotify **originals and exclusives** have no public feed and cannot be played.
+- **Keeps the screen awake only while music plays.** Free-tier YouTube Music pauses
+  anything you didn't upload yourself the moment the screen sleeps, which normally forces
+  the developer option "Stay awake" on — lighting the panel 24 hours a day. Instead the app
+  holds a 1×1 transparent overlay carrying `FLAG_KEEP_SCREEN_ON` for exactly as long as
+  YouTube Music reports it is playing, and can pin brightness near zero so the screen is
+  technically on but practically black. Needs a one-time **Display over other apps** grant;
+  toggles live in **Default settings**.
+  - Turn **off** Developer options → "Stay awake" once this is enabled.
+  - A wake lock is not used: `SCREEN_BRIGHT_WAKE_LOCK`/`SCREEN_DIM_WAKE_LOCK` have been
+    deprecated since API 17 and are unreliable, and a `PARTIAL_WAKE_LOCK` explicitly does
+    not keep the display on.
 - **Optional stop time** per schedule — leave it blank (the default) to play until stopped,
   or set a clock time to pause automatically. A stop time at or before the start time means
   the next day, so an overnight schedule stops in the morning. The console has a **Stop**
