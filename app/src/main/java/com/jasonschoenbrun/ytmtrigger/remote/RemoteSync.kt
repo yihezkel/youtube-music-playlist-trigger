@@ -6,6 +6,7 @@ import android.os.PowerManager
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
@@ -195,8 +196,7 @@ object RemoteSync {
             // probe. isResponsive() infers health from recent events and
             // reports false on an idle phone, which would show "Accessibility
             // healthy: no" in the console for a perfectly working device.
-            accessibilityHealthy = YtmAccessibilityService.isRunning() &&
-                YtmAccessibilityService.canReadActiveWindow(),
+            accessibilityHealthy = A11yPermissionEnforcer.isUsable(context),
             notificationListenerReady = NotifListenerEnforcer.isEnabled(context),
             batteryOptimizationIgnored =
                 pm?.isIgnoringBatteryOptimizations(context.packageName) == true,

@@ -125,7 +125,7 @@ class PodcastPlayerService : Service() {
     }
 
     private fun stopPlayback(keepService: Boolean = false) {
-        playing.set(false)
+        val was = playing.getAndSet(false)
         runCatching { player?.stop() }
         runCatching { player?.release() }
         player = null
@@ -133,6 +133,7 @@ class PodcastPlayerService : Service() {
         session?.isActive = false
         runCatching { session?.release() }
         session = null
+        if (was) Logger.i("PodcastPlayer", "Stopped")
         if (!keepService) {
             runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
             stopSelf()
@@ -179,6 +180,7 @@ class PodcastPlayerService : Service() {
 
         fun stop(context: Context) {
             if (!playing.get()) return
+            Logger.i("PodcastPlayer", "Stop requested")
             val i = Intent(context, PodcastPlayerService::class.java).setAction(ACTION_STOP)
             runCatching { context.startService(i) }
         }

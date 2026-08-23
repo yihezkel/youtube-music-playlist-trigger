@@ -42,20 +42,24 @@ class A11yHealthWorker(
             val bound = YtmAccessibilityService.isRunning()
             // Blocking binder call, so it must not run on the main thread.
             // CoroutineWorker dispatches to a background thread.
-            val readable = bound && YtmAccessibilityService.canReadActiveWindow()
+            val state = A11yPermissionEnforcer.liveness(applicationContext)
+            val readable = state == A11yPermissionEnforcer.Liveness.Healthy
             val pm = applicationContext.getSystemService(PowerManager::class.java)
             Logger.i("A11yHealth", "sample", mapOf(
                 "bound" to bound.toString(),
                 "canReadWindow" to readable.toString(),
+                "liveness" to state.name,
                 "sawEventSinceConnect" to YtmAccessibilityService.isResponsive().toString(),
                 "connectedMinAgo" to minutes(YtmAccessibilityService.msSinceConnected()),
                 "lastEventMinAgo" to minutes(YtmAccessibilityService.msSinceLastEvent()),
                 "interactive" to (pm?.isInteractive?.toString() ?: "?"),
                 "deviceIdle" to (pm?.isDeviceIdleMode?.toString() ?: "?"),
             ))
-            if (bound && !readable) {
+            if (state == A11yPermissionEnforcer.Liveness.Unresponsive) {
                 // The signature of the fault, captured at the moment it starts
                 // rather than six hours later when a self-test trips over it.
+                // Only warn when the screen was on: with it off there is no
+                // active window to read, so an unreadable one proves nothing.
                 Logger.w("A11yHealth", "Accessibility bound but not readable", mapOf(
                     "connectedMinAgo" to minutes(YtmAccessibilityService.msSinceConnected()),
                     "lastEventMinAgo" to minutes(YtmAccessibilityService.msSinceLastEvent()),

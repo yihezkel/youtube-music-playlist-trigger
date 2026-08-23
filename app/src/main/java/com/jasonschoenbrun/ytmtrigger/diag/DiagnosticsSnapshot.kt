@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
@@ -216,7 +217,7 @@ object DiagnosticsSnapshot {
         Logger.i(origin, "Diag: a11y", mapOf(
             "enabledInSettings" to a11yOn.toString(),
             "serviceBound" to YtmAccessibilityService.isRunning().toString(),
-            "serviceResponsive" to a11yResponsive().toString(),
+            "serviceResponsive" to a11yResponsive(context).toString(),
         ))
     }
 
@@ -365,10 +366,14 @@ object DiagnosticsSnapshot {
      * Picks the probe by thread, because the two available signals fail in
      * opposite situations:
      *
-     * - [YtmAccessibilityService.canReadActiveWindow] is accurate regardless
-     *   of how quiet the device is, but blocks on a binder call. On the main
-     *   thread, while one of this app's own windows is foreground, that call
-     *   is served by this same thread and would deadlock until it times out.
+     * - [YtmAccessibilityService.canReadActiveWindow] is accurate while the
+     *   screen is on, but blocks on a binder call. On the main thread, while
+     *   one of this app's own windows is foreground, that call is served by
+     *   this same thread and would deadlock until it times out. It also
+     *   cannot distinguish a dead service from a sleeping screen, since with
+     *   the display off there is no active window to read at all - hence
+     *   [A11yPermissionEnforcer.isUsable], which reports "not broken" rather
+     *   than "healthy" in that case.
      * - [YtmAccessibilityService.isResponsive] never blocks, but infers health
      *   from having seen an event since connecting. On an idle phone — the
      *   normal state for a dedicated alarm device between triggers — a
@@ -382,11 +387,11 @@ object DiagnosticsSnapshot {
      * the UI checklist gets the non-blocking one, where our own window being
      * foreground guarantees a recent event anyway.
      */
-    private fun a11yResponsive(): Boolean =
+    private fun a11yResponsive(context: Context): Boolean =
         if (Looper.myLooper() == Looper.getMainLooper()) {
             YtmAccessibilityService.isResponsive()
         } else {
-            YtmAccessibilityService.isRunning() && YtmAccessibilityService.canReadActiveWindow()
+            A11yPermissionEnforcer.isUsable(context)
         }
 
     private fun dataA11y(context: Context): A11yStateData? {
@@ -398,7 +403,7 @@ object DiagnosticsSnapshot {
         return A11yStateData(
             enabledInSettings = a11yOn,
             serviceBound = YtmAccessibilityService.isRunning(),
-            serviceResponsive = a11yResponsive(),
+            serviceResponsive = a11yResponsive(context),
         )
     }
 

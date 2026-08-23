@@ -2,6 +2,7 @@ package com.jasonschoenbrun.ytmtrigger.accessibility
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.PowerManager
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.os.Handler
@@ -55,6 +56,38 @@ import kotlin.system.exitProcess
  * "no-user-intervention-after-setup" path on a normal stock Android phone.
  */
 object A11yPermissionEnforcer {
+
+    /**
+     * What we can honestly say about the service right now.
+     *
+     * The distinction between [Unresponsive] and [Unknown] matters a great
+     * deal. Reading the active window is the only cheap liveness proof we
+     * have, but with the display off there *is* no active window, so a null
+     * root says nothing about the service. Treating that as a fault made the
+     * preflight restart the process six minutes before every scheduled
+     * trigger - the exact opposite of protecting it - and made the console
+     * report the phone unhealthy whenever it was simply idle.
+     */
+    enum class Liveness { NotBound, Healthy, Unknown, Unresponsive }
+
+    /**
+     * Classify the service. Blocks on a binder call, so background threads
+     * only.
+     */
+    fun liveness(context: Context): Liveness {
+        if (!YtmAccessibilityService.isRunning()) return Liveness.NotBound
+        if (YtmAccessibilityService.canReadActiveWindow()) return Liveness.Healthy
+        val interactive = context.getSystemService(PowerManager::class.java)?.isInteractive
+        // Screen off: nothing to read, so nothing proven either way.
+        return if (interactive == false) Liveness.Unknown else Liveness.Unresponsive
+    }
+
+    /** True unless we can positively show the service is broken. */
+    fun isUsable(context: Context): Boolean = when (liveness(context)) {
+        Liveness.Healthy, Liveness.Unknown -> true
+        Liveness.NotBound, Liveness.Unresponsive -> false
+    }
+
 
     private const val SERVICE_FQN =
         "com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService"
@@ -174,8 +207,7 @@ object A11yPermissionEnforcer {
         bindTimeoutMs: Long = DEFAULT_BIND_TIMEOUT_MS,
         pollIntervalMs: Long = 150L,
     ): Boolean {
-        fun usable() =
-            YtmAccessibilityService.isRunning() && YtmAccessibilityService.canReadActiveWindow()
+        fun usable() = isUsable(context)
 
         if (usable()) return true
         ensureEnabled(context)
@@ -415,7 +447,17 @@ object A11yPermissionEnforcer {
         allowProcessRestart: Boolean = false,
     ): Boolean {
         if (!YtmAccessibilityService.isRunning()) return false
-        if (YtmAccessibilityService.canReadActiveWindow()) return true
+        when (liveness(context)) {
+            Liveness.Healthy -> return true
+            // Screen off: no active window exists, so we cannot tell a dead
+            // service from an idle phone. Recreating the component or killing
+            // the process on that basis would do real harm for no evidence.
+            Liveness.Unknown -> {
+                Logger.i("A11yPerm", "Skipping recovery: screen off, liveness unknowable")
+                return true
+            }
+            else -> Unit
+        }
 
         Logger.w(
             "A11yPerm",
@@ -481,7 +523,6 @@ object A11yPermissionEnforcer {
         }
         return false
     }
-
     /**
      * Registers a [ContentObserver] on the enabled-A11y-services secure
      * setting. Whenever the setting changes — typically because the user
