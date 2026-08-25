@@ -42,3 +42,4 @@ tools/node_modules/
 
 # Generated podcast statistics (regenerate with tools/podcast-stats.mjs)
 tools/podcast-stats.json
+tools/_*.mjs

@@ -51,11 +51,57 @@ async function resolveFeed(p) {
   }
   return {
     feedUrl: best.r.feedUrl,
+    itunesId: best.r.collectionId ?? null,
     itunesName: best.r.collectionName,
     itunesCount: best.r.trackCount ?? null,
     genre: best.r.primaryGenreName ?? "",
     confidence: Math.round(best.s * 100),
   };
+}
+
+// Apple Podcasts carries by far the largest public pool of podcast ratings;
+// Spotify does not publish counts at all. Read from the page's JSON-LD block,
+// which is scoped to the page's own show. Scraping the first "ratingCount" in
+// the page markup is wrong: a show page embeds ~15 of them for the
+// "You Might Also Like" rail, and the first belongs to a different podcast.
+async function fetchApple(itunesId) {
+  if (!itunesId) return {};
+  const html = await getText(`https://podcasts.apple.com/us/podcast/id${itunesId}`, 30000);
+  const m = /"aggregateRating"\s*:\s*\{[\s\S]{0,4000}?"itemReviewed"\s*:\s*\{[\s\S]{0,2000}?\}/.exec(html)
+    || /"aggregateRating"\s*:\s*\{[\s\S]{0,6000}?\}\s*\}/.exec(html);
+  if (!m) return {};
+  const blob = m[0];
+  const avg = /"ratingValue"\s*:\s*([\d.]+)/.exec(blob)?.[1];
+  const cnt = /"reviewCount"\s*:\s*(\d+)/.exec(blob)?.[1];
+  const name = /"name"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(blob)?.[1];
+  const desc = /"description"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(blob)?.[1];
+  const out = {};
+  if (avg && cnt) {
+    out.ratingAvg = Number(avg);
+    out.ratingCount = Number(cnt);
+    out.ratingSource = "Apple Podcasts";
+    out.ratingOf = name ? name.replace(/\\"/g, '"') : "";
+  }
+  if (desc) out.appleDescription = desc.replace(/\\"/g, '"').replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+  return out;
+}
+
+// One-sentence summary taken from the feed's own channel description, so it
+// describes the show as its publisher does rather than as I imagine it.
+function channelDescription(xml) {
+  const head = xml.split(/<item[\s>]/)[0];
+  const raw =
+    /<itunes:summary>([\s\S]*?)<\/itunes:summary>/i.exec(head)?.[1] ??
+    /<description>([\s\S]*?)<\/description>/i.exec(head)?.[1] ?? "";
+  const text = raw
+    .replace(/<!\[CDATA\[|\]\]>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z]+;|&#\d+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  const first = text.split(/(?<=[.!?])\s+/)[0] || text;
+  return (first.length > 240 ? first.slice(0, 237) + "..." : first);
 }
 
 function parseDuration(raw, fallbackBytes) {
@@ -172,6 +218,18 @@ for (const p of PODCASTS) {
     const eps = parseFeed(xml);
     if (!eps.length) throw new Error("feed had no items");
     Object.assign(row, analyse(eps));
+    row.description = channelDescription(xml);
+    // Ratings and the editorial blurb are a bonus: a failure here must not lose
+    // the feed statistics, but it must be visible rather than silently empty.
+    try {
+      Object.assign(row, await fetchApple(f.itunesId));
+    } catch (e) {
+      row.ratingError = String(e.message || e).slice(0, 60);
+    }
+    if (row.appleDescription) {
+      const first = row.appleDescription.split(/(?<=[.!?])\s+/)[0] || row.appleDescription;
+      row.description = first.length > 240 ? first.slice(0, 237) + "..." : first;
+    }
     row.ok = true;
   } catch (e) {
     row.ok = false;

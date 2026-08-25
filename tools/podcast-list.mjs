@@ -4,7 +4,6 @@
 export const PODCASTS = [
   // ---- Weekly tab: "Already Doing" ----
   { name: "18Forty - Exploring Big Jewish Ideas", status: "Doing", slot: "Weekly", q: "18Forty Podcast" },
-  { name: "Honestly with Bari Weiss", status: "Doing", slot: "Weekly", q: "Honestly with Bari Weiss" },
   { name: "Behind the Bima", status: "Doing", slot: "Weekly", q: "Behind the Bima" },
   { name: "Business Wars", status: "Doing", slot: "Weekly", q: "Business Wars" },
   { name: "Freakonomics Radio", status: "Doing", slot: "Weekly", q: "Freakonomics Radio" },
@@ -49,7 +48,6 @@ export const PODCASTS = [
   { name: "Inc. Productivity Tip of the Day", status: "Doing", slot: "News", q: "Inc Productivity Tip of the Day" },
   { name: "The Economist Morning Briefing", status: "Doing", slot: "News", kind: "News brief" },
   { name: "Parents Tip of the Day", status: "Doing", slot: "News", kind: "News brief" },
-  { name: "WIRED Business", status: "Doing", slot: "News", q: "WIRED Business", pick: "Business, Spoken" },
   { name: "Bloomberg First Word", status: "Doing", slot: "News", kind: "News brief" },
   { name: "Daily Tech Headlines", status: "Doing", slot: "News", q: "Daily Tech Headlines" },
   { name: "Reuters TV (US)", status: "Doing", slot: "News", q: "Reuters World News", pick: "Reuters World News" },
@@ -95,4 +93,24 @@ export const PODCASTS = [
   { name: "The Intelligence", status: "Dropped", slot: "Daily", q: "The Intelligence Economist" },
   { name: "KMTT - the Torah Podcast", status: "Dropped", slot: "Daily", q: "KMTT Torah Podcast", note: "Hebrew; spotty timing" },
   { name: "Talking Talmud", status: "Dropped", slot: "Daily", q: "Talking Talmud" },
+
+  // ---- Suggested by AI (not previously on the sheet) ----
+  { name: "Short Wave (NPR)", status: "Suggested by AI", slot: "Kids", q: "Short Wave NPR", pick: "Short Wave" },
+  { name: "The Indicator from Planet Money", status: "Suggested by AI", slot: "Family", q: "The Indicator from Planet Money" },
+  { name: "Planet Money", status: "Suggested by AI", slot: "Family", q: "Planet Money NPR", pick: "Planet Money" },
+  { name: "How I Built This with Guy Raz", status: "Suggested by AI", slot: "Wife", q: "How I Built This with Guy Raz" },
+  { name: "Business Movers", status: "Suggested by AI", slot: "Wife", q: "Business Movers Wondery", pick: "Business Movers" },
+  { name: "Cautionary Tales with Tim Harford", status: "Suggested by AI", slot: "Family", q: "Cautionary Tales with Tim Harford" },
+  { name: "Revisionist History", status: "Suggested by AI", slot: "Family", q: "Revisionist History Malcolm Gladwell", pick: "Revisionist History" },
+  { name: "99% Invisible", status: "Suggested by AI", slot: "Family", q: "99% Invisible" },
+  { name: "Smash Boom Best", status: "Suggested by AI", slot: "Kids", q: "Smash Boom Best" },
+  { name: "Greeking Out from National Geographic Kids", status: "Suggested by AI", slot: "Kids", q: "Greeking Out National Geographic Kids" },
+  { name: "Who Smarted?", status: "Suggested by AI", slot: "Kids", q: "Who Smarted" },
+  { name: "The Past and The Curious", status: "Suggested by AI", slot: "Kids", q: "The Past and The Curious history podcast for kids" },
+  { name: "Meaningful People", status: "Suggested by AI", slot: "Family", q: "Meaningful People podcast" },
+  { name: "Jewish History Nerds", status: "Suggested by AI", slot: "Family", q: "Jewish History Nerds Unpacked" },
+  { name: "Wow in the World", status: "Suggested by AI", slot: "Kids", q: "Wow in the World" },
+  { name: "Up First (NPR)", status: "Suggested by AI", slot: "News", q: "Up First NPR", pick: "Up First from NPR" },
+  { name: "TorahAnytime Daily Dose", status: "Suggested by AI", slot: "Kids", q: "TorahAnytime Daily Dose", pick: "TorahAnytime Daily Dose" },
+  { name: "The Daily Thread (Meaningful Minute)", status: "Suggested by AI", slot: "Kids", q: "The Daily Thread Meaningful Minute", pick: "The Daily Thread" },
 ];
