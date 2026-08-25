@@ -7,6 +7,16 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 ## What it does
 
 - **Scheduled triggers**: per-schedule day-of-week + time picker. Multiple schedules supported.
+- **Trigger time can follow the calendar, not just the clock.** Each schedule picks what its
+  time is measured from:
+  - **Clock** — a fixed wall-clock time (the default, and the previous behaviour);
+  - **Sunset ± N minutes** — real sunset at the configured latitude/longitude, which in Israel
+    moves by over three hours across the year, so a fixed time drifts against it;
+  - **Shabat/Yom Tov ends ± N minutes** — nightfall at the end of a window. This is *not* the
+    same as a sunset offset: it also covers Yom Tov and multi-day festivals, and it deliberately
+    yields nothing on a day when no window ends, so such a schedule fires only on motzaei
+    Shabat / Yom Tov even if extra days are ticked. When one window runs straight into the
+    next (Shabat into Yom Tov), the intervening nightfall is not treated as an end.
 - **Plays playlists, songs and podcasts.** An entry can be:
   - a YouTube Music **playlist**, album or radio mix (`…/playlist?list=…`, or a `watch` link
     that carries a `list=`);

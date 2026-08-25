@@ -14,6 +14,22 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
     /** Minutes since midnight, 0..1439 */
     val timeMinutes: Int = 7 * 60 + 30,
     /**
+     * What [timeMinutes] is measured against.
+     *
+     * [TimeAnchor.FixedClock] keeps the historical behaviour: [timeMinutes] is
+     * a wall-clock time. The other anchors ignore [timeMinutes] and instead
+     * derive the trigger from that day's sunset or from the end of Shabat /
+     * Yom Tov, shifted by [anchorOffsetMinutes]. Sunset in Israel moves by
+     * over three hours across the year, so a fixed clock time drifts relative
+     * to it - that drift is exactly what these anchors remove.
+     */
+    val timeAnchor: TimeAnchor = TimeAnchor.FixedClock,
+    /**
+     * Minutes to add to the anchor; negative means before it. Ignored when
+     * [timeAnchor] is [TimeAnchor.FixedClock].
+     */
+    val anchorOffsetMinutes: Int = 0,
+    /**
      * Clock time at which to pause playback, or null for "play until stopped".
      * Null by default. When it is at or before [timeMinutes] it is treated as
      * belonging to the following day, so an overnight schedule works.
@@ -51,6 +67,31 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
 /** Which episode of a podcast a schedule should play. */
 @Serializable
 enum class PodcastEpisodeMode { Random, Latest }
+
+/**
+ * What a schedule's trigger time is measured from.
+ *
+ * [Sunset] and [ShabatYomTovEnd] both move with the calendar, which is the
+ * point: a fixed clock time drifts by hours against sunset over the year.
+ * [ShabatYomTovEnd] is not the same as a sunset offset, because it also
+ * covers Yom Tov and multi-day festivals, which a bare sunset offset gets
+ * wrong.
+ */
+@Serializable
+enum class TimeAnchor {
+    /** Plain wall-clock time. The historical, and still default, behaviour. */
+    FixedClock,
+
+    /** That day's sunset at the configured latitude / longitude. */
+    Sunset,
+
+    /**
+     * Nightfall at the end of a Shabat or Yom Tov window. A day on which no
+     * window ends produces no occurrence, so such a schedule fires only on
+     * motzaei Shabat / Yom Tov even if more days are ticked.
+     */
+    ShabatYomTovEnd,
+}
 
 /**
  * A playlist entry is a URL, optionally followed by a display name in square

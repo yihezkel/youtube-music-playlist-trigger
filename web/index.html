@@ -339,10 +339,24 @@ function renderSchedules() {
     const mm = String((s.timeMinutes ?? 450) % 60).padStart(2, '0');
     const stop = s.stopTimeMinutes == null ? '' :
       `${String(Math.floor(s.stopTimeMinutes / 60)).padStart(2, '0')}:${String(s.stopTimeMinutes % 60).padStart(2, '0')}`;
+    const anchor = s.timeAnchor || 'FixedClock';
+    const offset = s.anchorOffsetMinutes ?? 0;
     div.innerHTML = `
       <div class="row">
         <input type="text" data-f="name" placeholder="Name" value="${esc(s.name || '')}" />
-        <input type="time" data-f="time" value="${hh}:${mm}" style="flex:0 0 130px" />
+        <input type="time" data-f="time" value="${hh}:${mm}"
+               style="flex:0 0 130px${anchor === 'FixedClock' ? '' : ';display:none'}" />
+      </div>
+      <label>Trigger time is measured from</label>
+      <div class="row">
+        <select data-f="anchor" style="flex:0 0 190px">
+          <option value="FixedClock"${anchor === 'FixedClock' ? ' selected' : ''}>Clock</option>
+          <option value="Sunset"${anchor === 'Sunset' ? ' selected' : ''}>Sunset</option>
+          <option value="ShabatYomTovEnd"${anchor === 'ShabatYomTovEnd' ? ' selected' : ''}>Shabat/Yom Tov ends</option>
+        </select>
+        <input type="number" data-f="offset" value="${offset}" step="5"
+               title="Minutes from the anchor; negative means before it"
+               style="flex:0 0 130px${anchor === 'FixedClock' ? ';display:none' : ''}" />
       </div>
       <label>Stop time (optional — leave blank to play until stopped)</label>
       <input type="time" data-f="stop" value="${stop}" style="flex:0 0 130px" />
@@ -364,6 +378,14 @@ function renderSchedules() {
       schedules.splice(i, 1);
       renderSchedules();
     };
+    // Only the control that applies to the chosen anchor is shown, so the
+    // clock time and the offset can never be set to conflicting values.
+    const anchorSel = div.querySelector('[data-f=anchor]');
+    anchorSel.onchange = () => {
+      const clock = anchorSel.value === 'FixedClock';
+      div.querySelector('[data-f=time]').style.display = clock ? '' : 'none';
+      div.querySelector('[data-f=offset]').style.display = clock ? 'none' : '';
+    };
     div._read = () => {
       const days = [...div.querySelectorAll('[data-day]')].filter(c => c.checked).map(c => +c.dataset.day);
       const [h, m] = div.querySelector('[data-f=time]').value.split(':').map(Number);
@@ -377,6 +399,8 @@ function renderSchedules() {
         enabled: div.querySelector('[data-f=enabled]').checked,
         daysOfWeek: days,
         timeMinutes: (h * 60 + m) || 0,
+        timeAnchor: anchorSel.value,
+        anchorOffsetMinutes: Number(div.querySelector('[data-f=offset]').value) || 0,
         stopTimeMinutes: stopRaw ? sh * 60 + sm : null,
         podcastEpisodeMode: div.querySelector('[data-f=podcastRandom]').checked ? 'Random' : 'Latest',
         playlistUrls: div.querySelector('[data-f=playlists]').value.split('\n').map(x => x.trim()).filter(Boolean),
@@ -391,6 +415,7 @@ $('addSched').onclick = () => {
   schedules.push({
     id: crypto.randomUUID(), name: 'New', enabled: true,
     daysOfWeek: [1, 2, 3, 4, 5], timeMinutes: 7 * 60 + 30, stopTimeMinutes: null,
+    timeAnchor: 'FixedClock', anchorOffsetMinutes: 0,
     podcastEpisodeMode: 'Random',
     playlistUrls: [], targetVolumePercent: null, autoStopMinutes: null,
     enableShuffle: true, skipFirstTrack: true, lastPickedPlaylistIds: [],

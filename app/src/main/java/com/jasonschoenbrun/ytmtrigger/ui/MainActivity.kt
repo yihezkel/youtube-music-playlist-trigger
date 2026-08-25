@@ -46,6 +46,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jasonschoenbrun.ytmtrigger.BuildConfig
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
+import com.jasonschoenbrun.ytmtrigger.alarm.ScheduleTimes
 import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
 import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.data.MediaEntries
@@ -55,6 +56,7 @@ import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
+import com.jasonschoenbrun.ytmtrigger.data.TimeAnchor
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.LogLevel
 import com.jasonschoenbrun.ytmtrigger.log.Logger
@@ -263,7 +265,7 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         for (s in schedules.filter { it.enabled }) {
-                            val next = AlarmScheduler.computeNextTriggerMs(s)
+                            val next = AlarmScheduler.computeNextTriggerMs(ctx, s)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     s.name,
@@ -426,7 +428,7 @@ fun SchedulesScreen(onNav: (Screen) -> Unit) {
                     // A disabled schedule would not have fired anyway, so it
                     // gets no warning.
                     val wouldHitChag = s.enabled && HebrewCalendarChecker.blockedOccurrences(
-                        AlarmScheduler.occurrencesWithin(s, days = 7),
+                        AlarmScheduler.occurrencesWithin(ctx, s, days = 7),
                         settings.calendarConfig(),
                     ).isNotEmpty()
                     ScheduleCard(
@@ -517,8 +519,9 @@ private fun ScheduleCard(
     onToggle: (Boolean) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val time = "%02d:%02d".format(schedule.timeMinutes / 60, schedule.timeMinutes % 60)
-    val nextMs = if (schedule.enabled) AlarmScheduler.computeNextTriggerMs(schedule) else null
+    val ctx = LocalContext.current
+    val time = ScheduleTimes.describe(schedule)
+    val nextMs = if (schedule.enabled) AlarmScheduler.computeNextTriggerMs(ctx, schedule) else null
     val nextLabel = nextMs?.let {
         val fmt = java.text.SimpleDateFormat("EEE MMM d, HH:mm", java.util.Locale.US)
         "Next: ${fmt.format(java.util.Date(it))}"
@@ -724,6 +727,8 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
     var volPctText by remember { mutableStateOf(initial.targetVolumePercent?.toString().orEmpty()) }
     var stopMinText by remember { mutableStateOf(initial.autoStopMinutes?.toString().orEmpty()) }
     var stopTimeMin by remember { mutableStateOf(initial.stopTimeMinutes) }
+    var anchor by remember { mutableStateOf(initial.timeAnchor) }
+    var anchorOffsetText by remember { mutableStateOf(initial.anchorOffsetMinutes.toString()) }
     var podcastRandom by remember {
         mutableStateOf(initial.podcastEpisodeMode == PodcastEpisodeMode.Random)
     }
@@ -753,6 +758,11 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                             targetVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
                             autoStopMinutes = stopMinText.toIntOrNull()?.coerceAtLeast(1),
                             stopTimeMinutes = stopTimeMin,
+                            timeAnchor = anchor,
+                            // An unparseable or blank offset means "no shift"
+                            // rather than a silent revert to the old value.
+                            anchorOffsetMinutes = anchorOffsetText.trim()
+                                .toIntOrNull()?.coerceIn(-720, 720) ?: 0,
                             podcastEpisodeMode = if (podcastRandom) PodcastEpisodeMode.Random
                                                  else PodcastEpisodeMode.Latest,
                         )
@@ -780,25 +790,67 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                 Switch(checked = enabled, onCheckedChange = { enabled = it })
             }
 
-            // Time picker — tap card to open Material3 TimePickerDialog
+            // Trigger time. A schedule is anchored either to the clock or to
+            // something that moves with the calendar; only the relevant
+            // control is shown so the two cannot be set to conflicting values.
+            Text("Trigger time is measured from", style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = anchor == TimeAnchor.FixedClock,
+                    onClick = { anchor = TimeAnchor.FixedClock },
+                    label = { Text("Clock") },
+                )
+                FilterChip(
+                    selected = anchor == TimeAnchor.Sunset,
+                    onClick = { anchor = TimeAnchor.Sunset },
+                    label = { Text("Sunset") },
+                )
+                FilterChip(
+                    selected = anchor == TimeAnchor.ShabatYomTovEnd,
+                    onClick = { anchor = TimeAnchor.ShabatYomTovEnd },
+                    label = { Text("Shabat ends") },
+                )
+            }
+
             var showTimePicker by remember { mutableStateOf(false) }
-            ElevatedCard(
-                onClick = { showTimePicker = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Schedule, null)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Trigger time", style = MaterialTheme.typography.labelMedium)
-                        Text(
-                            "%02d:%02d".format(timeMin / 60, timeMin % 60),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Light,
-                        )
+            if (anchor == TimeAnchor.FixedClock) {
+                ElevatedCard(
+                    onClick = { showTimePicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Schedule, null)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Trigger time", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                "%02d:%02d".format(timeMin / 60, timeMin % 60),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Light,
+                            )
+                        }
+                        TextButton(onClick = { showTimePicker = true }) { Text("Change") }
                     }
-                    TextButton(onClick = { showTimePicker = true }) { Text("Change") }
                 }
+            } else {
+                OutlinedTextField(
+                    value = anchorOffsetText,
+                    onValueChange = { anchorOffsetText = it },
+                    label = { Text("Minutes from anchor (negative = before)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    if (anchor == TimeAnchor.Sunset) {
+                        "Fires relative to sunset, which shifts by over three " +
+                            "hours across the year."
+                    } else {
+                        "Fires only on days a Shabat or Yom Tov window actually " +
+                            "ends, so other ticked days are skipped."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (showTimePicker) {
                 TimePickerDialog(

@@ -367,7 +367,7 @@ object A11yPermissionEnforcer {
         }
         if (respectTriggerProximity) {
             val minsToTrigger = runCatching {
-                AlarmScheduler.minutesToNextTrigger(ScheduleRepository.get(context).all())
+                AlarmScheduler.minutesToNextTrigger(context, ScheduleRepository.get(context).all())
             }.getOrNull()
             if (minsToTrigger != null && minsToTrigger <= TRIGGER_PROXIMITY_MIN) {
                 Logger.w(

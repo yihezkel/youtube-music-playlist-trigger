@@ -129,6 +129,25 @@ object HebrewCalendarChecker {
         if (r.skip) at to (r.reason ?: "Shabat/Yom Tov") else null
     }
 
+    /**
+     * Nightfall on [day] if a Shabat or Yom Tov window genuinely ends then,
+     * else null.
+     *
+     * "Genuinely" matters when one window runs straight into the next - Shabat
+     * followed by Yom Tov on Saturday night, or the middle of a two-day
+     * festival. Saturday's nightfall is not an end in that case, so this
+     * re-checks a moment past the candidate and rejects it if the block is
+     * still in force. Without that guard a "after Shabat" schedule would fire
+     * in the middle of Yom Tov.
+     */
+    fun windowEndOn(day: LocalDate, cfg: Config): LocalDateTime? {
+        val table = if (cfg.israeliObservance) YOM_TOV_ISRAEL else YOM_TOV_DIASPORA
+        val ends = day.dayOfWeek == DayOfWeek.SATURDAY || table.any { it.endDay == day }
+        if (!ends) return null
+        val end = endOf(day, cfg)
+        return if (evaluate(end.plusMinutes(1), cfg).skip) null else end
+    }
+
     /** The coming Shabat window, for display in settings. */
     fun nextShabatWindow(from: LocalDate, cfg: Config): Pair<LocalDateTime, LocalDateTime> {
         var friday = from

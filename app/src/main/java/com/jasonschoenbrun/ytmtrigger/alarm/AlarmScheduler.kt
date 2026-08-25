@@ -101,7 +101,7 @@ object AlarmScheduler {
             Logger.w("Alarm", "Schedule has no days; not scheduling", mapOf("id" to schedule.id))
             return
         }
-        val nextMs = computeNextTriggerMs(schedule) ?: run {
+        val nextMs = computeNextTriggerMs(context, schedule) ?: run {
             Logger.w("Alarm", "Could not compute next trigger", mapOf("id" to schedule.id))
             return
         }
@@ -141,7 +141,7 @@ object AlarmScheduler {
                 "at" to FMT.format(Date(nextMs)),
                 "inMin" to ((nextMs - System.currentTimeMillis()) / 60000).toString(),
                 "daysOfWeek" to schedule.daysOfWeek.joinToString(","),
-                "localTime" to schedule.localTime().toString(),
+                "localTime" to ScheduleTimes.describe(schedule),
             ))
         } catch (se: SecurityException) {
             EvalFix.end("H-fix-2-setAlarmClock", success = false, mapOf("err" to "SecurityException"))
@@ -290,22 +290,31 @@ object AlarmScheduler {
     /**
      * Minutes until the soonest enabled schedule fires, or null if none.
      */
-    fun minutesToNextTrigger(schedules: List<Schedule>): Long? {
+    fun minutesToNextTrigger(context: Context, schedules: List<Schedule>): Long? {
         val now = System.currentTimeMillis()
         return schedules.filter { it.enabled }
-            .mapNotNull { computeNextTriggerMs(it) }
+            .mapNotNull { computeNextTriggerMs(context, it) }
             .minOrNull()
             ?.let { (it - now) / 60000 }
     }
 
-    fun computeNextTriggerMs(schedule: Schedule, now: LocalDateTime = LocalDateTime.now()): Long? {        val time = schedule.localTime()
+    fun computeNextTriggerMs(
+        context: Context,
+        schedule: Schedule,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): Long? {
         val days = schedule.daysOfWeek.map { DayOfWeek.of(it) }.toSet()
         if (days.isEmpty()) return null
-        var probe: LocalDate = now.toLocalDate()
-        for (i in 0..7) {
-            val candidate: LocalDate = probe.plusDays(i.toLong())
+        val cfg = SettingsRepository.get(context).current().calendarConfig()
+        val today: LocalDate = now.toLocalDate()
+        // Anchored schedules can skip a ticked day entirely (no sunset, or no
+        // window ending), so this must keep looking rather than give up on the
+        // first matching weekday. A fortnight covers the longest realistic gap
+        // between consecutive Shabat/Yom Tov endings.
+        for (i in 0..14L) {
+            val candidate: LocalDate = today.plusDays(i)
             if (candidate.dayOfWeek !in days) continue
-            val dt = LocalDateTime.of(candidate, time)
+            val dt = ScheduleTimes.triggerOn(schedule, candidate, cfg) ?: continue
             if (dt.isAfter(now)) return dt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
         return null
@@ -319,22 +328,27 @@ object AlarmScheduler {
      * the first hit, because a weekly warning has to consider all of them.
      */
     fun occurrencesWithin(
+        context: Context,
         schedule: Schedule,
         days: Long,
         now: LocalDateTime = LocalDateTime.now(),
     ): List<LocalDateTime> {
         val wanted = schedule.daysOfWeek.map { DayOfWeek.of(it) }.toSet()
         if (wanted.isEmpty()) return emptyList()
-        val time = schedule.localTime()
+        val cfg = SettingsRepository.get(context).current().calendarConfig()
         val end = now.plusDays(days)
         val out = mutableListOf<LocalDateTime>()
         var day = now.toLocalDate()
-        while (true) {
-            val at = LocalDateTime.of(day, time)
-            if (at.isAfter(end)) break
-            if (day.dayOfWeek in wanted && at.isAfter(now)) out += at
+        // Walk one extra day: an anchored time can land after midnight, so the
+        // occurrence for the last in-range date may still be computed from it.
+        val lastDay = end.toLocalDate().plusDays(1)
+        while (!day.isAfter(lastDay)) {
+            if (day.dayOfWeek in wanted) {
+                val at = ScheduleTimes.triggerOn(schedule, day, cfg)
+                if (at != null && at.isAfter(now) && !at.isAfter(end)) out += at
+            }
             day = day.plusDays(1)
         }
-        return out
+        return out.sorted()
     }
 }
