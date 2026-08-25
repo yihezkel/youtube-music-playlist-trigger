@@ -39,3 +39,6 @@ tools/service-account.json
 tools/node_modules/
 .remote-logs/
 
+
+# Generated podcast statistics (regenerate with tools/podcast-stats.mjs)
+tools/podcast-stats.json
