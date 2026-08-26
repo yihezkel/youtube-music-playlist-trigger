@@ -154,6 +154,23 @@ class PlaybackTriggerService : Service() {
             // Arm the stop time on the first item only. Re-arming mid-queue
             // would be harmless but pointless, and it muddies the log.
             if (queueIndex <= 0) AlarmScheduler.scheduleStop(this, schedule)
+
+            // Set the volume before dispatching anywhere. This used to sit
+            // further down, after the podcast branch had already returned, so
+            // a podcast-only schedule never set the volume at all - and once
+            // the phone was muted for any reason it stayed muted, playing to
+            // nobody. Only on the first item of a queue, so turning the volume
+            // down mid-block is not undone by the next episode.
+            if (queueIndex <= 0) {
+                val effectiveVolume = schedule.targetVolumePercent
+                    ?: SettingsRepository.get(this).current().defaultVolumePercent
+                if (effectiveVolume != null) {
+                    setMediaVolume(effectiveVolume)
+                } else {
+                    Logger.d("PlaybackSvc", "No target volume configured; leaving as-is")
+                }
+            }
+
             // Podcasts and single tracks don't go through the YT Music
             // playlist flow at all: a feed is played by us, and a track
             // deep-link starts playing on its own.
@@ -166,16 +183,6 @@ class PlaybackTriggerService : Service() {
             }
 
             updateNotification("Launching ${schedule.name}…")
-
-            // Set volume if requested. Falls back to global default if the
-            // schedule itself has none configured.
-            val effectiveVolume = schedule.targetVolumePercent
-                ?: SettingsRepository.get(this).current().defaultVolumePercent
-            if (effectiveVolume != null) {
-                setMediaVolume(effectiveVolume)
-            } else {
-                Logger.d("PlaybackSvc", "No target volume configured; leaving as-is")
-            }
 
             val needsAccessibility = schedule.enableShuffle || schedule.skipFirstTrack
 
