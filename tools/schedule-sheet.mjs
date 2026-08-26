@@ -37,7 +37,23 @@ const WEEK = [
 
 const rows = [];
 const fmt = [];
-const push = (arr, kind) => { rows.push(arr); if (kind) fmt.push({ r: rows.length - 1, kind }); };
+// Rows are padded with blanks so that shrinking content actually clears what
+// was there before. The tab is no longer deleted between runs, so a row that
+// gets shorter — or a spacer that lands where text used to be — would otherwise
+// leave the old text sitting on screen.
+//
+// How far to pad matters: a row must never be padded into a guidance column,
+// which would erase what Jason writes there. Spacers and full-width banners pad
+// to 8 because none of them falls beside a guidance column; the per-day
+// sub-headings inside section 3 pad only to 6, because column G beside them
+// is his.
+const PAD = { title: 8, sub: 8, section: 8, sub2: 6 };
+const push = (arr, kind) => {
+  const want = arr.length === 0 ? 8 : (PAD[kind] || arr.length);
+  const row = want > arr.length ? [...arr, ...Array(want - arr.length).fill("")] : arr;
+  rows.push(row);
+  if (kind) fmt.push({ r: rows.length - 1, kind });
+};
 
 push(["Recommended Podcast Schedule"], "title");
 push([`Built ${new Date().toISOString().slice(0, 10)} · kids 07:30–08:00 and 16:00–19:30 · Sarah 08:00–15:50 and 16:30–19:30 · 15-year-old to 21:30 · Fridays the kids are home by 15:00 (about 12:00 once the clocks go back)`], "sub");
@@ -79,11 +95,9 @@ push(["4 · How it plays"], "section");
 ].forEach(([k, v]) => push(["", k, v], "note"));
 push([]);
 
-push(["5 · Things you should know before we build this"], "section");
+push(["5 · Open items"], "section");
 push(["Issue", "Detail"], "head");
 [
-  ["Your sheet disagrees with the hours you gave me",
-   "The Weekly tab said: 'Hallel gets home about 13:45 every day', 'Miryam gets home about 14:00 every day', 'Aharon gets home 17:40–18:00 every day, except Tuesdays at 15:25'. You told me the kids are around from 16:00. I have built to what you told me, but if those older lines are still true then roughly two hours of Sarah's block each afternoon actually has children in it, and should be family content instead."],
   ["A Book Like No Other has only 5 episodes",
    "It carries the Sunday and Friday Torah slots but the feed is tiny, so random play will repeat quickly. Worth pairing with another Aleph Beta feed or accepting the repetition."],
   ["Jews You Should Know needs length-aware picking",
