@@ -247,17 +247,33 @@ object AlarmScheduler {
      */
     fun scheduleStop(context: Context, schedule: Schedule) {
         cancelStop(context, schedule.id)
-        val stopTime = schedule.stopLocalTime() ?: return
-        val now = LocalDateTime.now()
-        var stop = LocalDateTime.of(now.toLocalDate(), stopTime)
-        if (!stop.isAfter(now)) stop = stop.plusDays(1)
-        val at = stop.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        AutoStop.clear(context, schedule.id)
+        val stopTime = schedule.stopLocalTime()
+        val at: Long
+        val how: String
+        if (stopTime != null) {
+            val now = LocalDateTime.now()
+            var stop = LocalDateTime.of(now.toLocalDate(), stopTime)
+            if (!stop.isAfter(now)) stop = stop.plusDays(1)
+            at = stop.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            how = "clock"
+        } else {
+            // Stop after a fixed run instead. Measured from now, which is the
+            // moment the block starts - this is only called on its first item.
+            // It exists for blocks whose start moves through the year: a fixed
+            // clock stop gives those a different length every week.
+            val mins = schedule.autoStopMinutes ?: return
+            at = System.currentTimeMillis() + mins * 60_000L
+            how = "after ${mins}m"
+            AutoStop.record(context, schedule.id, at)
+        }
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         try {
             am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, stopPendingIntent(context, schedule.id))
             Logger.i("Alarm", "Stop scheduled", mapOf(
                 "id" to schedule.id,
                 "name" to schedule.name,
+                "how" to how,
                 "at" to FMT.format(Date(at)),
                 "inMin" to ((at - System.currentTimeMillis()) / 60000).toString(),
             ))

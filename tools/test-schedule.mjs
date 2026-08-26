@@ -81,6 +81,25 @@ if (mode !== "clean") {
       playlistUrls: [`${TORAH} [Chain second]`],
     });
   }
+  // "autostop": no clock stop, a fixed run instead, and music last so the queue
+  // itself can never end. The stop alarm has to both pause YT Music and hand on
+  // to the follower.
+  if (mode === "autostop") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = null;
+    first.autoStopMinutes = length;
+    first.playlistUrls = [`${TORAH} [Autostop first]`, ...(cfg.defaultPlaylistUrls || []).slice(0, 1)];
+    cfg.schedules.push({
+      ...first,
+      id: "zz-queue-test-2",
+      name: NAME2,
+      timeMinutes: start + 60,
+      stopTimeMinutes: null,
+      autoStopMinutes: null,
+      startsAfter: "zz-queue-test",
+      playlistUrls: [`${TORAH} [Autostop follower]`],
+    });
+  }
 }
 
 await ref.set({ json: JSON.stringify(cfg), revision: revision + 1 }, { merge: true });

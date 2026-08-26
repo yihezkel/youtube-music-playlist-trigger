@@ -41,9 +41,9 @@ const built = all.map((q) => ({
   timeAnchor: q.block.anchor || "FixedClock",
   anchorOffsetMinutes: q.block.offset || 0,
   startsAfter: q.block.startsAfter || null,
+  autoStopMinutes: q.block.autoStop || null,
   playlistUrls: q.shows.flatMap(([s]) => (s === MUSIC ? music : [feed(s)])),
   targetVolumePercent: 100,
-  autoStopMinutes: null,
   enableShuffle: true,
   skipFirstTrack: false,
   podcastEpisodeMode: q.block.mode || "Random",
@@ -84,6 +84,10 @@ for (const q of all) {
     const flag = Math.abs(drift) > 15 ? `  ENDS ${drift > 0 ? "+" : ""}${drift}m OFF TARGET` : "";
     if (Math.abs(drift) > 15) over++;
     console.log(`  ${tag} ${String(total).padStart(4)}m vs ${String(B).padStart(4)}m nominal  runs to the end${flag}`);
+    continue;
+  }
+  if (q.block.autoStop) {
+    console.log(`  ${tag} ${String(total).padStart(4)}m of ${String(q.block.autoStop).padStart(4)}m  stops after ${q.block.autoStop}m${hasMusic ? ", music fills the rest" : ""}`);
     continue;
   }
   if (B == null || hasMusic) {

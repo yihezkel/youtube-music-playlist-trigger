@@ -287,13 +287,14 @@ export const BLOCKS = [
 
   {
     id: "G", name: "Motzaei Shabat — kids", who: "Kids",
-    time: "Shabat ends + 30 min, runs about 40 min", mins: 40,
-    start: hm(20), stop: null, anchor: "ShabatYomTovEnd", offset: 30, endsWithQueue: true,
-    idea: "Anchored to nightfall, not the clock. It used to stop at a fixed 20:30, which in midsummer left the kids about nine minutes and in midwinter left two and a half hours to be filled with music. It now simply plays its queue and ends, so the kids get the same ~40 minutes all year, and the teen block starts when this one finishes rather than at a clock time.",
+    time: "Shabat ends + 30 min, runs 60 min", mins: 60,
+    start: hm(20), stop: null, anchor: "ShabatYomTovEnd", offset: 30, autoStop: 60,
+    idea: "Anchored to nightfall, not the clock, and stopped after a fixed hour rather than at a fixed 20:30 — that clock stop gave the kids two and a half hours in December and nine minutes in August. An hour is an hour all year. Music closes it out and is stopped by the same alarm.",
     queues: [{
       label: "Motzaei Shabat (kids)", appName: "G Motzaei Shabat - kids", days: [SAT], shows: [
         ["TorahAnytime Daily Dose", "Two minutes to open on"],
         ["Jewish History Nerds", "Jewish history, accessible to the kids"],
+        [MUSIC, "Winds down the rest of the hour. Stopped by the block's own stop, since YouTube Music never reports an end of its own"],
       ],
     }],
   },

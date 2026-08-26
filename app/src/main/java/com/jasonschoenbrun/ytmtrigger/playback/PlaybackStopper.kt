@@ -53,16 +53,38 @@ object PlaybackStopper {
             mgr.getActiveSessions(listenerComp)
         } catch (t: Throwable) {
             // SecurityException when notif listener isn't granted — fall back.
+            // Logged because without it there is no way to tell this apart from
+            // "no YT Music session was playing", and the two want different fixes.
+            Logger.w("Stop", "Cannot list media sessions; using the media-key fallback",
+                mapOf("reason" to reason, "err" to (t.javaClass.simpleName)))
             return false
         }
-        val ytm = sessions.firstOrNull { it.packageName == MediaSessionListenerService.YT_MUSIC_PKG }
-            ?: return false
-        val state = ytm.playbackState?.state
-        val pausable = state == PlaybackState.STATE_PLAYING ||
-            state == PlaybackState.STATE_BUFFERING ||
-            state == PlaybackState.STATE_FAST_FORWARDING ||
-            state == PlaybackState.STATE_REWINDING
-        if (!pausable) return false
+        val ytmSessions = sessions.filter { it.packageName == MediaSessionListenerService.YT_MUSIC_PKG }
+        if (ytmSessions.isEmpty()) {
+            Logger.i("Stop", "No YT Music media session; using the media-key fallback", mapOf(
+                "reason" to reason, "sessions" to sessions.joinToString(",") { it.packageName },
+            ))
+            return false
+        }
+        // YT Music publishes more than one session - a local player and a cast
+        // controller - and the first is not reliably the one playing. Taking
+        // the first and giving up if it was not playable is what made this fall
+        // through to the media-key fallback even with notification access
+        // granted. The fallback goes to whichever app owns audio focus, so it
+        // is only right by luck.
+        val ytm = ytmSessions.firstOrNull { c ->
+            when (c.playbackState?.state) {
+                PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
+                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
+                else -> false
+            }
+        } ?: run {
+            Logger.i("Stop", "No YT Music session was playing; using the media-key fallback", mapOf(
+                "reason" to reason,
+                "states" to ytmSessions.joinToString(",") { it.playbackState?.state?.toString() ?: "null" },
+            ))
+            return false
+        }
         return try {
             ytm.transportControls.pause()
             Logger.i("Stop", "Pause sent via MediaController", mapOf("reason" to reason))

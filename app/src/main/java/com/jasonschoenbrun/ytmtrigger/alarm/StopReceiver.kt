@@ -6,6 +6,7 @@ import android.content.Intent
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
+import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
 
 /**
  * Fires at a schedule's stop time and pauses playback.
@@ -18,12 +19,29 @@ import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
 class StopReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val scheduleId = intent.getStringExtra(AlarmScheduler.EXTRA_SCHEDULE_ID)
-        val name = scheduleId?.let { ScheduleRepository.get(context).byId(it)?.name }
+        val repo = ScheduleRepository.get(context)
+        val name = scheduleId?.let { repo.byId(it)?.name }
         Logger.i("StopReceiver", "Fired", mapOf(
             "id" to (scheduleId ?: "-"),
             "name" to (name ?: "-"),
         ))
         val stopped = PlaybackStopper.stop(context, reason = "stop time: ${name ?: scheduleId}")
         Logger.i("StopReceiver", "Stop dispatched", mapOf("ok" to stopped.toString()))
+        if (scheduleId != null) AutoStop.clear(context, scheduleId)
+
+        // Hand on to whatever follows this block. A block that ends in music
+        // never reports a queue end - YouTube Music is playing it, not us - so
+        // for those this stop is the only signal that the block is over.
+        // A block that ends with its queue has no stop alarm at all, so the two
+        // paths cannot both fire for the same block.
+        val next = scheduleId?.let { id ->
+            repo.all().firstOrNull { it.enabled && it.startsAfter == id }
+        }
+        if (next != null) {
+            Logger.i("StopReceiver", "Starting the block that follows", mapOf(
+                "after" to (scheduleId ?: "-"), "next" to next.id, "name" to next.name,
+            ))
+            PlaybackTriggerService.startQueued(context, next.id, 0)
+        }
     }
 }

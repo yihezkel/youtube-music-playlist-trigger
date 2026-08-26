@@ -52,6 +52,19 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
     val startsAfter: String? = null,
     val playlistUrls: List<String> = emptyList(),
     val targetVolumePercent: Int? = null,
+    /**
+     * Stop this many minutes after the block starts, when [stopTimeMinutes] is
+     * not set. Ignored if it is - a clock stop wins.
+     *
+     * For a block whose start moves through the year a clock stop gives a
+     * different length every week: the kids' motzaei Shabat block, anchored to
+     * nightfall against a fixed 20:30 stop, ran two and a half hours in December
+     * and nine minutes in August. A duration gives it the same length all year.
+     *
+     * It also gives a block that ends with music a way to finish. Music is
+     * played by YouTube Music rather than by us, so we are never told when it
+     * ends and the queue cannot move past it - but it can still be stopped.
+     */
     val autoStopMinutes: Int? = null,
     val enableShuffle: Boolean = true,
     val skipFirstTrack: Boolean = true,

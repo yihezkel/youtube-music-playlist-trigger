@@ -17,6 +17,7 @@ import com.jasonschoenbrun.ytmtrigger.YtmApp
 import com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
 import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
+import com.jasonschoenbrun.ytmtrigger.alarm.AutoStop
 import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
 import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
@@ -151,10 +152,13 @@ class PlaybackTriggerService : Service() {
             // A continuous schedule walks its entries in order and wraps, so
             // the block keeps filling; every other schedule picks one entry.
             //
-            // A block with no stop time is the last of its day. It runs its
-            // queue once and finishes with the last episode rather than looping
-            // back to the top, which would otherwise play on all night.
-            val endsWithQueue = schedule.continuousPlay && schedule.stopTimeMinutes == null
+            // A block with no stop of any kind is the last of its day. It runs
+            // its queue once and finishes with the last episode rather than
+            // looping back to the top, which would otherwise play on all night.
+            // A duration-stopped block is a timed block like any other, so it
+            // still wraps to stay full until its stop.
+            val endsWithQueue = schedule.continuousPlay &&
+                schedule.stopTimeMinutes == null && schedule.autoStopMinutes == null
             val choice = if (schedule.continuousPlay) {
                 PlaylistPicker.at(schedule, if (queueIndex < 0) 0 else queueIndex, wrap = !endsWithQueue)
             } else {
@@ -522,7 +526,12 @@ class PlaybackTriggerService : Service() {
      * mistaken for one that has already ended.
      */
     private fun secondsUntilStop(schedule: Schedule): Long? {
-        val stopTime = schedule.stopLocalTime() ?: return null
+        val stopTime = schedule.stopLocalTime() ?: run {
+            // Duration-stopped block: the absolute stop was written down when
+            // the block started, since the start time is no longer available.
+            val at = AutoStop.endsAt(this, schedule.id) ?: return null
+            return ((at - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+        }
         val now = LocalDateTime.now()
         var stop = LocalDateTime.of(now.toLocalDate(), stopTime)
         if (!stop.isAfter(now)) stop = stop.plusDays(1)
