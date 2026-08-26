@@ -64,6 +64,16 @@ console.log(`carried over ${prefs.size} preference note(s)`);
 const legacy = JSON.parse(readFileSync("sheet-legacy.json", "utf8"));
 const sheetDur = new Map(Object.entries(legacy.durations).map(([k, v]) => [norm(k), v]));
 const sheetNote = new Map(Object.entries(legacy.notes).map(([k, v]) => [norm(k), v]));
+// Where the show sits in the live Google Home routines. Captured before the
+// Daily and News tabs were removed: the clock times and the news running order
+// existed nowhere else.
+const sheetSlot = new Map(Object.entries(legacy.slots || {}).map(([k, v]) => [norm(k), v]));
+function lookupSlot(name) {
+  const k = norm(name);
+  if (sheetSlot.has(k)) return sheetSlot.get(k);
+  for (const [key, v] of sheetSlot) if (key.length > 6 && (k.includes(key) || key.includes(k))) return v;
+  return "";
+}
 function lookupNote(name) {
   const k = norm(name);
   if (sheetNote.has(k)) return sheetNote.get(k);
@@ -91,7 +101,7 @@ rows.sort((a, b) =>
   (ORDER[a.status] - ORDER[b.status]) || a.slot.localeCompare(b.slot) || a.name.localeCompare(b.name));
 
 const HEAD = [
-  "Podcast", "Status", "Group", "Type", "Our preferences", "Your notes (old tabs)", "What it is",
+  "Podcast", "Status", "Group", "Type", "Our preferences", "On Google Home", "Your notes (old tabs)", "What it is",
   "Rating (ratings)", "Publishing?", "Last episode", "Days since",
   "Eps/week (last 90d)", "Eps/week (lifetime)", "Eps last 365d", "Typical days",
   "Day regularity", "Length median (m)", "Length mean (m)", "Length SD (m)",
@@ -105,7 +115,7 @@ const body = rows.map((r) => {
   return [
     r.name, r.status, r.slot, r.kind || "Podcast",
     prefs.get(norm(r.name)) || "",
-    lookupNote(r.name),
+    lookupSlot(r.name), lookupNote(r.name),
     r.description || "", rating(r), publishing(r),
     r.lastEpisode || "", r.daysSinceLast ?? "",
     r.ok ? r.perWeekRecent : "", r.ok ? (r.perWeekLifetime ?? "") : "", r.ok ? r.episodesLast365 : "",
@@ -124,6 +134,7 @@ const body = rows.map((r) => {
 const legend = [
   [],
   ["How to read this tab"],
+  ["On Google Home", "Where the show sits in the live Google Home routines - the daily clock time, or its place in the running order of the 16:37 news routine. Captured before the Daily and News tabs were removed, because those times and that ordering existed nowhere else. \"Weekly grid\" means it is on the Weekly tab, which is still there."],
   ["Your notes (old tabs)", "The Notes and TODO wording carried over from the Weekly/Daily/News tabs before their lower halves were removed. Read-only history - write new thoughts in the next column."],
   ["Our preferences", "Yours to write in - e.g. 'Sarah loves this', 'too long for the morning'. Kept intact when this tab is regenerated, and read back when we next reassess the line-up."],
   ["Status: Considering", "Shows you had already noted as ideas."],
@@ -140,6 +151,7 @@ const legend = [
   ["Type: News brief", "A Google Assistant news briefing, not a podcast. No public RSS, so these cannot move to the YTM Trigger app by feed."],
   ["Match confidence", "Name similarity between the label and the matched feed. Low values are not necessarily wrong - renamed shows score low but are correct (see Notes)."],
   [],
+  ["Not podcasts", "Two entries on the old Daily routine were Google Assistant features rather than shows, so they have no row here: \"Something interesting\" (15:00) and \"New word\" (15:01)."],
   [`Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} from public RSS feeds (iTunes directory) and Apple Podcasts ratings.`],
 ];
 
@@ -199,12 +211,12 @@ req.push(
   rule(1, "Suggested by AI", { red: 0.85, green: 0.90, blue: 0.98 }),
   rule(1, "Considering", { red: 1.00, green: 0.96, blue: 0.78 }),
   rule(1, "Dropped", { red: 0.94, green: 0.87, blue: 0.87 }),
-  rule(8, "Active", { red: 0.82, green: 0.93, blue: 0.82 }),
-  rule(8, "Slowing", { red: 1.00, green: 0.96, blue: 0.78 }),
-  rule(8, "Dormant", { red: 0.99, green: 0.89, blue: 0.79 }),
-  rule(8, "Ended", { red: 0.94, green: 0.87, blue: 0.87 }),
-  rule(21, "Mixed formats", { red: 0.97, green: 0.86, blue: 0.95 }),
-  rule(21, "Tight", { red: 0.86, green: 0.94, blue: 0.98 }),
+  rule(9, "Active", { red: 0.82, green: 0.93, blue: 0.82 }),
+  rule(9, "Slowing", { red: 1.00, green: 0.96, blue: 0.78 }),
+  rule(9, "Dormant", { red: 0.99, green: 0.89, blue: 0.79 }),
+  rule(9, "Ended", { red: 0.94, green: 0.87, blue: 0.87 }),
+  rule(22, "Mixed formats", { red: 0.97, green: 0.86, blue: 0.95 }),
+  rule(22, "Tight", { red: 0.86, green: 0.94, blue: 0.98 }),
 );
 await api("POST", ":batchUpdate", { requests: req });
 

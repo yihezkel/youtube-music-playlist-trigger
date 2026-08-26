@@ -113,4 +113,6 @@ export const PODCASTS = [
   { name: "Up First (NPR)", status: "Suggested by AI", slot: "News", q: "Up First NPR", pick: "Up First from NPR" },
   { name: "TorahAnytime Daily Dose", status: "Suggested by AI", slot: "Kids", q: "TorahAnytime Daily Dose", pick: "TorahAnytime Daily Dose" },
   { name: "The Daily Thread (Meaningful Minute)", status: "Suggested by AI", slot: "Kids", q: "The Daily Thread Meaningful Minute", pick: "The Daily Thread" },
+  { name: "Fox Radio", status: "Doing", slot: "News", kind: "News brief" },
+  { name: "Bloomberg Best", status: "Doing", slot: "News", kind: "News brief", note: "Sheet: seems to be business news. Not on Podcast." },
 ];
