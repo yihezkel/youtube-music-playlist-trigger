@@ -32,6 +32,17 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   cache is preferred to failing a trigger.
   - **Random episode by default**, or newest — a per-schedule switch, shown only when the
     schedule actually contains a podcast.
+  - **Continuous play** — a schedule can run its entries as a queue rather than picking one:
+    the next starts the moment the current finishes, wrapping back to the top so the block
+    stays filled until its stop time. Only podcast entries chain; a YouTube Music entry hands
+    control to YT Music and never hands it back, so music belongs last in a queue.
+  - **Won't start an episode it can't get halfway through.** With less than half an episode's
+    worth of block remaining, the block simply ends early rather than playing a fragment.
+    Episodes whose feed omits a duration are always played — unknown must not mean "skip".
+  - **Resumes what was cut off.** A block ends on a clock time, so something is always
+    interrupted. The position is remembered per feed and picked up next time, five minutes
+    earlier than where it stopped so the context is re-established rather than resuming
+    mid-sentence. An episode heard to the end clears its mark.
   - Spotify's own API is deliberately not used: it requires a **Premium** account and its
     public page exposes only 12 episodes, whereas the feed for the same show carries the
     full back catalogue (384 episodes, in the case this was built against).

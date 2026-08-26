@@ -15,6 +15,14 @@ data class Episode(
     val title: String,
     val audioUrl: String,
     val publishedMs: Long,
+    /**
+     * Length in seconds from the feed's `itunes:duration`, or null when the
+     * feed omits it. Null must be treated as "unknown", never as zero: a
+     * caller deciding whether an episode fits the time left has to fall back
+     * to playing it rather than silently skipping every episode in a feed
+     * that happens not to publish durations.
+     */
+    val durationSec: Long? = null,
 )
 
 /**
@@ -96,6 +104,24 @@ object PodcastCatalog {
         return 0L
     }
 
+    /**
+     * `itunes:duration` in seconds. Feeds publish it three ways - plain
+     * seconds, `MM:SS`, or `HH:MM:SS` - and a feed that uses one form for most
+     * episodes will still occasionally use another, so all three are accepted.
+     */
+    private fun parseDuration(raw: String?): Long? {
+        val s = raw?.trim().orEmpty()
+        if (s.isEmpty()) return null
+        if (s.all { it.isDigit() }) return s.toLongOrNull()?.takeIf { it > 0 }
+        val parts = s.split(":").map { it.trim().toLongOrNull() ?: return null }
+        val secs = when (parts.size) {
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            2 -> parts[0] * 60 + parts[1]
+            else -> return null
+        }
+        return secs.takeIf { it > 0 }
+    }
+
     private fun parse(xml: String): List<Episode> {
         val parser = XmlPullParserFactory.newInstance().newPullParser()
         parser.setInput(xml.reader())
@@ -104,15 +130,18 @@ object PodcastCatalog {
         var title: String? = null
         var audio: String? = null
         var published = 0L
+        var durationSec: Long? = null
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             when (event) {
                 XmlPullParser.START_TAG -> when (parser.name) {
-                    "item" -> { inItem = true; title = null; audio = null; published = 0L }
+                    "item" -> { inItem = true; title = null; audio = null; published = 0L; durationSec = null }
                     // Only the first <title> in an item: feeds also carry
                     // itunes:title, and taking the last would sometimes win.
                     "title" -> if (inItem && title == null) title = parser.nextText().trim()
                     "pubDate" -> if (inItem) published = parseDate(parser.nextText())
+                    "itunes:duration", "duration" ->
+                        if (inItem && durationSec == null) durationSec = parseDuration(parser.nextText())
                     "enclosure" -> if (inItem && audio == null) {
                         val type = parser.getAttributeValue(null, "type").orEmpty()
                         val url = parser.getAttributeValue(null, "url").orEmpty()
@@ -123,7 +152,7 @@ object PodcastCatalog {
                 }
                 XmlPullParser.END_TAG -> if (parser.name == "item") {
                     val a = audio
-                    if (a != null) out += Episode(title ?: "(untitled)", a, published)
+                    if (a != null) out += Episode(title ?: "(untitled)", a, published, durationSec)
                     inItem = false
                 }
             }

@@ -28,6 +28,7 @@ import com.jasonschoenbrun.ytmtrigger.data.MediaKind
 import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
 import com.jasonschoenbrun.ytmtrigger.podcast.PodcastCatalog
 import com.jasonschoenbrun.ytmtrigger.podcast.PodcastPlayerService
+import com.jasonschoenbrun.ytmtrigger.podcast.PodcastResume
 import com.jasonschoenbrun.ytmtrigger.podcast.SpotifyFeedResolver
 import com.jasonschoenbrun.ytmtrigger.diag.DiagnosticsSnapshot
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
@@ -140,25 +141,11 @@ class PlaybackTriggerService : Service() {
                 return
             }
 
-            // Don't start another episode when the block is seconds from its
-            // stop. Deliberately a narrow guard: refusing to start anything
-            // that cannot finish would leave dead air, and for a block whose
-            // whole point is continuous sound that is worse than an episode
-            // being cut off. This only avoids the pointless case - starting a
-            // fresh episode, waking the screen and running diagnostics for a
-            // handful of seconds of audio.
-            if (queueIndex > 0) {
-                val remainingSec = secondsUntilStop(schedule)
-                if (remainingSec != null && remainingSec < QUEUE_TAIL_GUARD_SEC) {
-                    Logger.i("PlaybackSvc", "Not advancing queue; block ends imminently", mapOf(
-                        "scheduleId" to schedule.id,
-                        "name" to schedule.name,
-                        "queueIndex" to queueIndex.toString(),
-                        "secondsLeft" to remainingSec.toString(),
-                    ))
-                    return
-                }
-            }
+            // Whether there is enough of the block left to be worth starting
+            // the next episode is decided in playPodcast, where the episode's
+            // own length is known. A fixed number of seconds cannot answer it:
+            // the same two minutes is nearly all of a short clip and almost
+            // none of an hour-long shiur.
 
             // A continuous schedule walks its entries in order and wraps, so
             // the block keeps filling; every other schedule picks one entry.
@@ -531,21 +518,58 @@ class PlaybackTriggerService : Service() {
             Logger.e("PlaybackSvc", "Feed produced no episodes", mapOf("feed" to feedUrl))
             return false
         }
-        val chosen = when (schedule.podcastEpisodeMode) {
+        // An episode left part-heard when a block ended takes precedence over
+        // picking a new one: finishing what was started is the point of the
+        // resume feature, and dropping back a few minutes re-establishes
+        // context rather than resuming mid-sentence.
+        val pending = PodcastResume.get(this, feedUrl)
+        val resumeEpisode = pending?.let { m -> episodes.firstOrNull { it.audioUrl == m.audioUrl } }
+        val chosen = resumeEpisode ?: when (schedule.podcastEpisodeMode) {
             PodcastEpisodeMode.Latest -> episodes.first()
             PodcastEpisodeMode.Random -> episodes[Random.nextInt(episodes.size)]
         }
+        val startAtSec = if (resumeEpisode != null && pending != null) {
+            PodcastResume.resumeAtSec(pending)
+        } else 0L
+
+        // Don't start an episode the block cannot get meaningfully through.
+        // The threshold is a share of the episode, not a fixed number of
+        // seconds: hearing two minutes of a 71-minute shiur is not worth the
+        // interruption, whereas two minutes of a three-minute clip is nearly
+        // all of it. Episodes whose feed omits a duration are always played -
+        // unknown must not become "skip".
+        val remainingSec = secondsUntilStop(schedule)
+        val playableSec = (chosen.durationSec ?: 0L) - startAtSec
+        if (queueIndex > 0 && remainingSec != null && playableSec > 0 &&
+            remainingSec < playableSec * MIN_EPISODE_SHARE
+        ) {
+            Logger.i("PlaybackSvc", "Not starting episode; too little of it would play", mapOf(
+                "scheduleId" to schedule.id,
+                "podcast" to entry.displayName,
+                "title" to chosen.title,
+                "secondsLeft" to remainingSec.toString(),
+                "episodeSec" to playableSec.toString(),
+                "sharePlayable" to "%.2f".format(remainingSec.toDouble() / playableSec),
+            ))
+            return true
+        }
+
         Logger.i("PlaybackSvc", "Podcast episode chosen", mapOf(
             "podcast" to entry.displayName,
-            "mode" to schedule.podcastEpisodeMode.name,
+            "mode" to if (resumeEpisode != null) "Resume" else schedule.podcastEpisodeMode.name,
             "episodes" to episodes.size.toString(),
             "title" to chosen.title,
+            "startAtSec" to startAtSec.toString(),
+            "feedDurationSec" to (chosen.durationSec?.toString() ?: "unknown"),
+            "secondsLeftInBlock" to (remainingSec?.toString() ?: "no stop"),
         ))
         updateNotification("Playing ${entry.displayName}…")
         PodcastPlayerService.start(
             this, chosen.audioUrl, chosen.title,
             queueScheduleId = if (schedule.continuousPlay) schedule.id else null,
             queueIndex = queueIndex,
+            feedUrl = feedUrl,
+            startAtSec = startAtSec,
         )
         // Verify rather than assume, mirroring the YT Music path.
         val deadline = System.currentTimeMillis() + PLAYBACK_TIMEOUT_MS
@@ -576,7 +600,12 @@ class PlaybackTriggerService : Service() {
          * How close to a block's stop time is too close to start another
          * episode. Small on purpose - see the guard's comment in runFlow.
          */
-        const val QUEUE_TAIL_GUARD_SEC = 60L
+        /**
+         * The least of an episode that must fit in what remains of a block for
+         * it to be worth starting. Below this the block simply ends early;
+         * with resume in place the episode is not lost, only deferred.
+         */
+        const val MIN_EPISODE_SHARE = 0.5
         const val YT_MUSIC_PKG = "com.google.android.apps.youtube.music"
         const val NOTIFICATION_ID = 1001
         const val NOTIFICATION_FAILURE_ID = 1002

@@ -42,6 +42,15 @@ class PodcastPlayerService : Service() {
     private var queueScheduleId: String? = null
     private var queueIndex: Int = 0
 
+    // Identify what is playing so an interrupted episode can be resumed. Feed
+    // and title come from the caller; the position is read off the player.
+    private var currentFeedUrl: String? = null
+    private var currentAudioUrl: String? = null
+    private var currentTitle: String = ""
+    // Set when an episode ends of its own accord, so the stop that follows is
+    // not mistaken for an interruption worth resuming.
+    private var finishedNaturally = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -52,18 +61,23 @@ class PodcastPlayerService : Service() {
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Podcast"
         queueScheduleId = intent?.getStringExtra(EXTRA_QUEUE_SCHEDULE)
         queueIndex = intent?.getIntExtra(EXTRA_QUEUE_INDEX, 0) ?: 0
+        currentFeedUrl = intent?.getStringExtra(EXTRA_FEED_URL)
+        val startAtSec = intent?.getLongExtra(EXTRA_START_AT_SEC, 0L) ?: 0L
         if (url.isNullOrBlank()) {
             Logger.e("PodcastPlayer", "No audio URL; stopping")
             stopSelf()
             return START_NOT_STICKY
         }
         startForeground(NOTIFICATION_ID, notification(title))
-        play(url, title)
+        play(url, title, startAtSec)
         return START_NOT_STICKY
     }
 
-    private fun play(url: String, title: String) {
+    private fun play(url: String, title: String, startAtSec: Long = 0L) {
         stopPlayback(keepService = true)
+        currentAudioUrl = url
+        currentTitle = title
+        finishedNaturally = false
         val ms = MediaSession(this, "YTMTriggerPodcast").apply {
             setCallback(object : MediaSession.Callback() {
                 override fun onPause() { pause() }
@@ -81,16 +95,28 @@ class PodcastPlayerService : Service() {
                     .build()
             )
             setOnPreparedListener {
+                // Seek before starting so a resumed episode does not blurt out
+                // its opening seconds before jumping.
+                if (startAtSec > 0) {
+                    runCatching { it.seekTo((startAtSec * 1000L).toInt()) }
+                    Logger.i("PodcastPlayer", "Resuming", mapOf(
+                        "title" to title, "atSec" to startAtSec.toString(),
+                    ))
+                }
                 it.start()
                 playing.set(true)
                 publishState(PlaybackState.STATE_PLAYING)
                 Logger.i("PodcastPlayer", "Playing", mapOf(
                     "title" to title,
                     "durationMs" to it.duration.toString(),
+                    "startAtSec" to startAtSec.toString(),
                 ))
             }
             setOnCompletionListener {
                 Logger.i("PodcastPlayer", "Episode finished", mapOf("title" to title))
+                // Heard to the end, so there is nothing to come back to.
+                finishedNaturally = true
+                currentFeedUrl?.let { feed -> PodcastResume.clear(this@PodcastPlayerService, feed) }
                 // A continuous schedule carries on to its next entry. The
                 // follow-on goes back through PlaybackTriggerService rather
                 // than being played here, so it re-runs the Shabat gate, the
@@ -149,6 +175,17 @@ class PodcastPlayerService : Service() {
 
     private fun stopPlayback(keepService: Boolean = false) {
         val was = playing.getAndSet(false)
+        // Capture the position before releasing the player: an episode cut off
+        // by a block's stop time should be resumable next time.
+        if (was && !finishedNaturally) {
+            val feed = currentFeedUrl
+            val audio = currentAudioUrl
+            val posSec = runCatching { (player?.currentPosition ?: 0) / 1000L }.getOrDefault(0L)
+            val durSec = runCatching { (player?.duration ?: 0) / 1000L }.getOrDefault(0L)
+            if (feed != null && audio != null) {
+                PodcastResume.save(this, feed, audio, currentTitle, posSec, durSec)
+            }
+        }
         runCatching { player?.stop() }
         runCatching { player?.release() }
         player = null
@@ -188,6 +225,8 @@ class PodcastPlayerService : Service() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_QUEUE_SCHEDULE = "queueScheduleId"
         const val EXTRA_QUEUE_INDEX = "queueIndex"
+        const val EXTRA_FEED_URL = "feedUrl"
+        const val EXTRA_START_AT_SEC = "startAtSec"
         const val ACTION_STOP = "com.jasonschoenbrun.ytmtrigger.PODCAST_STOP"
 
         private val playing = AtomicBoolean(false)
@@ -205,10 +244,14 @@ class PodcastPlayerService : Service() {
             title: String,
             queueScheduleId: String? = null,
             queueIndex: Int = 0,
+            feedUrl: String? = null,
+            startAtSec: Long = 0L,
         ) {
             val i = Intent(context, PodcastPlayerService::class.java).apply {
                 putExtra(EXTRA_URL, audioUrl)
                 putExtra(EXTRA_TITLE, title)
+                if (feedUrl != null) putExtra(EXTRA_FEED_URL, feedUrl)
+                if (startAtSec > 0) putExtra(EXTRA_START_AT_SEC, startAtSec)
                 if (queueScheduleId != null) {
                     putExtra(EXTRA_QUEUE_SCHEDULE, queueScheduleId)
                     putExtra(EXTRA_QUEUE_INDEX, queueIndex)
