@@ -9,6 +9,7 @@ import { GoogleAuth } from "google-auth-library";
 const ID = "<SHEET_ID>";
 const TAB = "Podcast Catalog";
 const OLD_TABS = ["Podcast Catalogue"]; // earlier spelling
+import { MUSIC, queues } from "./schedule-blocks.mjs";
 const rows = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 
 const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
@@ -85,6 +86,23 @@ function drift(r, recorded) {
   if (r.durMedian < lo * 0.6) return `SHORTER than recorded (${recorded}m)`;
   return "";
 }
+
+// A show the app is actually scheduled to play is being done, whatever an older
+// hand-maintained list said. Deriving it from the schedule rather than repeating
+// it here is what stops the catalog claiming "Considering" for something that
+// has been in the line-up for weeks.
+const scheduled = new Set(
+  queues().flatMap((q) => q.shows.map(([n]) => n)).filter((n) => n !== MUSIC).map(norm));
+const promoted = [];
+for (const r of rows) {
+  if (r.status !== "Doing" && scheduled.has(norm(r.name))) {
+    promoted.push(`${r.name} (was ${r.status})`);
+    r.status = "Doing";
+  }
+}
+const orphan = [...scheduled].filter((n) => !rows.some((r) => norm(r.name) === n));
+if (promoted.length) console.log(`promoted to Doing: ${promoted.join(", ")}`);
+if (orphan.length) console.log(`SCHEDULED BUT NOT IN CATALOG: ${orphan.join(", ")}`);
 
 const ORDER = { Doing: 0, "Suggested by AI": 1, Considering: 2, Dropped: 3 };
 rows.sort((a, b) =>

@@ -17,99 +17,19 @@ const api = (m, u, d) => client.request({ method: m, url: `https://sheets.google
 
 const find = (n) => stats.find((s) => s.name === n) || stats.find((s) => s.name.startsWith(n));
 const mins = (n) => find(n)?.durMedian ?? null;
-const label = (n) => (n.startsWith("Music") ? "—" : (mins(n) ? `${mins(n)}m` : "—"));
+const label = (n) => (n === MUSIC ? "—" : (mins(n) ? `${mins(n)}m` : "—"));
 
-const R = "Random", N = "Newest", M = "—";
+import { BLOCKS, MUSIC, modeLabel, queues } from "./schedule-blocks.mjs";
 
-const BLOCKS = [
-  { id: "A", name: "Morning Launch", time: "07:30 – 08:00", who: "Kids", mins: 30,
-    idea: "A Torah thought, the day's headlines, one science idea. Short items only — nothing that can overrun the school run." },
-  { id: "B", name: "Sarah's Day", time: "08:00 – 15:50", who: "Sarah", mins: 470,
-    idea: "Long-form listening while the house is quiet. Opens with The Mindset Mentor every day, per your note that she likes it and would rather repeat it than miss it." },
-  { id: "C", name: "Landing", time: "16:00 – 16:30", who: "Kids", mins: 30,
-    idea: "Kids walk in — music first to decompress, then one short, funny, factual show." },
-  { id: "D", name: "Family Table", time: "16:30 – 19:30", who: "Kids + Sarah", mins: 180,
-    idea: "The main block, both audiences present. Rabbi Breitowitz anchors Tuesday and Thursday — his own publishing days, and moved earlier as your TODO asked." },
-  { id: "E", name: "Teen Evening", time: "19:30 – 21:30, Sun–Thu", who: "Your 15-year-old", mins: 120,
-    idea: "Longer, more demanding material once the younger ones are down. TED Talks Daily sits at the back end of each night — your note suggested a last slot around 8pm." },
-  { id: "F", name: "Erev Shabat", time: "Fri, from 15:10 (≈12:10 in winter)", who: "Everyone", mins: null,
-    idea: "Parsha, then music. Needs no end time: the app blocks playback for Shabat and mutes the speaker 15 minutes before it starts." },
-  { id: "G", name: "Motzaei Shabat — kids", time: "Shabat ends + 30 min → 20:30", who: "Kids", mins: null,
-    idea: "Anchored to nightfall, not the clock. Read the seasonal warning in section 5 — this window is 2½ hours in midwinter and under 10 minutes in midsummer." },
-  { id: "H", name: "Motzaei Shabat — teen", time: "20:30 – 21:30", who: "Your 15-year-old", mins: 60,
-    idea: "A fixed hour that works all year, unlike the kids' window above." },
-];
-
-const Q = {
-  "A|Every day": [
-    ["TorahAnytime Daily Dose", R, "2-minute clip from a 1,951-episode archive — a Torah thought that cannot overrun"],
-    ["Up First (NPR)", N, "The day's news in ~13 min. With The Indicator on Tuesdays this is the entire news diet"],
-    ["Short Wave (NPR)", N, "One science idea, ~13 min, pitched right for 9–15"],
-  ],
-  "B|Sunday": [["The Mindset Mentor", R, "Sarah's daily opener"], ["Business Wars", R, ""], ["How I Built This with Guy Raz", R, ""], ["Hidden Brain", R, ""], ["Freakonomics Radio", R, ""]],
-  "B|Monday": [["The Mindset Mentor", R, ""], ["Meaningful People", R, ""], ["Planet Money", R, ""], ["This American Life", N, ""]],
-  "B|Tuesday": [["The Mindset Mentor", R, ""], ["Business Movers", R, ""], ["Cautionary Tales with Tim Harford", R, ""], ["Call Me Back", N, ""], ["Revisionist History", R, ""]],
-  "B|Wednesday": [["The Mindset Mentor", R, ""], ["Business Wars", R, ""], ["Unpacking Israeli History", R, ""], ["SeforimChatter", R, ""], ["Hidden Brain", R, ""]],
-  "B|Thursday": [["The Mindset Mentor", R, ""], ["How I Built This with Guy Raz", R, ""], ["Jewish History Nerds", R, ""], ["Stuff You Should Know", R, ""], ["Planet Money", R, ""]],
-  "C|Every day": [
-    ["Music — your YTM playlists", M, "Rotate the existing playlists (Best, Pearl Jam, Effervescent Poodles…) to decompress"],
-    ["Who Smarted?", R, "Funny, factual, 16 min — lands across the whole 9–15 range"],
-  ],
-  "D|Sunday — Torah & Science": [
-    ["A Book Like No Other (Aleph Beta)", R, "Close Tanach reading. Only 5 episodes in the feed, so expect repeats"],
-    ["SciShow Tangents", R, "Science panel game, genuinely funny. 4.9 stars, 338-episode archive"],
-    ["Business Wars", R, "Sarah's favourite, and the rivalry stories hold teenagers easily"],
-    ["Stuff You Should Know", R, "Your note said 2 more a week — this is one of them. 2,866 episodes to draw on"],
-  ],
-  "D|Monday — People & Stories": [
-    ["Jews You Should Know", R, "Biography interviews. Publisher says: permanent hiatus, but the archive stays available. 288 episodes, 4.9"],
-    ["Planet Money", R, "Economics as storytelling; the clearest on-ramp to business thinking for kids"],
-    ["99% Invisible", R, "Design and the built world — changes how you look at ordinary things"],
-    ["Wow in the World", R, "Lighter science for the younger end of the range"],
-  ],
-  "D|Tuesday — Rabbi Breitowitz": [
-    ["The Q & A with Rabbi Breitowitz", R, "The best-rated show in your whole catalog: 4.9 from 247 ratings, 385 episodes. Tuesday is one of his publishing days"],
-    ["The Indicator from Planet Money", N, "9 minutes of business/econ news — the rest of the 'basic news' diet"],
-    ["Greeking Out from National Geographic Kids", R, "Mythology, well told; strong general knowledge"],
-    ["SciShow Tangents", R, "Fills the tail of the block"],
-  ],
-  "D|Wednesday — Story & Design": [
-    ["Cautionary Tales with Tim Harford", R, "True stories of things going wrong, with the lesson drawn out. Superb for this age"],
-    ["Revisionist History", R, "Gladwell re-examining what everyone thinks they know"],
-    ["Stuff You Should Know", R, "The second of your 'two more a week'"],
-    ["Who Smarted?", R, "Light finish"],
-  ],
-  "D|Thursday — Breitowitz & Community": [
-    ["The Q & A with Rabbi Breitowitz", R, "His second publishing day, and the 'one more a week' your TODO asked for"],
-    ["Behind the Bima", R, "Community and rabbinic conversation, ~70m"],
-    ["Smash Boom Best", R, "Structured debate — teaches argument, and kids pick sides"],
-  ],
-  "E|Sunday": [["Orthodox Conundrum", R, "Recommended by Aharon, per your notes"], ["StarTalk Radio", R, "Your note: can do one more a week"], ["TED Talks Daily", N, "Short, at the back of the evening"]],
-  "E|Monday": [["The School of Greatness", R, "Your note: one more a week"], ["Something You Should Know", R, "Your note: one more a week"], ["TED Talks Daily", N, ""]],
-  "E|Tuesday": [["18Forty", R, "Serious Jewish thought, ~80m"], ["The Indicator from Planet Money", N, ""], ["TED Talks Daily", N, ""]],
-  "E|Wednesday": [["SeforimChatter", R, "Your note: one more a week. 5.0 stars"], ["Unpacking Israeli History", R, "Recommended by Avi"], ["TED Talks Daily", N, ""]],
-  "E|Thursday": [["Call Me Back", N, "Recommended by Avi — current affairs, Israel focus"], ["Freakonomics Radio", R, ""], ["TED Talks Daily", N, ""]],
-  "F|Friday": [
-    ["A Book Like No Other (Aleph Beta)", R, "Parsha-adjacent Torah for erev Shabat"],
-    ["Parsha Perspectives", R, "Recommended by Avi. Replaces Into the Verse, which your TODO asked to swap out"],
-    ["Music — your YTM playlists", M, "Runs until the app mutes for Shabat"],
-  ],
-  "G|Motzaei Shabat (kids)": [
-    ["TorahAnytime Daily Dose", R, "Deliberately first: in midsummer this whole window is under 10 minutes, so lead with something that always fits"],
-    ["Jewish History Nerds", R, "Jewish history, accessible to the kids"],
-    ["Music — your YTM playlists", M, ""],
-  ],
-  "H|Motzaei Shabat (teen)": [
-    ["Meaningful People", N, "Publishes on Saturdays, so the newest episode is genuinely new at this point in the week"],
-    ["TED Talks Daily", N, ""],
-  ],
-};
+// Music is a set of YT Music playlists in the app rather than a feed, so it has
+// no duration and no episode mode; everything else is looked up by name.
+const showName = (s) => (s === MUSIC ? "Music — your YTM playlists" : s);
 
 const WEEK = [
   ["Block", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Motzaei Shabat"],
   ["A · Morning Launch\n07:30–08:00 · Kids", "Torah · News · Science", "Torah · News · Science", "Torah · News · Science", "Torah · News · Science", "Torah · News · Science", "(kids leave later)", "—"],
   ["B · Sarah's Day\n08:00–15:50", "Mindset + business", "Mindset + people", "Mindset + ideas", "Mindset + Israel", "Mindset + founders", "(short — erev Shabat)", "—"],
-  ["C · Landing\n16:00–16:30 · Kids", "Music + Who Smarted?", "Music + Who Smarted?", "Music + Who Smarted?", "Music + Who Smarted?", "Music + Who Smarted?", "—", "—"],
+  ["C · Landing\n16:00–16:30 · Kids", "Who Smarted? + music", "Who Smarted? + music", "Who Smarted? + music", "Who Smarted? + music", "Who Smarted? + music", "—", "—"],
   ["D · Family Table\n16:30–19:30 · Kids + Sarah", "Torah & Science", "People & Stories", "★ Rabbi Breitowitz", "Story & Design", "★ Breitowitz & Community", "—", "—"],
   ["E · Teen Evening\n19:30–21:30 · 15-year-old", "Orthodox Conundrum\n+ StarTalk", "School of Greatness\n+ SYSK", "18Forty", "SeforimChatter\n+ Israeli History", "Call Me Back\n+ Freakonomics", "—", "—"],
   ["F/G/H · Shabat edges", "—", "—", "—", "—", "—", "Parsha + music\nfrom ~15:10", "Kids: ends+30 → 20:30\nTeen: 20:30 → 21:30"],
@@ -135,21 +55,20 @@ push([]);
 
 push(["3 · What plays, in order"], "section");
 push(["Block / day", "#", "Show", "Typical", "Episode", "Why it's here"], "head");
-for (const [key, list] of Object.entries(Q)) {
-  const [bid, day] = key.split("|");
-  const b = BLOCKS.find((x) => x.id === bid);
-  push([`${bid} · ${b.name} — ${day}`], "sub2");
-  list.forEach(([show, mode, why], i) => push(["", String(i + 1), show, label(show), mode, why]));
-  const total = list.reduce((s, [n]) => s + (n.startsWith("Music") ? 0 : (mins(n) || 0)), 0);
+for (const q of queues()) {
+  push([`${q.block.id} · ${q.block.name} — ${q.label}`], "sub2");
+  q.shows.forEach(([show, why], i) =>
+    push(["", String(i + 1), showName(show), label(show), modeLabel(show), why]));
+  const total = q.shows.reduce((s, [n]) => s + (n === MUSIC ? 0 : (mins(n) || 0)), 0);
   push(["", "", "Queue length (median episodes)", `${Math.floor(total / 60)}h ${total % 60}m`, "",
-    b.mins ? `Block is ${Math.floor(b.mins / 60)}h ${b.mins % 60}m — the queue restarts from the top to fill it. Random and sequential entries draw something different each lap; newest entries play once, then are passed over` : "Runs to the block's end"], "total");
+    q.block.mins ? `Block is ${Math.floor(q.block.mins / 60)}h ${q.block.mins % 60}m — the queue is sized to outlast it, so nothing is replayed` : "Runs to the block's end"], "total");
 }
 push([]);
 
 push(["4 · How it plays"], "section");
 [
   ["Continuous, not timed", "Each block is a queue. When an episode ends the next starts immediately, so a 22-minute episode and a 78-minute one both simply flow on. Only the block's start and stop are fixed."],
-  ["Going round again", "When a queue is shorter than its block it restarts from the top. Random entries draw a different episode and sequential entries advance, so another lap is new material. A 'newest' entry cannot do that — the newest episode is still the same episode — so once it has played it is passed over and the slot goes to the next show in the queue."],
+  ["Going round again", "Each queue is now sized to outlast its block, so in normal running nothing repeats. If a block does outlive its queue — episodes shorter than usual, say — it restarts from the top: random entries draw a different episode and sequential entries advance, while a 'newest' entry is passed over, because the newest episode is still the same episode it already played."],
   ["Random vs newest", "'Random' draws from the whole back catalogue — right for evergreen shows and archives. 'Newest' is for news and for feeds that mix formats, where a random pick lands on the wrong thing."],
   ["Shabat and Yom Tov", "No Friday end time is needed. The app blocks all playback for Shabat and Yom Tov and mutes the speaker 15 minutes before it begins."],
   ["Motzaei Shabat", "Uses the 'Shabat/Yom Tov ends' anchor built this week, so it follows nightfall through the year instead of drifting against a clock time."],
@@ -236,5 +155,6 @@ for (const { r, kind } of fmt) {
 await api("POST", ":batchUpdate", { requests: req });
 console.log(`wrote "${TAB}": ${rows.length} rows`);
 
-const unmatched = [...new Set(Object.values(Q).flat().map(([n]) => n))].filter((n) => !n.startsWith("Music") && !find(n));
+const unmatched = [...new Set(queues().flatMap((q) => q.shows.map(([n]) => n)))]
+  .filter((n) => n !== MUSIC && !find(n));
 console.log(unmatched.length ? `UNMATCHED SHOWS: ${unmatched.join(", ")}` : "all show names resolve");
