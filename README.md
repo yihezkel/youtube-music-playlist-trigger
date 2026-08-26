@@ -30,8 +30,20 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   the console's Stop button all work on it unchanged). A Spotify show link is resolved to
   that feed automatically via the show's title. Feeds are cached for 12 hours, and a stale
   cache is preferred to failing a trigger.
-  - **Random episode by default**, or newest — a per-schedule switch, shown only when the
-    schedule actually contains a podcast.
+  - **Random / newest / in order** — set per schedule, and overridable per entry by ending the
+    entry's name with a mode:
+
+        https://feeds.npr.org/510325/podcast.xml  [The Indicator | newest]
+        https://rss.art19.com/business-wars       [Business Wars | sequential]
+
+    One block legitimately mixes shows with opposite needs, which a single per-schedule
+    setting could not express. Random suits evergreen archives; newest suits news and feeds
+    that mix short and long formats; **in order** suits a serial that tells one story across
+    numbered parts, where random produces part 1 followed by part 5 of a different series.
+  - **In-order position is remembered per feed** and advances only when an episode is heard
+    to the end, so a block that cuts one off resumes it rather than skipping past it. If the
+    marked episode drops out of the feed, or the show has been heard through, it starts again
+    from the oldest rather than going silent.
   - **Continuous play** — a schedule can run its entries as a queue rather than picking one:
     the next starts the moment the current finishes, wrapping back to the top so the block
     stays filled until its stop time. Only podcast entries chain; a YouTube Music entry hands

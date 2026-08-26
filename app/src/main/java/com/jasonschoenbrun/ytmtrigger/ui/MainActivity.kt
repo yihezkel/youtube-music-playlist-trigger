@@ -730,9 +730,7 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
     var continuous by remember { mutableStateOf(initial.continuousPlay) }
     var anchor by remember { mutableStateOf(initial.timeAnchor) }
     var anchorOffsetText by remember { mutableStateOf(initial.anchorOffsetMinutes.toString()) }
-    var podcastRandom by remember {
-        mutableStateOf(initial.podcastEpisodeMode == PodcastEpisodeMode.Random)
-    }
+    var podcastMode by remember { mutableStateOf(initial.podcastEpisodeMode) }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -764,8 +762,7 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                             // rather than a silent revert to the old value.
                             anchorOffsetMinutes = anchorOffsetText.trim()
                                 .toIntOrNull()?.coerceIn(-720, 720) ?: 0,
-                            podcastEpisodeMode = if (podcastRandom) PodcastEpisodeMode.Random
-                                                 else PodcastEpisodeMode.Latest,
+                            podcastEpisodeMode = podcastMode,
                             continuousPlay = continuous,
                         )
                         repo.upsert(updated)
@@ -950,20 +947,32 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                     k == MediaKind.PodcastFeed || k == MediaKind.SpotifyShow
                 }
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Podcasts: play a random episode")
-                        Text(
-                            if (podcastRandom)
-                                "Off would play the newest episode each time."
-                            else
-                                "Currently plays the newest episode.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(checked = podcastRandom, onCheckedChange = { podcastRandom = it })
+                Text("Podcasts: which episode", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = podcastMode == PodcastEpisodeMode.Random,
+                        onClick = { podcastMode = PodcastEpisodeMode.Random },
+                        label = { Text("Random") },
+                    )
+                    FilterChip(
+                        selected = podcastMode == PodcastEpisodeMode.Latest,
+                        onClick = { podcastMode = PodcastEpisodeMode.Latest },
+                        label = { Text("Newest") },
+                    )
+                    FilterChip(
+                        selected = podcastMode == PodcastEpisodeMode.Sequential,
+                        onClick = { podcastMode = PodcastEpisodeMode.Sequential },
+                        label = { Text("In order") },
+                    )
                 }
+                Text(
+                    "Random suits evergreen archives, Newest suits news and feeds that mix " +
+                        "short and long formats, In order suits a show that tells one story " +
+                        "across numbered parts.\n\nA single entry can override this by ending " +
+                        "its name with a mode, e.g.  …/feed.xml [The Indicator | newest]",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

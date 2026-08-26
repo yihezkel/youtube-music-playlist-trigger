@@ -29,6 +29,7 @@ import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
 import com.jasonschoenbrun.ytmtrigger.podcast.PodcastCatalog
 import com.jasonschoenbrun.ytmtrigger.podcast.PodcastPlayerService
 import com.jasonschoenbrun.ytmtrigger.podcast.PodcastResume
+import com.jasonschoenbrun.ytmtrigger.podcast.PodcastSequence
 import com.jasonschoenbrun.ytmtrigger.podcast.SpotifyFeedResolver
 import com.jasonschoenbrun.ytmtrigger.diag.DiagnosticsSnapshot
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
@@ -182,7 +183,8 @@ class PlaybackTriggerService : Service() {
             // playlist flow at all: a feed is played by us, and a track
             // deep-link starts playing on its own.
             // Carry the label across: choice.url is already stripped of it.
-            val entry = MediaEntries.parse(choice.url).copy(label = choice.label)
+            val entry = MediaEntries.parse(choice.url)
+                .copy(label = choice.label, episodeMode = choice.episodeMode)
             if (entry.kind == MediaKind.PodcastFeed || entry.kind == MediaKind.SpotifyShow) {
                 val played = playPodcast(schedule, entry, if (queueIndex < 0) 0 else queueIndex)
                 if (!played) postFailure("Could not play podcast for '${schedule.name}'")
@@ -524,10 +526,15 @@ class PlaybackTriggerService : Service() {
         // context rather than resuming mid-sentence.
         val pending = PodcastResume.get(this, feedUrl)
         val resumeEpisode = pending?.let { m -> episodes.firstOrNull { it.audioUrl == m.audioUrl } }
-        val chosen = resumeEpisode ?: when (schedule.podcastEpisodeMode) {
+        // A per-entry mode wins over the schedule's: one block legitimately
+        // mixes a news feed that must be newest with an archive that should be
+        // shuffled and a serial that has to run in order.
+        val mode = entry.episodeMode ?: schedule.podcastEpisodeMode
+        val chosen = resumeEpisode ?: when (mode) {
             PodcastEpisodeMode.Latest -> episodes.first()
             PodcastEpisodeMode.Random -> episodes[Random.nextInt(episodes.size)]
-        }
+            PodcastEpisodeMode.Sequential -> PodcastSequence.next(this, feedUrl, episodes)
+        } ?: episodes.first()
         val startAtSec = if (resumeEpisode != null && pending != null) {
             PodcastResume.resumeAtSec(pending)
         } else 0L
@@ -556,7 +563,8 @@ class PlaybackTriggerService : Service() {
 
         Logger.i("PlaybackSvc", "Podcast episode chosen", mapOf(
             "podcast" to entry.displayName,
-            "mode" to if (resumeEpisode != null) "Resume" else schedule.podcastEpisodeMode.name,
+            "mode" to if (resumeEpisode != null) "Resume" else mode.name,
+            "modeFrom" to if (entry.episodeMode != null) "entry" else "schedule",
             "episodes" to episodes.size.toString(),
             "title" to chosen.title,
             "startAtSec" to startAtSec.toString(),

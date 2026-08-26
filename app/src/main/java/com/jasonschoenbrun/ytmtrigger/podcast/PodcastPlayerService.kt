@@ -114,9 +114,17 @@ class PodcastPlayerService : Service() {
             }
             setOnCompletionListener {
                 Logger.i("PodcastPlayer", "Episode finished", mapOf("title" to title))
-                // Heard to the end, so there is nothing to come back to.
+                // Heard to the end, so there is nothing to come back to, and a
+                // serialised show can move on to the next part. Both only on a
+                // real finish: an episode cut off by a block's stop must be
+                // resumed, not skipped past.
                 finishedNaturally = true
-                currentFeedUrl?.let { feed -> PodcastResume.clear(this@PodcastPlayerService, feed) }
+                currentFeedUrl?.let { feed ->
+                    PodcastResume.clear(this@PodcastPlayerService, feed)
+                    currentAudioUrl?.let { audio ->
+                        PodcastSequence.markPlayed(this@PodcastPlayerService, feed, audio)
+                    }
+                }
                 // A continuous schedule carries on to its next entry. The
                 // follow-on goes back through PlaybackTriggerService rather
                 // than being played here, so it re-runs the Shabat gate, the

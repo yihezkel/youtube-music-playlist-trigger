@@ -37,7 +37,11 @@ const fmt = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String
 if (mode !== "clean") {
   const urls = mode === "guard"
     ? [`${TORAH} [Short clip]`, `${SHORTWAVE} [Long episode]`]
-    : [`${SHORTWAVE} [Long episode]`];
+    : mode === "modes"
+      // Schedule-level mode is Random below, so if per-entry parsing works the
+      // log must show Latest and Sequential with modeFrom=entry.
+      ? [`${TORAH} [Newest one | newest]`, `${TORAH} [In order | sequential]`]
+      : [`${SHORTWAVE} [Long episode]`];
   cfg.schedules.push({
     id: "zz-queue-test",
     name: NAME,
@@ -52,7 +56,7 @@ if (mode !== "clean") {
     autoStopMinutes: null,
     enableShuffle: false,
     skipFirstTrack: false,
-    podcastEpisodeMode: "Latest",   // deterministic episode, so timings are predictable
+    podcastEpisodeMode: mode === "modes" ? "Random" : "Latest",
     continuousPlay: true,
     lastPickedPlaylistIds: [],
   });

@@ -10,10 +10,30 @@ import { readFileSync } from "node:fs";
 const DOC = "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
 const stats = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 
+// Per-entry episode mode. News is only useful newest-first; serialised shows
+// that number their parts have to run in order; everything else is an
+// evergreen archive and is best shuffled. Without this a whole block had to
+// share one setting, which is why Business Wars played "part 1" one morning
+// and "part 5" of a different series the same afternoon.
+const MODE = {
+  "Up First (NPR)": "newest",
+  "Short Wave (NPR)": "newest",
+  "The Indicator from Planet Money": "newest",
+  "TED Talks Daily": "newest",
+  "This American Life": "newest",
+  "Call Me Back": "newest",
+  "Meaningful People": "newest",
+  "Business Wars": "sequential",
+  "Business Movers": "sequential",
+  "Unpacking Israeli History": "sequential",
+  "A Book Like No Other (Aleph Beta)": "sequential",
+};
+
 const feed = (name) => {
   const s = stats.find((x) => x.name === name) || stats.find((x) => x.name.startsWith(name));
   if (!s?.feedUrl) throw new Error(`no feed for "${name}"`);
-  return `${s.feedUrl} [${name}]`;
+  const mode = MODE[name];
+  return `${s.feedUrl} [${name}${mode ? ` | ${mode}` : ""}]`;
 };
 
 // ISO day numbers, as the app stores them.
@@ -26,7 +46,7 @@ const hm = (h, m = 0) => h * 60 + m;
 const MUSIC = "__MUSIC__";
 
 const BLOCKS = [
-  { name: "A Morning Launch", days: WEEKDAYS, start: hm(7, 30), stop: hm(8, 0), mode: "Latest",
+  { name: "A Morning Launch", days: WEEKDAYS, start: hm(7, 30), stop: hm(8, 0), mode: "Random",
     shows: ["TorahAnytime Daily Dose", "Up First (NPR)", "Short Wave (NPR)"] },
 
   { name: "B Sarah Sun", days: [SUN], start: hm(8), stop: hm(15, 50), mode: "Random",

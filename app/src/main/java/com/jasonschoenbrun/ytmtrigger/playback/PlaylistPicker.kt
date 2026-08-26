@@ -2,6 +2,7 @@ package com.jasonschoenbrun.ytmtrigger.playback
 
 import com.jasonschoenbrun.ytmtrigger.data.MediaEntries
 import com.jasonschoenbrun.ytmtrigger.data.MediaKind
+import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
@@ -39,6 +40,7 @@ object PlaylistPicker {
             playlistId = picked.id,
             label = picked.label,
             kind = picked.kind,
+            episodeMode = picked.episodeMode,
         )
     }
 
@@ -71,6 +73,7 @@ object PlaylistPicker {
             playlistId = picked.id,
             label = picked.label,
             kind = picked.kind,
+            episodeMode = picked.episodeMode,
         )
     }
 
@@ -80,5 +83,11 @@ object PlaylistPicker {
         val playlistId: String,
         val label: String? = null,
         val kind: MediaKind = MediaKind.YtmPlaylist,
+        /**
+         * Carried explicitly because [url] is the bare URL with the brackets
+         * stripped: re-parsing it downstream cannot recover anything the
+         * brackets held.
+         */
+        val episodeMode: PodcastEpisodeMode? = null,
     )
 }

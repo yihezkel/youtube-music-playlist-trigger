@@ -364,10 +364,18 @@ function renderSchedules() {
       <div class="days">${DAYS.map(([n, v]) =>
         `<label><input type="checkbox" data-day="${v}" ${(s.daysOfWeek || []).includes(v) ? 'checked' : ''}/>${n}</label>`).join('')}</div>
       <label>Playlist URLs (one per line; blank = use defaults)</label>
-      <textarea data-f="playlists" placeholder="playlist, song or podcast URL - optionally [Name]">${esc((s.playlistUrls || []).join('\n'))}</textarea>
+      <textarea data-f="playlists" placeholder="playlist, song or podcast URL - optionally [Name] or [Name | newest|random|sequential]">${esc((s.playlistUrls || []).join('\n'))}</textarea>
       <label style="display:flex;align-items:center;gap:6px;color:var(--fg);margin-top:8px">
-        <input type="checkbox" data-f="podcastRandom" ${s.podcastEpisodeMode !== 'Latest' ? 'checked' : ''}/>
-        Podcasts: play a random episode (off = newest)</label>
+        <select data-f="podcastMode" style="flex:0 0 210px">
+          <option value="Random"${(s.podcastEpisodeMode || 'Random') === 'Random' ? ' selected' : ''}>Random episode</option>
+          <option value="Latest"${s.podcastEpisodeMode === 'Latest' ? ' selected' : ''}>Newest episode</option>
+          <option value="Sequential"${s.podcastEpisodeMode === 'Sequential' ? ' selected' : ''}>In order (serials)</option>
+        </select>
+        Podcasts: which episode</label>
+      <div style="font-size:12px;color:var(--muted);margin:2px 0 6px">
+        A single entry can override this: end its name with a mode, e.g.
+        <code>&hellip;/feed.xml [The Indicator | newest]</code> or
+        <code>[Business Wars | sequential]</code>.</div>
       <label style="display:flex;align-items:center;gap:6px;color:var(--fg);margin-top:4px">
         <input type="checkbox" data-f="continuous" ${s.continuousPlay ? 'checked' : ''}/>
         Play continuously (next entry starts when one finishes, until the stop time)</label>
@@ -405,7 +413,7 @@ function renderSchedules() {
         timeAnchor: anchorSel.value,
         anchorOffsetMinutes: Number(div.querySelector('[data-f=offset]').value) || 0,
         stopTimeMinutes: stopRaw ? sh * 60 + sm : null,
-        podcastEpisodeMode: div.querySelector('[data-f=podcastRandom]').checked ? 'Random' : 'Latest',
+        podcastEpisodeMode: div.querySelector('[data-f=podcastMode]').value,
         continuousPlay: div.querySelector('[data-f=continuous]').checked,
         playlistUrls: div.querySelector('[data-f=playlists]').value.split('\n').map(x => x.trim()).filter(Boolean),
       };

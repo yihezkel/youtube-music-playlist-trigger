@@ -81,7 +81,23 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
 
 /** Which episode of a podcast a schedule should play. */
 @Serializable
-enum class PodcastEpisodeMode { Random, Latest }
+enum class PodcastEpisodeMode {
+    /** Anywhere in the back catalogue. Right for evergreen archives. */
+    Random,
+
+    /** The newest episode. Right for news, and for feeds that mix formats. */
+    Latest,
+
+    /**
+     * The next unheard episode, oldest first.
+     *
+     * For shows that tell one story across numbered parts, where Random
+     * produces part 1 followed by part 5 of a different series. The position
+     * is remembered per feed and advances only when an episode is heard to
+     * the end, so a block that cuts one off resumes it rather than skipping.
+     */
+    Sequential,
+}
 
 /**
  * What a schedule's trigger time is measured from.
@@ -127,19 +143,21 @@ object PlaylistUrl {
     /** The bare URL, with any trailing " [Name]" removed. */
     fun url(entry: String): String = entry.trim().substringBefore(' ').trim()
 
-    /** The bracketed name, or null when the entry is a plain URL. */
-    fun label(entry: String): String? {
-        val rest = entry.trim().substringAfter(' ', "").trim()
-        if (!rest.startsWith("[") || !rest.endsWith("]") || rest.length <= 2) return null
-        return rest.substring(1, rest.length - 1).trim().ifBlank { null }
-    }
+    /**
+     * The bracketed name, or null when the entry is a plain URL.
+     *
+     * Delegates to [MediaEntries] so there is one implementation of the entry
+     * syntax. Keeping a second copy here meant a `| sequential` suffix ended
+     * up displayed as part of the show's name.
+     */
+    fun label(entry: String): String? = MediaEntries.label(entry)
 
     /** What to show a human: the name when there is one, else the URL. */
     fun display(entry: String): String = label(entry) ?: url(entry)
 
-    /** Recombine into the stored form. */
+    /** Recombine into the stored form, preserving any per-entry mode. */
     fun format(url: String, label: String?): String =
-        if (label.isNullOrBlank()) url.trim() else "${url.trim()} [${label.trim()}]"
+        MediaEntries.format(url, label)
 
     fun extractId(entry: String): String? =
         ID_REGEX.find(url(entry))?.groupValues?.getOrNull(1)
