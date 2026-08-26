@@ -38,8 +38,14 @@ object MediaSessionProbe {
         } catch (t: Throwable) {
             return Status.Unavailable("${t.javaClass.simpleName}: ${t.message}")
         }
-        val ytm = sessions.firstOrNull { it.packageName == MediaSessionListenerService.YT_MUSIC_PKG }
-            ?: return Status.NoSession
+        // YT Music publishes more than one session - a local player and a cast
+        // controller - and the first is not reliably the one playing. Taking the
+        // first would report NOT_PLAYING while music was audible, which for the
+        // end-of-playlist watch would cut a block short.
+        val ytmAll = sessions.filter { it.packageName == MediaSessionListenerService.YT_MUSIC_PKG }
+        if (ytmAll.isEmpty()) return Status.NoSession
+        val ytm = ytmAll.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            ?: ytmAll.first()
         val state = ytm.playbackState
         if (state == null) return Status.NotPlaying(PlaybackState.STATE_NONE, "STATE_NONE(null)")
         return if (state.state == PlaybackState.STATE_PLAYING) {

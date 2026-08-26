@@ -127,6 +127,11 @@
             android:exported="false" />
 
         <receiver
+            android:name=".playback.MusicEndReceiver"
+            android:exported="false" />
+
+
+        <receiver
             android:name=".alarm.ShabatPrepReceiver"
             android:exported="false" />
 

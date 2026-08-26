@@ -6,6 +6,7 @@ import android.content.Intent
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
+import com.jasonschoenbrun.ytmtrigger.playback.MusicEndWatcher
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
 
 /**
@@ -28,6 +29,8 @@ class StopReceiver : BroadcastReceiver() {
         val stopped = PlaybackStopper.stop(context, reason = "stop time: ${name ?: scheduleId}")
         Logger.i("StopReceiver", "Stop dispatched", mapOf("ok" to stopped.toString()))
         if (scheduleId != null) AutoStop.clear(context, scheduleId)
+        // The block is over; a pending music check must not resurrect it.
+        if (scheduleId != null) MusicEndWatcher.cancel(context, scheduleId)
 
         // Hand on to whatever follows this block. A block that ends in music
         // never reports a queue end - YouTube Music is playing it, not us - so

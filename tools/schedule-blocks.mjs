@@ -163,12 +163,12 @@ export const BLOCKS = [
     time: "16:00 – 16:30", mins: 30, start: hm(16), stop: hm(16, 30),
     idea: "Kids walk in. One short, funny, factual show, then music to decompress into the evening.",
     queues: [{
-      // Music sits last on purpose: a YT Music entry hands control to YT Music,
-      // which never hands it back, so anything after it would never play.
+      // Music sits last as a wind-down. It no longer has to: the app now polls
+      // for the end of a playlist, so a queue can carry on past one.
       label: "Every day", appName: "C Landing", days: WEEKDAYS,
       shows: [
         ["Who Smarted?", "Funny, factual, 16 min — lands across the whole 9–15 range"],
-        [MUSIC, "Rotate the existing playlists (Best, Pearl Jam, Effervescent Poodles…). Last on purpose: music never hands control back, so nothing after it would play"],
+        [MUSIC, "Rotate the existing playlists (Best, Pearl Jam, Effervescent Poodles…). If the playlist runs out the queue starts again rather than going quiet"],
       ],
     }],
   },
@@ -294,7 +294,7 @@ export const BLOCKS = [
       label: "Motzaei Shabat (kids)", appName: "G Motzaei Shabat - kids", days: [SAT], shows: [
         ["TorahAnytime Daily Dose", "Two minutes to open on"],
         ["Jewish History Nerds", "Jewish history, accessible to the kids"],
-        [MUSIC, "Winds down the rest of the hour. Stopped by the block's own stop, since YouTube Music never reports an end of its own"],
+        [MUSIC, "Winds down the rest of the hour, and is stopped by the block's own stop"],
       ],
     }],
   },

@@ -88,9 +88,11 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
      * last of its day, so it plays each entry once and ends with the final
      * episode rather than looping on into the night.
      *
-     * Chaining only follows podcast entries, because those are the ones this
-     * app plays itself and can therefore detect the end of. A YouTube Music
-     * entry hands control to YT Music, which continues on its own.
+     * A podcast entry chains exactly, because this app plays it and is told
+     * when it ends. A YouTube Music entry hands control to YT Music, which
+     * reports nothing, so its end is found by polling - see [MusicEndWatcher].
+     * That is approximate, to within its check interval, but it does mean music
+     * no longer has to be the last thing in a queue.
      */
     val continuousPlay: Boolean = false,
     val lastPickedPlaylistIds: List<String> = emptyList(),

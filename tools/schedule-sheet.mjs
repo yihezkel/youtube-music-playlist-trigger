@@ -75,7 +75,7 @@ push(["4 · How it plays"], "section");
   ["Shabat and Yom Tov", "No Friday end time is needed. The app blocks all playback for Shabat and Yom Tov and mutes the speaker 15 minutes before it begins."],
   ["Blocks that end with their queue", "The last block of a day has no stop time. It plays each show once and finishes with the last episode instead of being cut off mid-sentence, so its queue is sized to land near the nominal end rather than to outlast it. That covers the teen evening on weeknights, and both motzaei Shabat blocks."],
   ["Motzaei Shabat", "The kids' block starts 30 minutes after Shabat ends and simply plays its queue, about 40 minutes, whatever the season. The teen block then starts when the kids' block finishes rather than at a clock time. It used to stop at a fixed 20:30, which left the kids nine minutes in late August and two and a half hours to fill with music in December."],
-  ["Music", "Music entries mean your existing YTM Trigger playlists. Rotating them keeps the kids' blocks from feeling like school."],
+  ["Music", "Music entries mean your existing YTM Trigger playlists. Rotating them keeps the kids' blocks from feeling like school. YouTube Music does not tell the app when a playlist ends, so the app checks every five minutes and moves the queue on when it has — which means a block no longer falls silent if a playlist runs out, and music no longer has to be the last thing in a queue."],
 ].forEach(([k, v]) => push(["", k, v], "note"));
 push([]);
 

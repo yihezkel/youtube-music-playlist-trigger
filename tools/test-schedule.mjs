@@ -100,6 +100,17 @@ if (mode !== "clean") {
       playlistUrls: [`${TORAH} [Autostop follower]`],
     });
   }
+  // "musicend": a music entry in the middle of a queue. Nothing reports when a
+  // playlist finishes, so the watcher has to notice and move on to entry 3.
+  if (mode === "musicend") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = start + 30;
+    first.playlistUrls = [
+      `${TORAH} [Before music]`,
+      (cfg.defaultPlaylistUrls || [])[0],
+      `${TORAH} [After music]`,
+    ];
+  }
 }
 
 await ref.set({ json: JSON.stringify(cfg), revision: revision + 1 }, { merge: true });

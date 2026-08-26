@@ -136,6 +136,11 @@ class PlaybackTriggerService : Service() {
                 return
             }
 
+            // Any watch on this schedule belongs to the item that just ended.
+            // Cancelled here rather than per-branch so it cannot outlive its
+            // entry down any path, including the ones that return early.
+            MusicEndWatcher.cancel(this, schedule.id)
+
             // Skip if a phone call is active — don't talk over it.
             if (isInCall()) {
                 Logger.w("PlaybackSvc", "Skipping: phone call active", mapOf("scheduleId" to scheduleId))
@@ -286,6 +291,13 @@ class PlaybackTriggerService : Service() {
                     repo.recordPlayed(schedule.id, choice.playlistId)
                     Logger.i("PlaybackSvc", "Playback verified", mapOf("attempt" to attempt.toString()))
                     updateNotification("Playing ${schedule.name}")
+                    // Nothing tells us when a YT Music playlist ends, so ask
+                    // periodically instead. Without this the queue stopped dead
+                    // at the first music entry and the rest of the block was
+                    // silent once the playlist ran out.
+                    if (schedule.continuousPlay) {
+                        MusicEndWatcher.watch(this, schedule.id, choice.index)
+                    }
                     if (needsAccessibility) {
                         val done = YtmAccessibilityService.awaitActionComplete(20_000)
                         Logger.i("PlaybackSvc", "Post-launch action result", mapOf("completed" to done.toString()))
