@@ -146,11 +146,35 @@ const note = [
 ];
 
 const meta = (await api("GET", "?fields=sheets.properties")).data;
+// Reused rather than deleted and recreated, so anything Jason changes here by
+// hand survives - widths, wrap, or a column of his own added to the right.
 const old = meta.sheets.find((s) => s.properties.title === TAB);
-if (old) await api("POST", ":batchUpdate", { requests: [{ deleteSheet: { sheetId: old.properties.sheetId } }] });
-const made = await api("POST", ":batchUpdate", { requests: [{ addSheet: { properties: {
-  title: TAB, gridProperties: { rowCount: rows.length + 20, columnCount: HEAD.length, frozenRowCount: 1 } } } }] });
-const sheetId = made.data.replies[0].addSheet.properties.sheetId;
+const fresh = !old;
+let sheetId;
+if (old) {
+  sheetId = old.properties.sheetId;
+  const grid = old.properties.gridProperties || {};
+  const needRows = rows.length + note.length + 20;
+  if ((grid.rowCount || 0) < needRows || (grid.columnCount || 0) < HEAD.length) {
+    await api("POST", ":batchUpdate", { requests: [{ updateSheetProperties: {
+      properties: { sheetId, gridProperties: {
+        rowCount: Math.max(grid.rowCount || 0, needRows),
+        columnCount: Math.max(grid.columnCount || 0, HEAD.length),
+        frozenRowCount: 1,
+      } },
+      fields: "gridProperties(rowCount,columnCount,frozenRowCount)",
+    } }] });
+  }
+  const lastRow = grid.rowCount || 0;
+  const written = 1 + rows.length + note.length;
+  if (lastRow > written) {
+    await api("POST", `/values/${encodeURIComponent(TAB)}!A${written + 1}:${String.fromCharCode(64 + HEAD.length)}${lastRow}:clear`, {});
+  }
+} else {
+  const made = await api("POST", ":batchUpdate", { requests: [{ addSheet: { properties: {
+    title: TAB, gridProperties: { rowCount: rows.length + 20, columnCount: HEAD.length, frozenRowCount: 1 } } } }] });
+  sheetId = made.data.replies[0].addSheet.properties.sheetId;
+}
 await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, { values: [HEAD, ...rows, ...note] });
 
 const dataEnd = 1 + rows.length;
@@ -159,18 +183,31 @@ const req = [
       cell: { userEnteredFormat: { backgroundColor: { red: 0.12, green: 0.22, blue: 0.38 },
         textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, verticalAlignment: "MIDDLE" } },
       fields: "userEnteredFormat(backgroundColor,textFormat,verticalAlignment)" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 95 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 3 }, properties: { pixelSize: 95 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 3, endIndex: 4 }, properties: { pixelSize: 280 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 4, endIndex: 5 }, properties: { pixelSize: 210 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 5, endIndex: 6 }, properties: { pixelSize: 620 }, fields: "pixelSize" } },
-  { repeatCell: { range: { sheetId, startRowIndex: 1, endRowIndex: dataEnd },
-      cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
-      fields: "userEnteredFormat(wrapStrategy,verticalAlignment)" } },
   { setBasicFilter: { filter: { range: { sheetId, startRowIndex: 0, endRowIndex: dataEnd, startColumnIndex: 0, endColumnIndex: HEAD.length } } } },
   { repeatCell: { range: { sheetId, startRowIndex: dataEnd + 2, endRowIndex: dataEnd + 3 },
       cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 11 } } }, fields: "userEnteredFormat.textFormat" } },
 ];
+// Widths and wrap only on a tab created from nothing; on an existing one they
+// are whatever Jason has set them to.
+if (fresh) {
+  req.push(
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 95 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 3 }, properties: { pixelSize: 95 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 3, endIndex: 4 }, properties: { pixelSize: 280 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 4, endIndex: 5 }, properties: { pixelSize: 210 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 5, endIndex: 6 }, properties: { pixelSize: 620 }, fields: "pixelSize" } },
+    { repeatCell: { range: { sheetId, startRowIndex: 1, endRowIndex: dataEnd },
+        cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
+        fields: "userEnteredFormat(wrapStrategy,verticalAlignment)" } },
+  );
+}
+// Conditional formats are no longer cleared for us by deleting the tab, so
+// clear them explicitly or a duplicate set accumulates on every run.
+const existingRules = (await api("GET", "?fields=sheets(properties(sheetId),conditionalFormats)")).data
+  .sheets.find((s) => s.properties.sheetId === sheetId)?.conditionalFormats || [];
+for (let i = existingRules.length - 1; i >= 0; i--) {
+  req.push({ deleteConditionalFormatRule: { sheetId, index: i } });
+}
 const rule = (col, value, bg) => ({ addConditionalFormatRule: { rule: {
   ranges: [{ sheetId, startRowIndex: 1, endRowIndex: dataEnd, startColumnIndex: col, endColumnIndex: col + 1 }],
   booleanRule: { condition: { type: "TEXT_EQ", values: [{ userEnteredValue: value }] }, format: { backgroundColor: bg } } }, index: 0 } });

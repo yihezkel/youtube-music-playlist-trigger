@@ -58,6 +58,10 @@ function predictability(r) {
 const rating = (r) => (r.ratingCount ? `${r.ratingAvg} (${r.ratingCount.toLocaleString("en-US")})` : "");
 
 // --- carry the user's own column across a rebuild -----------------------------
+// Column index of the column that belongs to Jason rather than to this script.
+const USER_COL = 4;
+// Whatever he has titled it. Kept so a rebuild does not rename his column back.
+let userHeading = "Our preferences";
 const meta = (await api("GET", "?fields=sheets.properties")).data;
 const prefs = new Map();
 for (const t of [TAB, ...OLD_TABS]) {
@@ -67,8 +71,14 @@ for (const t of [TAB, ...OLD_TABS]) {
     const vals = got.data.values || [];
     const head = vals[0] || [];
     const iName = head.indexOf("Podcast");
-    const iPref = head.findIndex((h) => /our preferences/i.test(String(h)));
+    // Match the column by either name, and fall back to its position. Jason
+    // renamed it to "Change guidance from us" and coloured it yellow; matching
+    // only the original wording made this return -1, which silently dropped
+    // every note in it on the next rebuild.
+    let iPref = head.findIndex((h) => /our preferences|change guidance/i.test(String(h)));
+    if (iPref < 0 && head.length > USER_COL) iPref = USER_COL;
     if (iName < 0 || iPref < 0) continue;
+    if (head[iPref]) userHeading = String(head[iPref]);
     for (const row of vals.slice(1)) {
       const k = norm(row[iName] || "");
       const v = String(row[iPref] || "").trim();
@@ -183,21 +193,55 @@ const legend = [
 ];
 
 // --- rebuild ------------------------------------------------------------------
-const del = [TAB, ...OLD_TABS]
+// The tab is reused, never deleted and recreated. Dropping it threw away
+// everything Jason had done to it by hand - he has renamed column E to "Change
+// guidance from us" and coloured it yellow. Column widths and wrap are set only
+// when the tab is created from nothing, so on an ordinary run his formatting is
+// left alone. Only tabs under an older name are still deleted, since those are
+// genuinely superseded.
+const del = OLD_TABS
   .map((t) => meta.sheets.find((s) => s.properties.title === t))
   .filter(Boolean)
   .map((s) => ({ deleteSheet: { sheetId: s.properties.sheetId } }));
 if (del.length) await api("POST", ":batchUpdate", { requests: del });
 
-const made = await api("POST", ":batchUpdate", {
-  requests: [{ addSheet: { properties: {
-    title: TAB,
-    gridProperties: { rowCount: body.length + 40, columnCount: HEAD.length, frozenRowCount: 1, frozenColumnCount: 1 },
-  } } }],
-});
-const sheetId = made.data.replies[0].addSheet.properties.sheetId;
+const existing = meta.sheets.find((s) => s.properties.title === TAB);
+const fresh = !existing;
+let sheetId;
+if (existing) {
+  sheetId = existing.properties.sheetId;
+  const grid = existing.properties.gridProperties || {};
+  const needRows = body.length + legend.length + 40;
+  if ((grid.rowCount || 0) < needRows || (grid.columnCount || 0) < HEAD.length) {
+    await api("POST", ":batchUpdate", { requests: [{ updateSheetProperties: {
+      properties: { sheetId, gridProperties: {
+        rowCount: Math.max(grid.rowCount || 0, needRows),
+        columnCount: Math.max(grid.columnCount || 0, HEAD.length),
+        frozenRowCount: 1, frozenColumnCount: 1,
+      } },
+      fields: "gridProperties(rowCount,columnCount,frozenRowCount,frozenColumnCount)",
+    } }] });
+  }
+} else {
+  const made = await api("POST", ":batchUpdate", {
+    requests: [{ addSheet: { properties: {
+      title: TAB,
+      gridProperties: { rowCount: body.length + 40, columnCount: HEAD.length, frozenRowCount: 1, frozenColumnCount: 1 },
+    } } }],
+  });
+  sheetId = made.data.replies[0].addSheet.properties.sheetId;
+}
 
-await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, { values: [HEAD, ...body, ...legend] });
+// Write the whole grid, including his column: its values are keyed to the show
+// name and re-emitted, because the sort order changes when statuses change and
+// leaving the column in place would attach his notes to the wrong shows. Only
+// values are written here - cell colours are a separate thing and survive.
+const HEAD_OUT = HEAD.slice();
+HEAD_OUT[USER_COL] = userHeading;
+await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, {
+  values: [HEAD_OUT, ...body, ...legend],
+});
+
 
 const dataEnd = 1 + body.length;
 const width = (start, end, px) => ({ updateDimensionProperties: {
@@ -216,19 +260,35 @@ const req = [
         verticalAlignment: "MIDDLE", wrapStrategy: "WRAP" } },
       fields: "userEnteredFormat(backgroundColor,textFormat,verticalAlignment,wrapStrategy)" } },
   { updateDimensionProperties: { range: { sheetId, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 62 }, fields: "pixelSize" } },
-  width(0, 1, 250), width(1, 2, 118), width(2, 3, 85), width(3, 4, 95),
-  width(4, 5, 210), width(5, 6, 210), width(6, 7, 430),
-  width(7, 26, 105), width(26, 27, 300), width(27, 29, 110),
-  wrap(4, 7), wrap(26, 27),
   { setBasicFilter: { filter: { range: { sheetId, startRowIndex: 0, endRowIndex: dataEnd, startColumnIndex: 0, endColumnIndex: HEAD.length } } } },
-  { repeatCell: {
-      range: { sheetId, startRowIndex: 1, endRowIndex: dataEnd, startColumnIndex: 4, endColumnIndex: 5 },
-      cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 0.98, blue: 0.87 } } },
-      fields: "userEnteredFormat.backgroundColor" } },
   { repeatCell: {
       range: { sheetId, startRowIndex: dataEnd + 2, endRowIndex: dataEnd + 3 },
       cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 11 } } }, fields: "userEnteredFormat.textFormat" } },
 ];
+// Widths, wrap and the tint on his column are applied only when the tab is
+// created from nothing. He has renamed that column and given it a stronger
+// yellow, and re-running this must not paint over it.
+if (fresh) {
+  req.push(
+    width(0, 1, 250), width(1, 2, 118), width(2, 3, 85), width(3, 4, 95),
+    width(4, 5, 210), width(5, 6, 210), width(6, 7, 430),
+    width(7, 26, 105), width(26, 27, 300), width(27, 29, 110),
+    wrap(4, 7), wrap(26, 27),
+    { repeatCell: {
+        range: { sheetId, startRowIndex: 1, endRowIndex: dataEnd, startColumnIndex: USER_COL, endColumnIndex: USER_COL + 1 },
+        cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 0.98, blue: 0.87 } } },
+        fields: "userEnteredFormat.backgroundColor" } },
+  );
+}
+
+// The tab is no longer deleted between runs, so its conditional formats are not
+// cleared for us. Without this they would pile up a duplicate set every run.
+const existingRules = (await api("GET", "?fields=sheets(properties(sheetId),conditionalFormats)")).data
+  .sheets.find((s) => s.properties.sheetId === sheetId)?.conditionalFormats || [];
+for (let i = existingRules.length - 1; i >= 0; i--) {
+  req.push({ deleteConditionalFormatRule: { sheetId, index: i } });
+}
+
 
 const rule = (col, value, bg) => ({ addConditionalFormatRule: { rule: {
   ranges: [{ sheetId, startRowIndex: 1, endRowIndex: dataEnd, startColumnIndex: col, endColumnIndex: col + 1 }],

@@ -99,13 +99,58 @@ push(["Applied to Google Home and to the YTM Trigger app. The app is the live sy
   "the Google Home podcast routines are still running in parallel until you delete them."], "sub");
 
 // ---------------------------------------------------------------- write
+//
+// The tab is reused, never deleted and recreated. It used to be dropped and
+// rebuilt each run, which threw away everything Jason had changed by hand: the
+// yellow "Change guidance from us" columns he added beside each section, the
+// Overflow wrapping he set on the rightmost text column of each section, and
+// the narrower widths he gave columns C and F. Those are his, and this script
+// no longer has an opinion about them.
+//
+// Two rules keep it out of his way. Column widths and wrap strategy are set
+// only when the tab is created from nothing, so on every ordinary run they are
+// left exactly as he left them. And no row is ever formatted wider than its own
+// content, which is what keeps the guidance columns untouched - each one sits
+// immediately to the right of its section's last column.
 const meta = (await api("GET", "?fields=sheets.properties")).data;
 const old = meta.sheets.find((s) => s.properties.title === TAB);
-if (old) await api("POST", ":batchUpdate", { requests: [{ deleteSheet: { sheetId: old.properties.sheetId } }] });
-const made = await api("POST", ":batchUpdate", { requests: [{ addSheet: { properties: {
-  title: TAB, gridProperties: { rowCount: rows.length + 20, columnCount: 8, frozenRowCount: 2 } } } }] });
-const sheetId = made.data.replies[0].addSheet.properties.sheetId;
+const fresh = !old;
+let sheetId;
+if (old) {
+  sheetId = old.properties.sheetId;
+  const grid = old.properties.gridProperties || {};
+  const needRows = rows.length + 20;
+  // Grow if the schedule got longer; never shrink, which would delete his
+  // columns along with the cells we own.
+  if ((grid.rowCount || 0) < needRows || (grid.columnCount || 0) < 8) {
+    await api("POST", ":batchUpdate", { requests: [{ updateSheetProperties: {
+      properties: { sheetId, gridProperties: {
+        rowCount: Math.max(grid.rowCount || 0, needRows),
+        columnCount: Math.max(grid.columnCount || 0, 8),
+        frozenRowCount: 2,
+      } },
+      fields: "gridProperties(rowCount,columnCount,frozenRowCount)",
+    } }] });
+  }
+  // Stale merges from a previous, differently shaped run would corrupt the new
+  // layout. Only our own columns are unmerged.
+  await api("POST", ":batchUpdate", { requests: [{ unmergeCells: {
+    range: { sheetId, startRowIndex: 0, endRowIndex: grid.rowCount || rows.length, startColumnIndex: 0, endColumnIndex: 8 },
+  } }] }).catch(() => { /* nothing was merged */ });
+} else {
+  const made = await api("POST", ":batchUpdate", { requests: [{ addSheet: { properties: {
+    title: TAB, gridProperties: { rowCount: rows.length + 20, columnCount: 9, frozenRowCount: 2 } } } }] });
+  sheetId = made.data.replies[0].addSheet.properties.sheetId;
+}
 await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, { values: rows });
+// Clear anything left below the new content. Everything of his sits well above
+// this point, inside the sections themselves.
+if (old) {
+  const lastRow = old.properties.gridProperties?.rowCount || rows.length;
+  if (lastRow > rows.length) {
+    await api("POST", `/values/${encodeURIComponent(TAB)}!A${rows.length + 1}:H${lastRow}:clear`, {});
+  }
+}
 
 const C = {
   navy: { red: 0.11, green: 0.20, blue: 0.36 },
@@ -115,19 +160,37 @@ const C = {
   tot: { red: 0.97, green: 0.97, blue: 0.97 },
   white: { red: 1, green: 1, blue: 1 },
 };
-const req = [
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 250 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 2 }, properties: { pixelSize: 210 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 2, endIndex: 3 }, properties: { pixelSize: 270 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 3, endIndex: 5 }, properties: { pixelSize: 115 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 5, endIndex: 6 }, properties: { pixelSize: 560 }, fields: "pixelSize" } },
-  { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 6, endIndex: 8 }, properties: { pixelSize: 200 }, fields: "pixelSize" } },
-  { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: rows.length, startColumnIndex: 0, endColumnIndex: 8 },
-      cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 10 } } },
-      fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat)" } },
-];
+const req = [];
+// Column widths and the blanket wrap are applied only when the tab is created
+// from nothing. On an existing tab they are Jason's: he has narrowed C and F
+// and set the rightmost text column of each section to Overflow, and re-running
+// this script must not undo that.
+if (fresh) {
+  req.push(
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 250 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 2 }, properties: { pixelSize: 210 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 2, endIndex: 3 }, properties: { pixelSize: 270 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 3, endIndex: 5 }, properties: { pixelSize: 115 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 5, endIndex: 6 }, properties: { pixelSize: 560 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId, dimension: "COLUMNS", startIndex: 6, endIndex: 8 }, properties: { pixelSize: 200 }, fields: "pixelSize" } },
+    { repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: rows.length, startColumnIndex: 0, endColumnIndex: 8 },
+        cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 10 } } },
+        fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat)" } },
+  );
+}
+// How far right a row may be formatted. Never past its own content: the yellow
+// guidance columns sit immediately right of each section's last column, so
+// staying inside the content is what leaves them alone. Banner rows hold a
+// single cell but are meant to read as a full-width band, and none of them
+// falls beside a guidance column.
+const widthFor = (r, kind) => {
+  if (kind === "title" || kind === "sub" || kind === "section") return 8;
+  if (kind === "head") return Math.max((rows[r] || []).length, 1);
+  return 6;
+};
 for (const { r, kind } of fmt) {
-  const range = { sheetId, startRowIndex: r, endRowIndex: r + 1, startColumnIndex: 0, endColumnIndex: 8 };
+  const endColumnIndex = widthFor(r, kind);
+  const range = { sheetId, startRowIndex: r, endRowIndex: r + 1, startColumnIndex: 0, endColumnIndex };
   const rowH = (px) => ({ updateDimensionProperties: { range: { sheetId, dimension: "ROWS", startIndex: r, endIndex: r + 1 }, properties: { pixelSize: px }, fields: "pixelSize" } });
   if (kind === "title") {
     req.push({ mergeCells: { range, mergeType: "MERGE_ALL" } },
