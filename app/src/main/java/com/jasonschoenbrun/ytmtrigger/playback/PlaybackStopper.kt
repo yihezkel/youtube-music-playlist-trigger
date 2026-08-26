@@ -54,44 +54,42 @@ object PlaybackStopper {
         } catch (t: Throwable) {
             // SecurityException when notif listener isn't granted — fall back.
             // Logged because without it there is no way to tell this apart from
-            // "no YT Music session was playing", and the two want different fixes.
+            // "nothing was playing", and the two want different fixes.
             Logger.w("Stop", "Cannot list media sessions; using the media-key fallback",
                 mapOf("reason" to reason, "err" to (t.javaClass.simpleName)))
             return false
         }
-        val ytmSessions = sessions.filter { it.packageName == MediaSessionListenerService.YT_MUSIC_PKG }
-        if (ytmSessions.isEmpty()) {
-            Logger.i("Stop", "No YT Music media session; using the media-key fallback", mapOf(
-                "reason" to reason, "sessions" to sessions.joinToString(",") { it.packageName },
-            ))
-            return false
-        }
-        // YT Music publishes more than one session - a local player and a cast
-        // controller - and the first is not reliably the one playing. Taking
-        // the first and giving up if it was not playable is what made this fall
-        // through to the media-key fallback even with notification access
-        // granted. The fallback goes to whichever app owns audio focus, so it
-        // is only right by luck.
-        val ytm = ytmSessions.firstOrNull { c ->
+        // Pause whatever is actually playing rather than one named app. A stop
+        // time means "no audio after this", and the blocks now play through
+        // YouTube Music and the Aleph Beta app as well as our own player, so
+        // naming one of them would leave the others running.
+        val playing = sessions.filter { c ->
             when (c.playbackState?.state) {
                 PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
                 PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
                 else -> false
             }
-        } ?: run {
-            Logger.i("Stop", "No YT Music session was playing; using the media-key fallback", mapOf(
-                "reason" to reason,
-                "states" to ytmSessions.joinToString(",") { it.playbackState?.state?.toString() ?: "null" },
+        }
+        if (playing.isEmpty()) {
+            Logger.i("Stop", "No playing media session; using the media-key fallback", mapOf(
+                "reason" to reason, "sessions" to sessions.joinToString(",") { it.packageName },
             ))
             return false
         }
-        return try {
-            ytm.transportControls.pause()
-            Logger.i("Stop", "Pause sent via MediaController", mapOf("reason" to reason))
-            true
-        } catch (t: Throwable) {
-            Logger.w("Stop", "MediaController pause failed", mapOf("reason" to reason), t = t)
-            false
+        var paused = 0
+        for (c in playing) {
+            try {
+                c.transportControls.pause()
+                paused++
+                Logger.i("Stop", "Pause sent via MediaController", mapOf(
+                    "reason" to reason, "pkg" to c.packageName,
+                ))
+            } catch (t: Throwable) {
+                Logger.w("Stop", "MediaController pause failed", mapOf(
+                    "reason" to reason, "pkg" to c.packageName,
+                ), t = t)
+            }
         }
+        return paused > 0
     }
 }

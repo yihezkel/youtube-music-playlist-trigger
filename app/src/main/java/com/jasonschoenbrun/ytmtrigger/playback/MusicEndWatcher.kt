@@ -38,55 +38,60 @@ object MusicEndWatcher {
     private const val ACTION = "com.jasonschoenbrun.ytmtrigger.MUSIC_CHECK"
     const val EXTRA_SCHEDULE_ID = "scheduleId"
     const val EXTRA_QUEUE_INDEX = "queueIndex"
+    const val EXTRA_PACKAGE = "pkg"
 
     /**
-     * Begin watching the music entry at [queueIndex] of [scheduleId]. Cancels any
-     * previous watch on the same schedule, so re-arming cannot leave two running.
+     * Begin watching the entry at [queueIndex] of [scheduleId], played by [pkg].
+     *
+     * Cancels any previous watch on the same schedule, so re-arming cannot leave
+     * two running.
      */
-    fun watch(context: Context, scheduleId: String, queueIndex: Int) {
+    fun watch(context: Context, scheduleId: String, queueIndex: Int, pkg: String = MediaSessionListenerService.YT_MUSIC_PKG) {
         cancel(context, scheduleId)
-        arm(context, scheduleId, queueIndex)
-        Logger.i("MusicWatch", "Watching for the end of a playlist", mapOf(
+        arm(context, scheduleId, queueIndex, pkg)
+        Logger.i("MusicWatch", "Watching for the end", mapOf(
             "scheduleId" to scheduleId,
             "queueIndex" to queueIndex.toString(),
+            "pkg" to pkg,
             "everyMin" to CHECK_INTERVAL_MIN.toString(),
         ))
     }
 
     fun cancel(context: Context, scheduleId: String) {
-        context.getSystemService(AlarmManager::class.java)?.cancel(intentFor(context, scheduleId, 0))
+        context.getSystemService(AlarmManager::class.java)?.cancel(intentFor(context, scheduleId, 0, ""))
     }
 
-    internal fun arm(context: Context, scheduleId: String, queueIndex: Int) {
+    internal fun arm(context: Context, scheduleId: String, queueIndex: Int, pkg: String) {
         val at = System.currentTimeMillis() + CHECK_INTERVAL_MIN * 60_000L
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         try {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intentFor(context, scheduleId, queueIndex))
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intentFor(context, scheduleId, queueIndex, pkg))
         } catch (se: SecurityException) {
             Logger.w("MusicWatch", "Could not arm the check", mapOf("scheduleId" to scheduleId), t = se)
         }
     }
 
-    private fun intentFor(context: Context, scheduleId: String, queueIndex: Int): PendingIntent =
+    private fun intentFor(context: Context, scheduleId: String, queueIndex: Int, pkg: String): PendingIntent =
         PendingIntent.getBroadcast(
             context,
             "musicwatch:$scheduleId".hashCode(),
             Intent(context, MusicEndReceiver::class.java)
                 .setAction(ACTION)
                 .putExtra(EXTRA_SCHEDULE_ID, scheduleId)
-                .putExtra(EXTRA_QUEUE_INDEX, queueIndex),
+                .putExtra(EXTRA_QUEUE_INDEX, queueIndex)
+                .putExtra(EXTRA_PACKAGE, pkg),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
     /**
-     * Whether music should still be considered playing.
+     * Whether [pkg] should still be considered playing.
      *
-     * Transitional states count as playing: YouTube Music reports buffering or
-     * skipping between tracks, and calling that the end of the playlist would
-     * cut a block short every few minutes.
+     * Transitional states count as playing: an app reports buffering or skipping
+     * between tracks, and calling that the end of the queue would cut a block
+     * short every few minutes.
      */
-    fun stillPlaying(context: Context): Pair<Boolean, String> {
-        val status = MediaSessionProbe.ytMusicStatus(context)
+    fun stillPlaying(context: Context, pkg: String): Pair<Boolean, String> {
+        val status = MediaSessionProbe.status(context, pkg)
         val audioActive = context.getSystemService(AudioManager::class.java)?.isMusicActive == true
         val playing = when (status) {
             is MediaSessionProbe.Status.Playing -> true
@@ -120,23 +125,26 @@ class MusicEndReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val scheduleId = intent.getStringExtra(MusicEndWatcher.EXTRA_SCHEDULE_ID) ?: return
         val queueIndex = intent.getIntExtra(MusicEndWatcher.EXTRA_QUEUE_INDEX, 0)
+        val pkg = intent.getStringExtra(MusicEndWatcher.EXTRA_PACKAGE)
+            ?: MediaSessionListenerService.YT_MUSIC_PKG
         val schedule = ScheduleRepository.get(context).byId(scheduleId)
         if (schedule == null || !schedule.enabled || !schedule.continuousPlay) {
             Logger.i("MusicWatch", "Stopping: schedule is gone or not a queue", mapOf("scheduleId" to scheduleId))
             return
         }
-        val (playing, detail) = MusicEndWatcher.stillPlaying(context)
+        val (playing, detail) = MusicEndWatcher.stillPlaying(context, pkg)
         Logger.i("MusicWatch", "Checked", mapOf(
             "scheduleId" to scheduleId,
             "queueIndex" to queueIndex.toString(),
+            "pkg" to pkg,
             "playing" to playing.toString(),
             "state" to detail,
         ))
         if (playing) {
-            MusicEndWatcher.arm(context, scheduleId, queueIndex)
+            MusicEndWatcher.arm(context, scheduleId, queueIndex, pkg)
             return
         }
-        Logger.i("MusicWatch", "Playlist appears to have ended; moving the queue on", mapOf(
+        Logger.i("MusicWatch", "Playback appears to have ended; moving the queue on", mapOf(
             "scheduleId" to scheduleId,
             "nextIndex" to (queueIndex + 1).toString(),
         ))

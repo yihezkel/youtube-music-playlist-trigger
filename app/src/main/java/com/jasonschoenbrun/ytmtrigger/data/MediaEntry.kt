@@ -34,6 +34,16 @@ enum class MediaKind {
     /** A Spotify show, resolved to its public RSS feed before playing. */
     SpotifyShow,
 
+    /**
+     * Something in the Aleph Beta app.
+     *
+     * Their public RSS feeds carry only the series in progress - four episodes
+     * of "A Book Like No Other" where a subscription holds sixty-eight - so a
+     * feed cannot reach the archive. The app can, and it publishes a media
+     * session, so it can be started, watched and stopped like any other player.
+     */
+    AlephBeta,
+
     /** Not recognised. */
     Unknown,
 }
@@ -121,6 +131,13 @@ object MediaEntries {
                 return MediaEntry(entry, MediaKind.YtmTrack, it.groupValues[1], label, mode)
             }
             return MediaEntry(entry, MediaKind.Unknown, url, label, mode)
+        }
+        // Aleph Beta before the generic feed branch below: these are ordinary
+        // https links and would otherwise be mistaken for an RSS feed and
+        // parsed as XML. The app has verified App Links for both hosts, so the
+        // URL opens the app rather than a browser.
+        if (lower.contains("alephbeta.org")) {
+            return MediaEntry(entry, MediaKind.AlephBeta, url, label, mode)
         }
         // Anything else that looks like a feed. Deliberately permissive:
         // podcast feeds live on every imaginable host and path.

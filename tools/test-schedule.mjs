@@ -100,6 +100,16 @@ if (mode !== "clean") {
       playlistUrls: [`${TORAH} [Autostop follower]`],
     });
   }
+  // "alephbeta": drive the Aleph Beta app. Their public feed carries 4 episodes
+  // where the subscription holds 68, so the app is the only way to the archive.
+  if (mode === "alephbeta") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = start + length;
+    first.playlistUrls = [
+      "https://www.alephbeta.org/playlist/a-book-like-no-other [A Book Like No Other]",
+      `${TORAH} [After Aleph Beta]`,
+    ];
+  }
   // "trailer": Aleph Beta's feed carries a 2m19s trailer among five items, so
   // it is the case that proves trailers are left out of the rotation.
   if (mode === "trailer") {

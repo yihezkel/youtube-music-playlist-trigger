@@ -224,6 +224,11 @@ class PlaybackTriggerService : Service() {
                 if (!played) postFailure("Could not play podcast for '${schedule.name}'")
                 return
             }
+            if (entry.kind == MediaKind.AlephBeta) {
+                val played = playAlephBeta(schedule, entry, choice.index)
+                if (!played) postFailure("Could not play '${entry.displayName}' in the Aleph Beta app")
+                return
+            }
 
             updateNotification("Launching ${schedule.name}…")
 
@@ -647,6 +652,77 @@ class PlaybackTriggerService : Service() {
         return false
     }
 
+    /**
+     * Play something from the Aleph Beta app.
+     *
+     * Their public feeds carry only the series in progress, so a subscription's
+     * archive is reachable only through the app. It is driven the way YouTube
+     * Music is - opened at the right place, then watched through the media
+     * session it publishes - rather than screen-scraped.
+     *
+     * Two ways in, tried in order. The deep link opens the app on the show, and
+     * their App Links are verified for both alephbeta.org hosts so it never
+     * bounces through a browser. If that alone does not start playback, the
+     * session's own PLAY_FROM_SEARCH is asked for the entry by name; that is a
+     * documented request an app opts into, and it needs no screen coordinates.
+     */
+    private suspend fun playAlephBeta(schedule: Schedule, entry: MediaEntry, queueIndex: Int): Boolean {
+        val pkg = MediaAppController.ALEPH_BETA_PKG
+        val name = entry.displayName
+        updateNotification("Opening ${name}…")
+
+        MediaAppController.openDeepLink(this, entry.id, pkg)
+        // Give the app time to come up and lay the page out. Tapping or asking
+        // before it has finished is what produced a Source error by hand.
+        delay(ALEPH_BETA_LOAD_MS)
+
+        // Three ways to start it, weakest assumption first.
+        //
+        // The deep link loads the item into their player but does not start it,
+        // so a plain play() on the session it publishes is the most direct
+        // thing to try. Failing that, ask it for the entry by name.
+        if (!MediaAppController.isPlaying(this, pkg)) {
+            val resumed = MediaAppController.play(this, pkg)
+            Logger.i("PlaybackSvc", "Asked Aleph Beta to play what is loaded", mapOf(
+                "podcast" to name, "delivered" to resumed.toString(),
+                "state" to MusicEndWatcher.stillPlaying(this, pkg).second,
+            ))
+            delay(4000)
+        }
+        if (!MediaAppController.isPlaying(this, pkg)) {
+            val asked = MediaAppController.playFromSearch(this, pkg, name)
+            Logger.i("PlaybackSvc", "Asked Aleph Beta to play by name", mapOf(
+                "podcast" to name, "delivered" to asked.toString(),
+            ))
+        }
+
+        val deadline = System.currentTimeMillis() + ALEPH_BETA_START_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (MediaAppController.isPlaying(this, pkg)) {
+                Logger.i("PlaybackSvc", "Aleph Beta playback verified", mapOf(
+                    "podcast" to name,
+                    "nowPlaying" to (MediaAppController.nowPlaying(this, pkg) ?: "-"),
+                    "secondsLeftInBlock" to (secondsUntilStop(schedule)?.toString() ?: "no stop"),
+                ))
+                updateNotification("Playing $name…")
+                // Their app reports no end, exactly like YouTube Music, so the
+                // queue moves on when the session stops rather than when we are
+                // told anything.
+                if (schedule.continuousPlay) {
+                    MusicEndWatcher.watch(this, schedule.id, queueIndex, pkg)
+                }
+                return true
+            }
+            delay(1000)
+        }
+        Logger.e("PlaybackSvc", "Aleph Beta did not start playing", mapOf(
+            "podcast" to name,
+            "url" to entry.id,
+            "state" to MusicEndWatcher.stillPlaying(this, pkg).second,
+        ))
+        return false
+    }
+
     override fun onDestroy() {
         Logger.i("PlaybackSvc", "onDestroy")
         active.set(false)
@@ -669,6 +745,10 @@ class PlaybackTriggerService : Service() {
          * with resume in place the episode is not lost, only deferred.
          */
         const val MIN_EPISODE_SHARE = 0.5
+        /** How long to let the Aleph Beta app lay itself out before asking it to play. */
+        const val ALEPH_BETA_LOAD_MS = 12_000L
+        /** How long to wait for it to actually start. */
+        const val ALEPH_BETA_START_TIMEOUT_MS = 45_000L
         const val YT_MUSIC_PKG = "com.google.android.apps.youtube.music"
         const val NOTIFICATION_ID = 1001
         const val NOTIFICATION_FAILURE_ID = 1002

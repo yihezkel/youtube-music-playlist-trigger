@@ -27,7 +27,7 @@ object MediaSessionProbe {
         data class Unavailable(val reason: String) : Status()
     }
 
-    fun ytMusicStatus(context: Context): Status {
+    fun status(context: Context, pkg: String = MediaSessionListenerService.YT_MUSIC_PKG): Status {
         val mgr = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
             ?: return Status.Unavailable("no MediaSessionManager")
         val listenerComp = ComponentName(context, MediaSessionListenerService::class.java)
@@ -38,15 +38,15 @@ object MediaSessionProbe {
         } catch (t: Throwable) {
             return Status.Unavailable("${t.javaClass.simpleName}: ${t.message}")
         }
-        // YT Music publishes more than one session - a local player and a cast
+        // An app publishes more than one session - a local player and a cast
         // controller - and the first is not reliably the one playing. Taking the
-        // first would report NOT_PLAYING while music was audible, which for the
-        // end-of-playlist watch would cut a block short.
-        val ytmAll = sessions.filter { it.packageName == MediaSessionListenerService.YT_MUSIC_PKG }
-        if (ytmAll.isEmpty()) return Status.NoSession
-        val ytm = ytmAll.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
-            ?: ytmAll.first()
-        val state = ytm.playbackState
+        // first would report NOT_PLAYING while audio was audible, which for the
+        // end-of-playback watch would cut a block short.
+        val mine = sessions.filter { it.packageName == pkg }
+        if (mine.isEmpty()) return Status.NoSession
+        val chosen = mine.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            ?: mine.first()
+        val state = chosen.playbackState
         if (state == null) return Status.NotPlaying(PlaybackState.STATE_NONE, "STATE_NONE(null)")
         return if (state.state == PlaybackState.STATE_PLAYING) {
             Status.Playing
@@ -54,6 +54,9 @@ object MediaSessionProbe {
             Status.NotPlaying(state.state, stateName(state.state))
         }
     }
+
+    /** Convenience for the YouTube Music path, which is most of the callers. */
+    fun ytMusicStatus(context: Context): Status = status(context, MediaSessionListenerService.YT_MUSIC_PKG)
 
     /** Logs an [EvalFix] entry comparing what AudioManager.isMusicActive says
      *  vs what the MediaSession says. Used by [PlaybackTriggerService] so we
