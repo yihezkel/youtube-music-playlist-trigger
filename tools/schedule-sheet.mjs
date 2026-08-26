@@ -170,26 +170,9 @@ push(["Issue", "Detail"], "head");
 ].forEach((r) => push(r, "change"));
 push([]);
 
-push(["6 · What I changed, and why"], "section");
-push(["Change", "Show", "Reasoning"], "head");
-[
-  ["Added — major fix", "The Q & A with Rabbi Breitowitz", "You were right, this was a bad miss. It is the highest-rated show in your catalog (4.9 from 247) with 385 episodes. Now anchors Family Table on both Tuesday and Thursday — his own publishing days, and earlier in the evening as your TODO asked."],
-  ["Dropped — your note", "Life Kit", "'I think we should stop — PC and off topic.'"],
-  ["Dropped — your note", "Radiolab", "'Terribly anti-Israel. Remove.'"],
-  ["Dropped — your note", "60-Second Science / Science Quickly", "'Actually cancel, due to uncomfortable content.' I had planned it for the morning block; removed."],
-  ["Dropped — your note", "Curiosity Daily", "'Has been coming on at 15:00, which has uncomfortable talk.' Short Wave does the same job."],
-  ["Dropped — your note", "ABC News Nightline", "'Low priority. Get rid of for something else.'"],
-  ["Not scheduled — your note", "Consider This from NPR", "'Quite liberal. Reevaluate.' Left in the catalog, not in the schedule."],
-  ["Not scheduled — your note", "The Intelligence", "'Replace with something else — don't like Israel [coverage]'."],
-  ["Played more — your note", "The Mindset Mentor", "'Sarah likes this a lot… so play it more, despite or even intentionally repeating.' Now opens her block every single day."],
-  ["Played more — your note", "Stuff You Should Know", "'Can do 2 more/week' — added Sunday and Wednesday."],
-  ["Played more — your note", "SeforimChatter, StarTalk, Something You Should Know, School of Greatness", "Each marked 'can do 1 more/week'; each gains a slot in the teen evening."],
-  ["Moved later — your note", "TED Talks Daily", "'Hard to place because of the duration variability… maybe last slot at 8PM?' It now closes the teen evening every night, where an 8- or 60-minute episode does no harm."],
-  ["Swapped out — your note", "Into the Verse", "'Swap with something else.' Replaced by Parsha Perspectives (recommended by Avi) and A Book Like No Other."],
-  ["Removed — as asked", "Honestly with Bari Weiss / WIRED Business", "Both also dead: 131 and 721 days without an episode."],
-  ["Kept as archive", "Jews You Should Know, SciShow Tangents, This Day in History", "No longer publishing, but the archives are excellent and evergreen."],
-  ["Not scheduled", "Making Sense (Sam Harris)", "Left in the catalog. Harris is one of the best-known public critics of religion and much of the back catalogue argues against religious belief directly — not something to put in front of the kids."],
-].forEach((r) => push(r, "change"));
+push(["6 · Change history"], "section");
+push(["", "Every addition, removal and timing change now lives on the 'Schedule change log' tab, " +
+  "newest first, with the reason where one was written down."], "note");
 push([]);
 push(["Nothing here has been applied to Google Home or the YTM Trigger app yet."], "sub");
 
