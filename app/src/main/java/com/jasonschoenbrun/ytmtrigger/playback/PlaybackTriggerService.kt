@@ -57,6 +57,11 @@ class PlaybackTriggerService : Service() {
         val manual = intent?.getBooleanExtra(AlarmScheduler.EXTRA_MANUAL, false) == true
         val overrideCalendar =
             intent?.getBooleanExtra(AlarmScheduler.EXTRA_OVERRIDE_CALENDAR, false) == true
+        // Which entry of a continuous schedule to play. -1 means "first trigger
+        // of the block"; the podcast player passes the next index when an
+        // episode ends. Chained triggers still pass through the Shabat gate
+        // below, so a queue can never outlive the start of Shabat.
+        val queueIndex = intent?.getIntExtra(EXTRA_QUEUE_INDEX, -1) ?: -1
         active.set(true)
         Logger.i("PlaybackSvc", "onStartCommand", mapOf(
             "scheduleId" to (scheduleId ?: "null"),
@@ -101,11 +106,11 @@ class PlaybackTriggerService : Service() {
 
         // C-fix-3: cancel any in-flight previous attempt before starting a new one.
         currentJob?.cancel()
-        currentJob = scope.launch { runFlow(scheduleId, manual) }
+        currentJob = scope.launch { runFlow(scheduleId, manual, queueIndex) }
         return START_NOT_STICKY
     }
 
-    private suspend fun runFlow(scheduleId: String, manual: Boolean) {
+    private suspend fun runFlow(scheduleId: String, manual: Boolean, queueIndex: Int = -1) {
         acquireScreenWake()
         var fsiNotificationPosted = false
         try {
@@ -135,21 +140,27 @@ class PlaybackTriggerService : Service() {
                 return
             }
 
-            val choice = PlaylistPicker.pick(repo, schedule)
+            // A continuous schedule walks its entries in order and wraps, so
+            // the block keeps filling; every other schedule picks one entry.
+            val choice = if (schedule.continuousPlay) {
+                PlaylistPicker.at(schedule, if (queueIndex < 0) 0 else queueIndex)
+            } else {
+                PlaylistPicker.pick(repo, schedule)
+            }
             if (choice == null) {
                 postFailure("No playlists configured for '${schedule.name}'")
                 return
             }
-            // Arm the stop time now that playback is actually going ahead.
-            AlarmScheduler.scheduleStop(this, schedule)
-
+            // Arm the stop time on the first item only. Re-arming mid-queue
+            // would be harmless but pointless, and it muddies the log.
+            if (queueIndex <= 0) AlarmScheduler.scheduleStop(this, schedule)
             // Podcasts and single tracks don't go through the YT Music
             // playlist flow at all: a feed is played by us, and a track
             // deep-link starts playing on its own.
             // Carry the label across: choice.url is already stripped of it.
             val entry = MediaEntries.parse(choice.url).copy(label = choice.label)
             if (entry.kind == MediaKind.PodcastFeed || entry.kind == MediaKind.SpotifyShow) {
-                val played = playPodcast(schedule, entry)
+                val played = playPodcast(schedule, entry, if (queueIndex < 0) 0 else queueIndex)
                 if (!played) postFailure("Could not play podcast for '${schedule.name}'")
                 return
             }
@@ -462,7 +473,7 @@ class PlaybackTriggerService : Service() {
      * Safe to do network I/O here: this runs inside the service's coroutine
      * scope on [Dispatchers.Default], not on the main thread.
      */
-    private suspend fun playPodcast(schedule: Schedule, entry: MediaEntry): Boolean {
+    private suspend fun playPodcast(schedule: Schedule, entry: MediaEntry, queueIndex: Int): Boolean {
         val feedUrl = when (entry.kind) {
             MediaKind.PodcastFeed -> entry.id
             MediaKind.SpotifyShow -> SpotifyFeedResolver.feedForShow(this, entry.id) ?: run {
@@ -489,7 +500,11 @@ class PlaybackTriggerService : Service() {
             "title" to chosen.title,
         ))
         updateNotification("Playing ${entry.displayName}…")
-        PodcastPlayerService.start(this, chosen.audioUrl, chosen.title)
+        PodcastPlayerService.start(
+            this, chosen.audioUrl, chosen.title,
+            queueScheduleId = if (schedule.continuousPlay) schedule.id else null,
+            queueIndex = queueIndex,
+        )
         // Verify rather than assume, mirroring the YT Music path.
         val deadline = System.currentTimeMillis() + PLAYBACK_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
@@ -514,6 +529,7 @@ class PlaybackTriggerService : Service() {
 
     companion object {
         const val MANUAL_DEFAULT_ID = "manual"
+        const val EXTRA_QUEUE_INDEX = "queueIndex"
         const val YT_MUSIC_PKG = "com.google.android.apps.youtube.music"
         const val NOTIFICATION_ID = 1001
         const val NOTIFICATION_FAILURE_ID = 1002
@@ -532,6 +548,22 @@ class PlaybackTriggerService : Service() {
                 putExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, scheduleId)
                 putExtra(AlarmScheduler.EXTRA_MANUAL, true)
                 putExtra(AlarmScheduler.EXTRA_OVERRIDE_CALENDAR, overrideCalendar)
+            }
+            context.startForegroundService(intent)
+        }
+
+        /**
+         * Continue a continuous schedule at [queueIndex].
+         *
+         * Called by the podcast player when an episode ends. It deliberately
+         * re-enters the normal trigger path, so the Shabat gate, the in-call
+         * check and failure reporting apply to every item in a queue rather
+         * than only the first.
+         */
+        fun startQueued(context: Context, scheduleId: String, queueIndex: Int) {
+            val intent = Intent(context, PlaybackTriggerService::class.java).apply {
+                putExtra(AlarmScheduler.EXTRA_SCHEDULE_ID, scheduleId)
+                putExtra(EXTRA_QUEUE_INDEX, queueIndex)
             }
             context.startForegroundService(intent)
         }

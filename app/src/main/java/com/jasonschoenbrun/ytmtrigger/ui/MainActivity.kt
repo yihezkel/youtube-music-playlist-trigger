@@ -727,6 +727,7 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
     var volPctText by remember { mutableStateOf(initial.targetVolumePercent?.toString().orEmpty()) }
     var stopMinText by remember { mutableStateOf(initial.autoStopMinutes?.toString().orEmpty()) }
     var stopTimeMin by remember { mutableStateOf(initial.stopTimeMinutes) }
+    var continuous by remember { mutableStateOf(initial.continuousPlay) }
     var anchor by remember { mutableStateOf(initial.timeAnchor) }
     var anchorOffsetText by remember { mutableStateOf(initial.anchorOffsetMinutes.toString()) }
     var podcastRandom by remember {
@@ -765,6 +766,7 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                                 .toIntOrNull()?.coerceIn(-720, 720) ?: 0,
                             podcastEpisodeMode = if (podcastRandom) PodcastEpisodeMode.Random
                                                  else PodcastEpisodeMode.Latest,
+                            continuousPlay = continuous,
                         )
                         repo.upsert(updated)
                         val all = repo.all().toMutableList()
@@ -962,6 +964,18 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                     }
                     Switch(checked = podcastRandom, onCheckedChange = { podcastRandom = it })
                 }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Play continuously")
+                    Text(
+                        "Play the entries in order, starting the next the moment one " +
+                            "finishes, until the stop time. Off means pick one and stop.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = continuous, onCheckedChange = { continuous = it })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Enable shuffle after launch", Modifier.weight(1f))

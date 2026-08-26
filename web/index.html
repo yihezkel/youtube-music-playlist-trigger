@@ -368,6 +368,9 @@ function renderSchedules() {
       <label style="display:flex;align-items:center;gap:6px;color:var(--fg);margin-top:8px">
         <input type="checkbox" data-f="podcastRandom" ${s.podcastEpisodeMode !== 'Latest' ? 'checked' : ''}/>
         Podcasts: play a random episode (off = newest)</label>
+      <label style="display:flex;align-items:center;gap:6px;color:var(--fg);margin-top:4px">
+        <input type="checkbox" data-f="continuous" ${s.continuousPlay ? 'checked' : ''}/>
+        Play continuously (next entry starts when one finishes, until the stop time)</label>
       <div class="row" style="margin-top:8px">
         <label style="display:flex;align-items:center;gap:6px;color:var(--fg)">
           <input type="checkbox" data-f="enabled" ${s.enabled !== false ? 'checked' : ''}/> Enabled</label>
@@ -403,6 +406,7 @@ function renderSchedules() {
         anchorOffsetMinutes: Number(div.querySelector('[data-f=offset]').value) || 0,
         stopTimeMinutes: stopRaw ? sh * 60 + sm : null,
         podcastEpisodeMode: div.querySelector('[data-f=podcastRandom]').checked ? 'Random' : 'Latest',
+        continuousPlay: div.querySelector('[data-f=continuous]').checked,
         playlistUrls: div.querySelector('[data-f=playlists]').value.split('\n').map(x => x.trim()).filter(Boolean),
       };
     };
@@ -415,7 +419,7 @@ $('addSched').onclick = () => {
   schedules.push({
     id: crypto.randomUUID(), name: 'New', enabled: true,
     daysOfWeek: [1, 2, 3, 4, 5], timeMinutes: 7 * 60 + 30, stopTimeMinutes: null,
-    timeAnchor: 'FixedClock', anchorOffsetMinutes: 0,
+    timeAnchor: 'FixedClock', anchorOffsetMinutes: 0, continuousPlay: false,
     podcastEpisodeMode: 'Random',
     playlistUrls: [], targetVolumePercent: null, autoStopMinutes: null,
     enableShuffle: true, skipFirstTrack: true, lastPickedPlaylistIds: [],

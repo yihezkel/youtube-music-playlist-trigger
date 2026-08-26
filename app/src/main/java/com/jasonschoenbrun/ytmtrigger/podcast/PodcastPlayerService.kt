@@ -15,6 +15,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.jasonschoenbrun.ytmtrigger.YtmApp
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
 import com.jasonschoenbrun.ytmtrigger.ui.MainActivity
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -36,6 +37,11 @@ class PodcastPlayerService : Service() {
     private var player: MediaPlayer? = null
     private var session: MediaSession? = null
 
+    // Set only for a continuous schedule. Null means "play this episode and
+    // stop", which is what every non-continuous schedule relies on.
+    private var queueScheduleId: String? = null
+    private var queueIndex: Int = 0
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -44,6 +50,8 @@ class PodcastPlayerService : Service() {
         }
         val url = intent?.getStringExtra(EXTRA_URL)
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Podcast"
+        queueScheduleId = intent?.getStringExtra(EXTRA_QUEUE_SCHEDULE)
+        queueIndex = intent?.getIntExtra(EXTRA_QUEUE_INDEX, 0) ?: 0
         if (url.isNullOrBlank()) {
             Logger.e("PodcastPlayer", "No audio URL; stopping")
             stopSelf()
@@ -83,7 +91,22 @@ class PodcastPlayerService : Service() {
             }
             setOnCompletionListener {
                 Logger.i("PodcastPlayer", "Episode finished", mapOf("title" to title))
-                stopPlayback()
+                // A continuous schedule carries on to its next entry. The
+                // follow-on goes back through PlaybackTriggerService rather
+                // than being played here, so it re-runs the Shabat gate, the
+                // in-call check and the failure reporting - a queue must not
+                // become a way to bypass any of them.
+                val next = queueScheduleId
+                if (next != null) {
+                    Logger.i("PodcastPlayer", "Advancing queue", mapOf(
+                        "scheduleId" to next, "nextIndex" to (queueIndex + 1).toString(),
+                    ))
+                    stopPlayback(keepService = true)
+                    PlaybackTriggerService.startQueued(this@PodcastPlayerService, next, queueIndex + 1)
+                    stopSelf()
+                } else {
+                    stopPlayback()
+                }
             }
             setOnErrorListener { _, what, extra ->
                 Logger.e("PodcastPlayer", "Playback error", mapOf(
@@ -163,6 +186,8 @@ class PodcastPlayerService : Service() {
         const val NOTIFICATION_ID = 1004
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
+        const val EXTRA_QUEUE_SCHEDULE = "queueScheduleId"
+        const val EXTRA_QUEUE_INDEX = "queueIndex"
         const val ACTION_STOP = "com.jasonschoenbrun.ytmtrigger.PODCAST_STOP"
 
         private val playing = AtomicBoolean(false)
@@ -170,10 +195,24 @@ class PodcastPlayerService : Service() {
         /** True while an episode is actually playing. */
         fun isPlaying(): Boolean = playing.get()
 
-        fun start(context: Context, audioUrl: String, title: String) {
+        /**
+         * @param queueScheduleId set only for a continuous schedule, so the end
+         *   of this episode starts that schedule's next entry.
+         */
+        fun start(
+            context: Context,
+            audioUrl: String,
+            title: String,
+            queueScheduleId: String? = null,
+            queueIndex: Int = 0,
+        ) {
             val i = Intent(context, PodcastPlayerService::class.java).apply {
                 putExtra(EXTRA_URL, audioUrl)
                 putExtra(EXTRA_TITLE, title)
+                if (queueScheduleId != null) {
+                    putExtra(EXTRA_QUEUE_SCHEDULE, queueScheduleId)
+                    putExtra(EXTRA_QUEUE_INDEX, queueIndex)
+                }
             }
             context.startForegroundService(i)
         }

@@ -46,6 +46,21 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
      * newest episode until another is published.
      */
     val podcastEpisodeMode: PodcastEpisodeMode = PodcastEpisodeMode.Random,
+    /**
+     * Play the entries as a continuous queue rather than picking one.
+     *
+     * With this off (the default, and the historical behaviour) a trigger picks
+     * a single entry and stops when it ends. With it on, the entries play in
+     * order and the next one starts the moment the current finishes, wrapping
+     * back to the start so the block stays filled until [stopTimeMinutes].
+     * That is the only way to fill a window continuously when episode lengths
+     * within one show vary threefold.
+     *
+     * Chaining only follows podcast entries, because those are the ones this
+     * app plays itself and can therefore detect the end of. A YouTube Music
+     * entry hands control to YT Music, which continues on its own.
+     */
+    val continuousPlay: Boolean = false,
     val lastPickedPlaylistIds: List<String> = emptyList(),
 ) {
     fun localTime(): LocalTime = LocalTime.of(timeMinutes / 60, timeMinutes % 60)

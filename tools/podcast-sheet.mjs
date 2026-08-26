@@ -57,19 +57,18 @@ for (const t of [TAB, ...OLD_TABS]) {
 }
 console.log(`carried over ${prefs.size} preference note(s)`);
 
-// --- recorded durations on the existing tabs, for drift detection -------------
-const sheetDur = new Map();
-for (const tab of ["Weekly", "Daily", "News"]) {
-  const r = await api("GET", `/values/${tab}!A1:F200`);
-  for (const row of r.data.values || []) {
-    const cells = row.map((c) => String(c || "").trim());
-    for (let i = 0; i < cells.length - 1; i++) {
-      if (!cells[i] || cells[i].length < 4) continue;
-      if (!/^\d+\s*(-\s*\d+)?$/.test(cells[i + 1])) continue;
-      const k = norm(cells[i]);
-      if (k && !sheetDur.has(k)) sheetDur.set(k, cells[i + 1].replace(/\s+/g, " "));
-    }
-  }
+// --- notes and recorded durations carried over from the old tab layout -------
+// Read from tools/sheet-legacy.json, not the live tabs: the lower halves of
+// Weekly/Daily/News have been folded into this catalog and removed, so that
+// wording now survives only in that file.
+const legacy = JSON.parse(readFileSync("sheet-legacy.json", "utf8"));
+const sheetDur = new Map(Object.entries(legacy.durations).map(([k, v]) => [norm(k), v]));
+const sheetNote = new Map(Object.entries(legacy.notes).map(([k, v]) => [norm(k), v]));
+function lookupNote(name) {
+  const k = norm(name);
+  if (sheetNote.has(k)) return sheetNote.get(k);
+  for (const [key, v] of sheetNote) if (key.length > 6 && (k.includes(key) || key.includes(k))) return v;
+  return "";
 }
 function lookupSheetDur(name) {
   const k = norm(name);
@@ -92,7 +91,7 @@ rows.sort((a, b) =>
   (ORDER[a.status] - ORDER[b.status]) || a.slot.localeCompare(b.slot) || a.name.localeCompare(b.name));
 
 const HEAD = [
-  "Podcast", "Status", "Group", "Type", "Our preferences", "What it is",
+  "Podcast", "Status", "Group", "Type", "Our preferences", "Your notes (old tabs)", "What it is",
   "Rating (ratings)", "Publishing?", "Last episode", "Days since",
   "Eps/week (last 90d)", "Eps/week (lifetime)", "Eps last 365d", "Typical days",
   "Day regularity", "Length median (m)", "Length mean (m)", "Length SD (m)",
@@ -106,6 +105,7 @@ const body = rows.map((r) => {
   return [
     r.name, r.status, r.slot, r.kind || "Podcast",
     prefs.get(norm(r.name)) || "",
+    lookupNote(r.name),
     r.description || "", rating(r), publishing(r),
     r.lastEpisode || "", r.daysSinceLast ?? "",
     r.ok ? r.perWeekRecent : "", r.ok ? (r.perWeekLifetime ?? "") : "", r.ok ? r.episodesLast365 : "",
@@ -124,6 +124,7 @@ const body = rows.map((r) => {
 const legend = [
   [],
   ["How to read this tab"],
+  ["Your notes (old tabs)", "The Notes and TODO wording carried over from the Weekly/Daily/News tabs before their lower halves were removed. Read-only history - write new thoughts in the next column."],
   ["Our preferences", "Yours to write in - e.g. 'Sarah loves this', 'too long for the morning'. Kept intact when this tab is regenerated, and read back when we next reassess the line-up."],
   ["Status: Considering", "Shows you had already noted as ideas."],
   ["Status: Suggested by AI", "Shows proposed here that were not previously on the sheet."],
@@ -198,12 +199,12 @@ req.push(
   rule(1, "Suggested by AI", { red: 0.85, green: 0.90, blue: 0.98 }),
   rule(1, "Considering", { red: 1.00, green: 0.96, blue: 0.78 }),
   rule(1, "Dropped", { red: 0.94, green: 0.87, blue: 0.87 }),
-  rule(7, "Active", { red: 0.82, green: 0.93, blue: 0.82 }),
-  rule(7, "Slowing", { red: 1.00, green: 0.96, blue: 0.78 }),
-  rule(7, "Dormant", { red: 0.99, green: 0.89, blue: 0.79 }),
-  rule(7, "Ended", { red: 0.94, green: 0.87, blue: 0.87 }),
-  rule(20, "Mixed formats", { red: 0.97, green: 0.86, blue: 0.95 }),
-  rule(20, "Tight", { red: 0.86, green: 0.94, blue: 0.98 }),
+  rule(8, "Active", { red: 0.82, green: 0.93, blue: 0.82 }),
+  rule(8, "Slowing", { red: 1.00, green: 0.96, blue: 0.78 }),
+  rule(8, "Dormant", { red: 0.99, green: 0.89, blue: 0.79 }),
+  rule(8, "Ended", { red: 0.94, green: 0.87, blue: 0.87 }),
+  rule(21, "Mixed formats", { red: 0.97, green: 0.86, blue: 0.95 }),
+  rule(21, "Tight", { red: 0.86, green: 0.94, blue: 0.98 }),
 );
 await api("POST", ":batchUpdate", { requests: req });
 
