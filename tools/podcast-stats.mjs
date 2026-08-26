@@ -123,6 +123,12 @@ function parseFeed(xml) {
   const items = [...xml.matchAll(/<item[\s>][\s\S]*?<\/item>/g)].map((m) => m[0]);
   const out = [];
   for (const it of items) {
+    // A trailer is an advert for the show, not an episode of it, and the app
+    // now skips them at playback. Counting them here would overstate how much a
+    // feed holds - Aleph Beta's "A Book Like No Other" reported five episodes
+    // when it has four and a promo.
+    const type = /<itunes:episodeType>([\s\S]*?)<\/itunes:episodeType>/i.exec(it)?.[1]?.trim();
+    if (type && /^trailer$/i.test(type)) continue;
     const pub = /<pubDate>([\s\S]*?)<\/pubDate>/.exec(it)?.[1]?.trim();
     const dur = /<itunes:duration>([\s\S]*?)<\/itunes:duration>/i.exec(it)?.[1]?.trim();
     const len = Number(/<enclosure[^>]*\blength="(\d+)"/i.exec(it)?.[1] || 0);

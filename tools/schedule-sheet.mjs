@@ -98,8 +98,8 @@ push([]);
 push(["5 · Open items"], "section");
 push(["Issue", "Detail"], "head");
 [
-  ["A Book Like No Other has only 5 episodes",
-   "It carries the Sunday and Friday Torah slots but the feed is tiny, so random play will repeat quickly. Worth pairing with another Aleph Beta feed or accepting the repetition."],
+  ["A Book Like No Other carries only its current series",
+   "Not a small show — a pruned feed. Aleph Beta keeps only the series in progress public: right now four parts of 'Yom Kippur and Yonah', plus a trailer the app now skips. Their whole catalogue behaves this way; Into the Verse shows 208-day gaps between consecutive episodes, which no weekly parsha show really has. The archive lives behind their subscription, not in the feed. So this slot will repeat within a series and change wholesale when Aleph Beta moves on — worth revisiting when it does."],
   ["Jews You Should Know needs length-aware picking",
    "Your note asked for it in a small slot on Sunday and a long slot after Wednesday. The feed mixes 3-minute Friday episodes with 45–100 minute interviews, and neither Google Home nor the app can currently filter by length — so it is scheduled as one Monday slot for now."],
 ].forEach((r) => push(r, "change"));

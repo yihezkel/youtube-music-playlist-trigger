@@ -131,13 +131,68 @@ object PodcastCatalog {
         var audio: String? = null
         var published = 0L
         var durationSec: Long? = null
+        var isTrailer = false
+        var skipped = 0
+        var event = parser.eventType
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> when (parser.name) {
+                    "item" -> { inItem = true; title = null; audio = null; published = 0L; durationSec = null; isTrailer = false }
+                    // Only the first <title> in an item: feeds also carry
+                    // itunes:title, and taking the last would sometimes win.
+                    "title" -> if (inItem && title == null) title = parser.nextText().trim()
+                    "pubDate" -> if (inItem) published = parseDate(parser.nextText())
+                    "itunes:duration", "duration" ->
+                        if (inItem && durationSec == null) durationSec = parseDuration(parser.nextText())
+                    // A trailer is an advert for the show, not an episode of it.
+                    // Aleph Beta's "A Book Like No Other" carries a 2m19s
+                    // trailer among only five items, so playing it was a real
+                    // prospect: it would have opened a family block with a promo.
+                    // "bonus" is left in - that is genuine content.
+                    "itunes:episodeType" ->
+                        if (inItem) isTrailer = parser.nextText().trim().equals("trailer", ignoreCase = true)
+                    "enclosure" -> if (inItem && audio == null) {
+                        val type = parser.getAttributeValue(null, "type").orEmpty()
+                        val url = parser.getAttributeValue(null, "url").orEmpty()
+                        if (url.isNotBlank() && (type.startsWith("audio") || type.isBlank())) {
+                            audio = url
+                        }
+                    }
+                }
+                XmlPullParser.END_TAG -> if (parser.name == "item") {
+                    val a = audio
+                    if (a != null && !isTrailer) out += Episode(title ?: "(untitled)", a, published, durationSec)
+                    if (a != null && isTrailer) skipped++
+                    inItem = false
+                }
+            }
+            event = parser.next()
+        }
+        // Never hand back nothing: a feed made only of trailers is better played
+        // than treated as empty, which would look like a broken feed.
+        if (out.isEmpty() && skipped > 0) {
+            Logger.w("PodcastCatalog", "Feed is only trailers; playing them anyway", mapOf("count" to skipped.toString()))
+            return parseKeepingTrailers(xml)
+        }
+        if (skipped > 0) Logger.i("PodcastCatalog", "Skipped trailers", mapOf("count" to skipped.toString()))
+        return out
+    }
+
+    /** Fallback for a feed whose every item is tagged as a trailer. */
+    private fun parseKeepingTrailers(xml: String): List<Episode> {
+        val parser = XmlPullParserFactory.newInstance().newPullParser()
+        parser.setInput(xml.reader())
+        val out = mutableListOf<Episode>()
+        var inItem = false
+        var title: String? = null
+        var audio: String? = null
+        var published = 0L
+        var durationSec: Long? = null
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             when (event) {
                 XmlPullParser.START_TAG -> when (parser.name) {
                     "item" -> { inItem = true; title = null; audio = null; published = 0L; durationSec = null }
-                    // Only the first <title> in an item: feeds also carry
-                    // itunes:title, and taking the last would sometimes win.
                     "title" -> if (inItem && title == null) title = parser.nextText().trim()
                     "pubDate" -> if (inItem) published = parseDate(parser.nextText())
                     "itunes:duration", "duration" ->
@@ -145,9 +200,7 @@ object PodcastCatalog {
                     "enclosure" -> if (inItem && audio == null) {
                         val type = parser.getAttributeValue(null, "type").orEmpty()
                         val url = parser.getAttributeValue(null, "url").orEmpty()
-                        if (url.isNotBlank() && (type.startsWith("audio") || type.isBlank())) {
-                            audio = url
-                        }
+                        if (url.isNotBlank() && (type.startsWith("audio") || type.isBlank())) audio = url
                     }
                 }
                 XmlPullParser.END_TAG -> if (parser.name == "item") {

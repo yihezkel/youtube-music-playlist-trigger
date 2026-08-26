@@ -100,6 +100,13 @@ if (mode !== "clean") {
       playlistUrls: [`${TORAH} [Autostop follower]`],
     });
   }
+  // "trailer": Aleph Beta's feed carries a 2m19s trailer among five items, so
+  // it is the case that proves trailers are left out of the rotation.
+  if (mode === "trailer") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.playlistUrls = ["https://rss.buzzsprout.com/2113502.rss [A Book Like No Other | sequential]"];
+    first.podcastEpisodeMode = "Sequential";
+  }
   // "musicend": a music entry in the middle of a queue. Nothing reports when a
   // playlist finishes, so the watcher has to notice and move on to entry 3.
   if (mode === "musicend") {
