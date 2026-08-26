@@ -140,6 +140,26 @@ class PlaybackTriggerService : Service() {
                 return
             }
 
+            // Don't start another episode when the block is seconds from its
+            // stop. Deliberately a narrow guard: refusing to start anything
+            // that cannot finish would leave dead air, and for a block whose
+            // whole point is continuous sound that is worse than an episode
+            // being cut off. This only avoids the pointless case - starting a
+            // fresh episode, waking the screen and running diagnostics for a
+            // handful of seconds of audio.
+            if (queueIndex > 0) {
+                val remainingSec = secondsUntilStop(schedule)
+                if (remainingSec != null && remainingSec < QUEUE_TAIL_GUARD_SEC) {
+                    Logger.i("PlaybackSvc", "Not advancing queue; block ends imminently", mapOf(
+                        "scheduleId" to schedule.id,
+                        "name" to schedule.name,
+                        "queueIndex" to queueIndex.toString(),
+                        "secondsLeft" to remainingSec.toString(),
+                    ))
+                    return
+                }
+            }
+
             // A continuous schedule walks its entries in order and wraps, so
             // the block keeps filling; every other schedule picks one entry.
             val choice = if (schedule.continuousPlay) {
@@ -480,6 +500,21 @@ class PlaybackTriggerService : Service() {
      * Safe to do network I/O here: this runs inside the service's coroutine
      * scope on [Dispatchers.Default], not on the main thread.
      */
+    /**
+     * Seconds until [schedule]'s stop time, or null when it has none.
+     *
+     * Mirrors [AlarmScheduler.scheduleStop]'s rule that a stop at or before the
+     * current time belongs to the following day, so an overnight block is not
+     * mistaken for one that has already ended.
+     */
+    private fun secondsUntilStop(schedule: Schedule): Long? {
+        val stopTime = schedule.stopLocalTime() ?: return null
+        val now = LocalDateTime.now()
+        var stop = LocalDateTime.of(now.toLocalDate(), stopTime)
+        if (!stop.isAfter(now)) stop = stop.plusDays(1)
+        return java.time.Duration.between(now, stop).seconds
+    }
+
     private suspend fun playPodcast(schedule: Schedule, entry: MediaEntry, queueIndex: Int): Boolean {
         val feedUrl = when (entry.kind) {
             MediaKind.PodcastFeed -> entry.id
@@ -537,6 +572,11 @@ class PlaybackTriggerService : Service() {
     companion object {
         const val MANUAL_DEFAULT_ID = "manual"
         const val EXTRA_QUEUE_INDEX = "queueIndex"
+        /**
+         * How close to a block's stop time is too close to start another
+         * episode. Small on purpose - see the guard's comment in runFlow.
+         */
+        const val QUEUE_TAIL_GUARD_SEC = 60L
         const val YT_MUSIC_PKG = "com.google.android.apps.youtube.music"
         const val NOTIFICATION_ID = 1001
         const val NOTIFICATION_FAILURE_ID = 1002

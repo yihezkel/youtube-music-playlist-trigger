@@ -27,8 +27,8 @@ if (mode === "test") {
     name: TEST_NAME,
     enabled: true,
     daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
-    timeMinutes: 12 * 60,
-    stopTimeMinutes: null,
+    timeMinutes: Number(process.argv[4] ?? 12 * 60),
+    stopTimeMinutes: process.argv[3] ? Number(process.argv[3]) : null,
     // Two entries so the chain has somewhere to go. Same short feed twice:
     // each visit re-picks a random episode, so they will differ.
     playlistUrls: [`${TORAH} [Torah 1]`, `${TORAH} [Torah 2]`],
@@ -36,7 +36,7 @@ if (mode === "test") {
     autoStopMinutes: null,
     enableShuffle: false,
     skipFirstTrack: false,
-    podcastEpisodeMode: "Random",
+    podcastEpisodeMode: process.argv[5] || "Random",
     continuousPlay: true,
     lastPickedPlaylistIds: [],
   });
