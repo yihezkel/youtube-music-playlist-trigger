@@ -1,6 +1,7 @@
 package com.jasonschoenbrun.ytmtrigger.playback
 
 import com.jasonschoenbrun.ytmtrigger.data.MediaEntries
+import com.jasonschoenbrun.ytmtrigger.data.MediaEntry
 import com.jasonschoenbrun.ytmtrigger.data.MediaKind
 import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
@@ -48,9 +49,19 @@ object PlaylistPicker {
      * The entry at [index] of a continuous schedule, wrapping past the end.
      *
      * Wrapping is what keeps a block full: a queue of four shows totalling two
-     * hours has to start again to cover a three-hour block, and because podcast
-     * entries re-pick an episode each time, going round again yields fresh
-     * content rather than a repeat.
+     * hours has to start again to cover a three-hour block.
+     *
+     * Going round again only yields new content for entries that re-pick -
+     * random draws a different episode, sequential advances. A "newest episode"
+     * entry does not: `episodes.first()` is deterministic, so a second lap
+     * would replay the identical episode. Those entries are therefore passed
+     * over on any lap after the first, handing the slot to the next random or
+     * sequential show. The skip is bounded, so a queue made entirely of newest
+     * entries still plays rather than falling silent.
+     *
+     * The entry actually chosen is reported back as [Choice.index] so the
+     * player chains on from there; advancing from the requested index would
+     * land straight back on the entry just skipped.
      */
     fun at(schedule: Schedule, index: Int): Choice? {
         val pool = schedule.playlistUrls
@@ -60,11 +71,22 @@ object PlaylistPicker {
             Logger.w("Picker", "Empty playlist pool", mapOf("scheduleId" to schedule.id))
             return null
         }
-        val picked = pool[((index % pool.size) + pool.size) % pool.size]
+        fun slot(i: Int) = ((i % pool.size) + pool.size) % pool.size
+        var resolved = index
+        var skipped = 0
+        if (index >= pool.size) {
+            while (skipped < pool.size && repeatsOnWrap(pool[slot(resolved)], schedule)) {
+                resolved++
+                skipped++
+            }
+        }
+        val picked = pool[slot(resolved)]
         Logger.i("Picker", "Queue entry", mapOf(
             "scheduleId" to schedule.id,
-            "index" to index.toString(),
+            "index" to resolved.toString(),
             "of" to pool.size.toString(),
+            "lap" to (resolved / pool.size).toString(),
+            "skippedNewest" to skipped.toString(),
             "kind" to picked.kind.name,
             "name" to (picked.label ?: picked.id),
         ))
@@ -74,8 +96,14 @@ object PlaylistPicker {
             label = picked.label,
             kind = picked.kind,
             episodeMode = picked.episodeMode,
+            index = resolved,
         )
     }
+
+    /** True when replaying [entry] would hand back the episode it already played. */
+    private fun repeatsOnWrap(entry: MediaEntry, schedule: Schedule): Boolean =
+        (entry.kind == MediaKind.PodcastFeed || entry.kind == MediaKind.SpotifyShow) &&
+            (entry.episodeMode ?: schedule.podcastEpisodeMode) == PodcastEpisodeMode.Latest
 
     data class Choice(
         val url: String,
@@ -89,5 +117,10 @@ object PlaylistPicker {
          * brackets held.
          */
         val episodeMode: PodcastEpisodeMode? = null,
+        /**
+         * Which queue entry this is, after any wrap-lap skipping. Chaining uses
+         * this rather than the requested index. Always 0 for a single pick.
+         */
+        val index: Int = 0,
     )
 }

@@ -142,13 +142,14 @@ for (const [key, list] of Object.entries(Q)) {
   list.forEach(([show, mode, why], i) => push(["", String(i + 1), show, label(show), mode, why]));
   const total = list.reduce((s, [n]) => s + (n.startsWith("Music") ? 0 : (mins(n) || 0)), 0);
   push(["", "", "Queue length (median episodes)", `${Math.floor(total / 60)}h ${total % 60}m`, "",
-    b.mins ? `Block is ${Math.floor(b.mins / 60)}h ${b.mins % 60}m — the queue continues from the top, drawing fresh episodes, to fill it` : "Runs to the block's end"], "total");
+    b.mins ? `Block is ${Math.floor(b.mins / 60)}h ${b.mins % 60}m — the queue restarts from the top to fill it. Random and sequential entries draw something different each lap; newest entries play once, then are passed over` : "Runs to the block's end"], "total");
 }
 push([]);
 
 push(["4 · How it plays"], "section");
 [
   ["Continuous, not timed", "Each block is a queue. When an episode ends the next starts immediately, so a 22-minute episode and a 78-minute one both simply flow on. Only the block's start and stop are fixed."],
+  ["Going round again", "When a queue is shorter than its block it restarts from the top. Random entries draw a different episode and sequential entries advance, so another lap is new material. A 'newest' entry cannot do that — the newest episode is still the same episode — so once it has played it is passed over and the slot goes to the next show in the queue."],
   ["Random vs newest", "'Random' draws from the whole back catalogue — right for evergreen shows and archives. 'Newest' is for news and for feeds that mix formats, where a random pick lands on the wrong thing."],
   ["Shabat and Yom Tov", "No Friday end time is needed. The app blocks all playback for Shabat and Yom Tov and mutes the speaker 15 minutes before it begins."],
   ["Motzaei Shabat", "Uses the 'Shabat/Yom Tov ends' anchor built this week, so it follows nightfall through the year instead of drifting against a clock time."],

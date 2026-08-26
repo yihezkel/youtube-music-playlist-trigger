@@ -186,7 +186,7 @@ class PlaybackTriggerService : Service() {
             val entry = MediaEntries.parse(choice.url)
                 .copy(label = choice.label, episodeMode = choice.episodeMode)
             if (entry.kind == MediaKind.PodcastFeed || entry.kind == MediaKind.SpotifyShow) {
-                val played = playPodcast(schedule, entry, if (queueIndex < 0) 0 else queueIndex)
+                val played = playPodcast(schedule, entry, choice.index)
                 if (!played) postFailure("Could not play podcast for '${schedule.name}'")
                 return
             }

@@ -37,9 +37,13 @@ const fmt = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String
 if (mode !== "clean") {
   const urls = mode === "guard"
     ? [`${TORAH} [Short clip]`, `${SHORTWAVE} [Long episode]`]
-    : mode === "modes"
+    : mode === "modes" || mode === "wrap"
       // Schedule-level mode is Random below, so if per-entry parsing works the
       // log must show Latest and Sequential with modeFrom=entry.
+      //
+      // For "wrap" the same pair doubles as the wrap test: entry 1 is a newest
+      // entry, which must play on lap 0 and be skipped on every later lap,
+      // leaving entry 2 to carry the rest of the block.
       ? [`${TORAH} [Newest one | newest]`, `${TORAH} [In order | sequential]`]
       : [`${SHORTWAVE} [Long episode]`];
   cfg.schedules.push({
@@ -56,7 +60,7 @@ if (mode !== "clean") {
     autoStopMinutes: null,
     enableShuffle: false,
     skipFirstTrack: false,
-    podcastEpisodeMode: mode === "modes" ? "Random" : "Latest",
+    podcastEpisodeMode: mode === "modes" || mode === "wrap" ? "Random" : "Latest",
     continuousPlay: true,
     lastPickedPlaylistIds: [],
   });
@@ -78,7 +82,7 @@ for (let i = 0; i < 2; i++) {
   execSync(`"${ADB}" shell am start -n com.jasonschoenbrun.ytmtrigger/.ui.MainActivity`);
   await new Promise((r) => setTimeout(r, i === 0 ? 16000 : 12000));
 }
-const log = execSync(`"${ADB}" shell "run-as com.jasonschoenbrun.ytmtrigger cat files/logs/$(date +%Y-%m-%d).log"`).toString();
+const log = execSync(`"${ADB}" shell "run-as com.jasonschoenbrun.ytmtrigger tail -400 files/logs/$(date +%Y-%m-%d).log"`, { maxBuffer: 64 * 1024 * 1024 }).toString();
 const applied = log.split("\n").filter((l) => l.includes("Applied remote config")).pop();
 const armed = log.split("\n").filter((l) => l.includes("id=zz-queue-test")).pop();
 console.log("  " + (applied || "no sync line").trim());
