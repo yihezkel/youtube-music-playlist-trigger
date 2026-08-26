@@ -174,7 +174,8 @@ push(["6 · Change history"], "section");
 push(["", "Every addition, removal and timing change now lives on the 'Schedule change log' tab, " +
   "newest first, with the reason where one was written down."], "note");
 push([]);
-push(["Nothing here has been applied to Google Home or the YTM Trigger app yet."], "sub");
+push(["Applied to Google Home and to the YTM Trigger app. The app is the live system; " +
+  "the Google Home podcast routines are still running in parallel until you delete them."], "sub");
 
 // ---------------------------------------------------------------- write
 const meta = (await api("GET", "?fields=sheets.properties")).data;
