@@ -229,8 +229,8 @@ export const BLOCKS = [
 
   {
     id: "E", name: "Teen Evening", who: "Your 15-year-old",
-    time: "19:30 – 21:30, Sun–Thu", mins: 120, start: hm(19, 30), stop: hm(21, 30),
-    idea: "Longer, more demanding material once the younger ones are down. TED Talks Daily sits at the back end of each night — your note suggested a last slot around 8pm.",
+    time: "19:30 – about 21:30, Sun–Thu", mins: 120, start: hm(19, 30), stop: null, endsWithQueue: true,
+    idea: "Longer, more demanding material once the younger ones are down. Last block of the night, so it is not cut off: the queue is sized to land near 21:30 and the final episode is allowed to finish. TED Talks Daily sits at the back of each night — your note suggested a last slot around 8pm.",
     queues: [
       {
         label: "Sunday", appName: "E Teen Sun", days: [SUN], shows: [
@@ -287,26 +287,26 @@ export const BLOCKS = [
 
   {
     id: "G", name: "Motzaei Shabat — kids", who: "Kids",
-    time: "Shabat ends + 30 min → 20:30", mins: null,
-    start: hm(20), stop: hm(20, 30), anchor: "ShabatYomTovEnd", offset: 30,
-    idea: "Anchored to nightfall, not the clock. Read the seasonal warning in section 5 — this window is 2½ hours in midwinter and under 10 minutes in midsummer.",
+    time: "Shabat ends + 30 min, runs about 40 min", mins: 40,
+    start: hm(20), stop: null, anchor: "ShabatYomTovEnd", offset: 30, endsWithQueue: true,
+    idea: "Anchored to nightfall, not the clock. It used to stop at a fixed 20:30, which in midsummer left the kids about nine minutes and in midwinter left two and a half hours to be filled with music. It now simply plays its queue and ends, so the kids get the same ~40 minutes all year, and the teen block starts when this one finishes rather than at a clock time.",
     queues: [{
       label: "Motzaei Shabat (kids)", appName: "G Motzaei Shabat - kids", days: [SAT], shows: [
-        ["TorahAnytime Daily Dose", "Deliberately first: in midsummer this whole window is under 10 minutes, so lead with something that fits"],
+        ["TorahAnytime Daily Dose", "Two minutes to open on"],
         ["Jewish History Nerds", "Jewish history, accessible to the kids"],
-        [MUSIC, ""],
       ],
     }],
   },
 
   {
     id: "H", name: "Motzaei Shabat — teen", who: "Your 15-year-old",
-    time: "20:30 – 21:30", mins: 60, start: hm(20, 30), stop: hm(21, 30), mode: "Latest",
-    idea: "A fixed hour that works all year, unlike the kids' window above.",
+    time: "When the kids' block ends, runs about 76 min", mins: 75,
+    start: hm(20, 30), stop: null, endsWithQueue: true, mode: "Latest",
+    startsAfter: "sched-g-motzaei-shabat-kids",
+    idea: "Follows the kids' block rather than starting at a fixed 20:30, so it tracks nightfall through the year instead of colliding with the kids in summer and leaving a gap in winter. Sized around Meaningful People, whose typical episode is 76 minutes.",
     queues: [{
       label: "Motzaei Shabat (teen)", appName: "H Motzaei Shabat - teen", days: [SAT], shows: [
-        ["Meaningful People", "Publishes on Saturdays, so the newest episode is genuinely new at this point in the week"],
-        ["TED Talks Daily", ""],
+        ["Meaningful People", "Publishes on Saturdays, so the newest episode is genuinely new at this point in the week. At ~76m it fills the block on its own"],
       ],
     }],
   },

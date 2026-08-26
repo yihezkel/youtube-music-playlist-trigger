@@ -150,13 +150,38 @@ class PlaybackTriggerService : Service() {
 
             // A continuous schedule walks its entries in order and wraps, so
             // the block keeps filling; every other schedule picks one entry.
+            //
+            // A block with no stop time is the last of its day. It runs its
+            // queue once and finishes with the last episode rather than looping
+            // back to the top, which would otherwise play on all night.
+            val endsWithQueue = schedule.continuousPlay && schedule.stopTimeMinutes == null
             val choice = if (schedule.continuousPlay) {
-                PlaylistPicker.at(schedule, if (queueIndex < 0) 0 else queueIndex)
+                PlaylistPicker.at(schedule, if (queueIndex < 0) 0 else queueIndex, wrap = !endsWithQueue)
             } else {
                 PlaylistPicker.pick(repo, schedule)
             }
             if (choice == null) {
-                postFailure("No playlists configured for '${schedule.name}'")
+                // Having played something already means the pool is not empty,
+                // so this is the queue running out, not a misconfiguration.
+                if (endsWithQueue && queueIndex > 0) {
+                    Logger.i("PlaybackSvc", "Queue finished; block ends", mapOf(
+                        "scheduleId" to schedule.id,
+                        "itemsPlayed" to queueIndex.toString(),
+                    ))
+                    // Hand on to whatever follows this block. Chaining rather
+                    // than arming a clock time is the point: how long this
+                    // queue ran depends on the episodes it drew, so no fixed
+                    // offset would land on its end.
+                    val next = repo.all().firstOrNull { it.enabled && it.startsAfter == schedule.id }
+                    if (next != null) {
+                        Logger.i("PlaybackSvc", "Starting the block that follows", mapOf(
+                            "after" to schedule.id, "next" to next.id, "name" to next.name,
+                        ))
+                        startQueued(this, next.id, 0)
+                    }
+                } else {
+                    postFailure("No playlists configured for '${schedule.name}'")
+                }
                 return
             }
             // Arm the stop time on the first item only. Re-arming mid-queue

@@ -14,6 +14,7 @@ const DOC = "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
 const TORAH = "https://rss.buzzsprout.com/1566434.rss";     // ~108s episodes
 const SHORTWAVE = "https://feeds.npr.org/510351/podcast.xml"; // ~13 min episodes
 const NAME = "ZZ QueueTest";
+const NAME2 = "ZZ QueueTest Follower";
 const ADB = `${process.env.LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe`;
 
 const mode = process.argv[2] || "clean";
@@ -26,7 +27,7 @@ const ref = db.doc(DOC);
 const snap = await ref.get();
 const cfg = JSON.parse(snap.get("json"));
 const revision = Number(snap.get("revision") || 0);
-cfg.schedules = cfg.schedules.filter((s) => s.name !== NAME);
+cfg.schedules = cfg.schedules.filter((s) => s.name !== NAME && s.name !== NAME2);
 
 const deviceNow = execSync(`"${ADB}" shell "date +%H:%M"`).toString().trim();
 const [hh, mm] = deviceNow.split(":").map(Number);
@@ -64,6 +65,22 @@ if (mode !== "clean") {
     continuousPlay: true,
     lastPickedPlaylistIds: [],
   });
+  // "chain": the first block has no stop time, so it ends with its queue and
+  // must hand on to the follower rather than the follower waiting on a clock.
+  if (mode === "chain") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = null;
+    first.playlistUrls = [`${TORAH} [Chain first]`];
+    cfg.schedules.push({
+      ...first,
+      id: "zz-queue-test-2",
+      name: NAME2,
+      timeMinutes: start + 60,      // deliberately far off; must never be used
+      stopTimeMinutes: null,
+      startsAfter: "zz-queue-test",
+      playlistUrls: [`${TORAH} [Chain second]`],
+    });
+  }
 }
 
 await ref.set({ json: JSON.stringify(cfg), revision: revision + 1 }, { merge: true });

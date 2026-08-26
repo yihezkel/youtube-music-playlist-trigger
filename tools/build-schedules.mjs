@@ -40,6 +40,7 @@ const built = all.map((q) => ({
   stopTimeMinutes: q.block.stop,
   timeAnchor: q.block.anchor || "FixedClock",
   anchorOffsetMinutes: q.block.offset || 0,
+  startsAfter: q.block.startsAfter || null,
   playlistUrls: q.shows.flatMap(([s]) => (s === MUSIC ? music : [feed(s)])),
   targetVolumePercent: 100,
   autoStopMinutes: null,
@@ -70,21 +71,32 @@ console.log("kept:", keep.map((s) => `${s.name}${s.enabled ? "" : " (disabled)"}
 // always last, and it runs to the block's end, so a queue containing it is full
 // by definition.
 console.log("\nqueue depth (median episode lengths):");
-let thin = 0;
+let thin = 0, over = 0;
 for (const q of all) {
   const B = q.block.mins;
   const hasMusic = q.shows.some(([s]) => s === MUSIC);
   const total = q.shows.reduce((n, [s]) => n + (s === MUSIC ? 0 : median(s)), 0);
+  const tag = (q.block.id + " " + q.label).padEnd(34);
+  // A block that ends with its queue is not judged on filling a window - it is
+  // judged on landing near its nominal end, since nothing will cut it off.
+  if (q.block.endsWithQueue) {
+    const drift = total - B;
+    const flag = Math.abs(drift) > 15 ? `  ENDS ${drift > 0 ? "+" : ""}${drift}m OFF TARGET` : "";
+    if (Math.abs(drift) > 15) over++;
+    console.log(`  ${tag} ${String(total).padStart(4)}m vs ${String(B).padStart(4)}m nominal  runs to the end${flag}`);
+    continue;
+  }
   if (B == null || hasMusic) {
-    console.log(`  ${(q.block.id + " " + q.label).padEnd(34)} ${String(total).padStart(4)}m  runs to block end`);
+    console.log(`  ${tag} ${String(total).padStart(4)}m  runs to block end`);
     continue;
   }
   const laps = total ? B / total : Infinity;
   const flag = laps > 1.35 ? "  THIN - replays" : "";
   if (laps > 1.35) thin++;
-  console.log(`  ${(q.block.id + " " + q.label).padEnd(34)} ${String(total).padStart(4)}m of ${String(B).padStart(4)}m  ${laps.toFixed(2)} laps${flag}`);
+  console.log(`  ${tag} ${String(total).padStart(4)}m of ${String(B).padStart(4)}m  ${laps.toFixed(2)} laps${flag}`);
 }
 console.log(thin ? `\n${thin} queue(s) too thin for their block.` : "\nEvery timed queue outlasts its block.");
+if (over) console.log(`${over} queue-ended block(s) land more than 15 min from their nominal end.`);
 
 if (process.argv[2] === "push") {
   await ref.set({ json: JSON.stringify(cfg), revision: revision + 1 }, { merge: true });

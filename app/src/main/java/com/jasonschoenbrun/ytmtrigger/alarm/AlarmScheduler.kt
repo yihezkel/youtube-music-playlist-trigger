@@ -97,6 +97,12 @@ object AlarmScheduler {
 
     fun scheduleNext(context: Context, schedule: Schedule) {
         if (!schedule.enabled) return
+        if (schedule.startsAfter != null) {
+            Logger.i("Alarm", "Not clock-armed; follows another block", mapOf(
+                "id" to schedule.id, "startsAfter" to schedule.startsAfter,
+            ))
+            return
+        }
         if (schedule.daysOfWeek.isEmpty()) {
             Logger.w("Alarm", "Schedule has no days; not scheduling", mapOf("id" to schedule.id))
             return
@@ -303,6 +309,7 @@ object AlarmScheduler {
         schedule: Schedule,
         now: LocalDateTime = LocalDateTime.now(),
     ): Long? {
+        if (schedule.startsAfter != null) return null
         val days = schedule.daysOfWeek.map { DayOfWeek.of(it) }.toSet()
         if (days.isEmpty()) return null
         val cfg = SettingsRepository.get(context).current().calendarConfig()
@@ -333,6 +340,7 @@ object AlarmScheduler {
         days: Long,
         now: LocalDateTime = LocalDateTime.now(),
     ): List<LocalDateTime> {
+        if (schedule.startsAfter != null) return emptyList()
         val wanted = schedule.daysOfWeek.map { DayOfWeek.of(it) }.toSet()
         if (wanted.isEmpty()) return emptyList()
         val cfg = SettingsRepository.get(context).current().calendarConfig()

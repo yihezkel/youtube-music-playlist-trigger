@@ -72,6 +72,14 @@ const mine = [
   ["Added", "99% Invisible", "D - Family Table (Wed)", "Same reason."],
   ["Added", "Smash Boom Best", "D - Family Table (Tue)", "Same reason."],
 
+  ["Timing", "Motzaei Shabat", "G - kids, H - teen",
+    "The kids' block no longer stops at a fixed 20:30. It plays its ~40 minute queue and ends, so it is the same length all year instead of nine minutes in late August and two and a half hours in December. The teen block now starts when the kids' block finishes rather than at 20:30, since how long the kids' queue runs depends on the episodes it draws."],
+  ["Removed", "Music", "G - Motzaei Shabat (kids)",
+    "Music never hands control back, so a block ending in it can never end on its own. Removed so the block can finish with its last episode."],
+  ["Removed", "TED Talks Daily", "H - Motzaei Shabat (teen)",
+    "Meaningful People alone is about 76 minutes, so the block already ran past its nominal end; adding a second show pushed it to nearly 22:00."],
+
+
   ["Not scheduled", "Making Sense with Sam Harris", "B - Sarah's Day",
     "Checked again rather than relying on the earlier conversation. The free feed mixes full episodes with paywall previews - 12 and 21 minute items next to 85 and 81 minute ones - so a random pick would often cut off mid-conversation. Left out until the app can filter by length."],
 

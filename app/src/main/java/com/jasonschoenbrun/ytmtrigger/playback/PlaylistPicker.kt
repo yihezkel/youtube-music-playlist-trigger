@@ -46,10 +46,13 @@ object PlaylistPicker {
     }
 
     /**
-     * The entry at [index] of a continuous schedule, wrapping past the end.
+     * The entry at [index] of a continuous schedule.
      *
-     * Wrapping is what keeps a block full: a queue of four shows totalling two
-     * hours has to start again to cover a three-hour block.
+     * With [wrap] the queue restarts from the top past its end, which is what
+     * keeps a timed block full: a queue of four shows totalling two hours has
+     * to start again to cover a three-hour block. Without it the queue is
+     * finite and running off the end returns null, which is how a block with no
+     * stop time ends with its last episode instead of playing on all night.
      *
      * Going round again only yields new content for entries that re-pick -
      * random draws a different episode, sequential advances. A "newest episode"
@@ -63,12 +66,18 @@ object PlaylistPicker {
      * player chains on from there; advancing from the requested index would
      * land straight back on the entry just skipped.
      */
-    fun at(schedule: Schedule, index: Int): Choice? {
+    fun at(schedule: Schedule, index: Int, wrap: Boolean = true): Choice? {
         val pool = schedule.playlistUrls
             .map { MediaEntries.parse(it) }
             .filter { it.kind != MediaKind.Unknown }
         if (pool.isEmpty()) {
             Logger.w("Picker", "Empty playlist pool", mapOf("scheduleId" to schedule.id))
+            return null
+        }
+        if (!wrap && index >= pool.size) {
+            Logger.i("Picker", "Queue exhausted", mapOf(
+                "scheduleId" to schedule.id, "of" to pool.size.toString(),
+            ))
             return null
         }
         fun slot(i: Int) = ((i % pool.size) + pool.size) % pool.size

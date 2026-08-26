@@ -31,8 +31,8 @@ const WEEK = [
   ["B · Sarah's Day\n08:00–15:50", "Mindset + business", "Mindset + people", "Mindset + ideas", "Mindset + Israel", "Mindset + founders", "(short — erev Shabat)", "—"],
   ["C · Landing\n16:00–16:30 · Kids", "Who Smarted? + music", "Who Smarted? + music", "Who Smarted? + music", "Who Smarted? + music", "Who Smarted? + music", "—", "—"],
   ["D · Family Table\n16:30–19:30 · Kids + Sarah", "Torah & Science", "People & Stories", "★ Rabbi Breitowitz", "Story & Design", "★ Breitowitz & Community", "—", "—"],
-  ["E · Teen Evening\n19:30–21:30 · 15-year-old", "Orthodox Conundrum\n+ StarTalk", "School of Greatness\n+ SYSK", "18Forty", "SeforimChatter\n+ Israeli History", "Call Me Back\n+ Freakonomics", "—", "—"],
-  ["F/G/H · Shabat edges", "—", "—", "—", "—", "—", "Parsha + music\nfrom ~15:10", "Kids: ends+30 → 20:30\nTeen: 20:30 → 21:30"],
+  ["E · Teen Evening\n19:30 – about 21:30 · 15-year-old", "Orthodox Conundrum\n+ StarTalk", "School of Greatness\n+ SYSK", "18Forty", "SeforimChatter\n+ Israeli History", "Call Me Back\n+ Freakonomics", "—", "—"],
+  ["F/G/H · Shabat edges", "—", "—", "—", "—", "—", "Parsha + music\nfrom ~15:10", "Kids: ends+30, ~40 min\nTeen: follows, ~76 min"],
 ];
 
 const rows = [];
@@ -61,7 +61,9 @@ for (const q of queues()) {
     push(["", String(i + 1), showName(show), label(show), modeLabel(show), why]));
   const total = q.shows.reduce((s, [n]) => s + (n === MUSIC ? 0 : (mins(n) || 0)), 0);
   push(["", "", "Queue length (median episodes)", `${Math.floor(total / 60)}h ${total % 60}m`, "",
-    q.block.mins ? `Block is ${Math.floor(q.block.mins / 60)}h ${q.block.mins % 60}m — the queue is sized to outlast it, so nothing is replayed` : "Runs to the block's end"], "total");
+    q.block.endsWithQueue
+      ? `Nothing cuts this block off — it ends with its last episode, at about ${Math.floor(q.block.mins / 60)}h ${q.block.mins % 60}m`
+      : (q.block.mins ? `Block is ${Math.floor(q.block.mins / 60)}h ${q.block.mins % 60}m — the queue is sized to outlast it, so nothing is replayed` : "Runs to the block's end")], "total");
 }
 push([]);
 
@@ -71,7 +73,8 @@ push(["4 · How it plays"], "section");
   ["Going round again", "Each queue is now sized to outlast its block, so in normal running nothing repeats. If a block does outlive its queue — episodes shorter than usual, say — it restarts from the top: random entries draw a different episode and sequential entries advance, while a 'newest' entry is passed over, because the newest episode is still the same episode it already played."],
   ["Random vs newest", "'Random' draws from the whole back catalogue — right for evergreen shows and archives. 'Newest' is for news and for feeds that mix formats, where a random pick lands on the wrong thing."],
   ["Shabat and Yom Tov", "No Friday end time is needed. The app blocks all playback for Shabat and Yom Tov and mutes the speaker 15 minutes before it begins."],
-  ["Motzaei Shabat", "Uses the 'Shabat/Yom Tov ends' anchor built this week, so it follows nightfall through the year instead of drifting against a clock time."],
+  ["Blocks that end with their queue", "The last block of a day has no stop time. It plays each show once and finishes with the last episode instead of being cut off mid-sentence, so its queue is sized to land near the nominal end rather than to outlast it. That covers the teen evening on weeknights, and both motzaei Shabat blocks."],
+  ["Motzaei Shabat", "The kids' block starts 30 minutes after Shabat ends and simply plays its queue, about 40 minutes, whatever the season. The teen block then starts when the kids' block finishes rather than at a clock time. It used to stop at a fixed 20:30, which left the kids nine minutes in late August and two and a half hours to fill with music in December."],
   ["Music", "Music entries mean your existing YTM Trigger playlists. Rotating them keeps the kids' blocks from feeling like school."],
 ].forEach(([k, v]) => push(["", k, v], "note"));
 push([]);
@@ -79,8 +82,6 @@ push([]);
 push(["5 · Things you should know before we build this"], "section");
 push(["Issue", "Detail"], "head");
 [
-  ["The motzaei Shabat window collapses in summer",
-   "You asked for Shabat-end + 30 min until 20:30. In late December Shabat ends about 17:30, so that is a 2½-hour block. In late August it ends about 19:51, so the window is 20:21 → 20:30 — nine minutes. That is why the kids' motzaei queue leads with a 2-minute item. If you would rather it stayed useful all year, either let it run past 20:30 in summer or drop it between about May and September."],
   ["Your sheet disagrees with the hours you gave me",
    "The Weekly tab said: 'Hallel gets home about 13:45 every day', 'Miryam gets home about 14:00 every day', 'Aharon gets home 17:40–18:00 every day, except Tuesdays at 15:25'. You told me the kids are around from 16:00. I have built to what you told me, but if those older lines are still true then roughly two hours of Sarah's block each afternoon actually has children in it, and should be family content instead."],
   ["A Book Like No Other has only 5 episodes",
