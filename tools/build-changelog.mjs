@@ -58,8 +58,8 @@ const mine = [
   ["Added", "Curiosity Weekly", "B - Sarah's Day (Mon-Thu), E - Teen (Thu)", "Same reason. Twelve minutes of science news, useful for filling the tail of a block."],
   ["Added", "The Office of Rabbi Sacks", "B - Sarah's Day (all days)", "Same reason. Ten minutes, so it closes a day without overrunning."],
   ["Added", "Shapell's Virtual Beit Midrash", "B - Sarah's Day (Sun, Mon, Thu)", "Same reason. Torah shiurim, 500 in the archive."],
-  ["Added", "The Jordan B. Peterson Podcast", "B - Sarah's Day (Tue)",
-    "Same reason, but flagged rather than assumed: long-form and strongly opinionated, so say if you would rather it were not there."],
+  ["Not scheduled", "The Jordan B. Peterson Podcast", "B - Sarah's Day (Tue)",
+    "Added and removed the same day, before it ever played: you said Sarah would not enjoy it. Tuesday is refilled with Ask Haviv Anything and Shapell's Virtual Beit Midrash, both already in her week. Recorded so it is not proposed again."],
   ["Added", "Economist Radio", "B - Sarah's Day (all days)",
     "Already on your Google Home daily routine but never carried into the app. Now in the app line-up."],
   ["Added", "Uncanny Valley (WIRED)", "B - Sarah's Day (all days)", "Also already on Google Home and missing from the app."],
@@ -72,7 +72,7 @@ const mine = [
   ["Added", "99% Invisible", "D - Family Table (Wed)", "Same reason."],
   ["Added", "Smash Boom Best", "D - Family Table (Tue)", "Same reason."],
 
-  ["Not considered", "Making Sense with Sam Harris", "B - Sarah's Day",
+  ["Not scheduled", "Making Sense with Sam Harris", "B - Sarah's Day",
     "Checked again rather than relying on the earlier conversation. The free feed mixes full episodes with paywall previews - 12 and 21 minute items next to 85 and 81 minute ones - so a random pick would often cut off mid-conversation. Left out until the app can filter by length."],
 
   ["Added", "The Q & A with Rabbi Breitowitz", "D - Family Table (Tue, Thu)",
@@ -170,6 +170,7 @@ req.push(
   rule(2, "Added", { red: 0.82, green: 0.93, blue: 0.82 }),
   rule(2, "Removed", { red: 0.95, green: 0.86, blue: 0.86 }),
   rule(2, "Timing", { red: 0.87, green: 0.90, blue: 0.98 }),
+  rule(2, "Not scheduled", { red: 0.93, green: 0.93, blue: 0.93 }),
   rule(1, "AI", { red: 0.93, green: 0.95, blue: 1.00 }),
 );
 await api("POST", ":batchUpdate", { requests: req });

@@ -10,7 +10,27 @@ const ID = "<SHEET_ID>";
 const TAB = "Podcast Catalog";
 const OLD_TABS = ["Podcast Catalogue"]; // earlier spelling
 import { MUSIC, queues } from "./schedule-blocks.mjs";
+import { PODCASTS } from "./podcast-list.mjs";
 const rows = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
+
+// podcast-stats.json is a cache of what was fetched from each feed. The
+// editorial fields - status, slot, note - belong to the master list, so take
+// them from there rather than from whatever the cache happened to hold when it
+// was last rebuilt. Without this, changing a status in podcast-list.mjs did
+// nothing until every feed was re-fetched.
+{
+  const master = new Map(PODCASTS.map((p) => [p.name, p]));
+  let stale = 0;
+  for (const r of rows) {
+    const m = master.get(r.name);
+    if (!m) continue;
+    if (r.status !== m.status || (m.note || "") !== (r.note || "")) stale++;
+    r.status = m.status;
+    r.slot = m.slot;
+    if (m.note) r.note = m.note;
+  }
+  if (stale) console.log(`refreshed ${stale} row(s) from the master list`);
+}
 
 const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
 const client = await auth.getClient();

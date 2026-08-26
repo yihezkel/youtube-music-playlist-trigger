@@ -61,7 +61,7 @@ export const PODCASTS = [
   { name: "Money Talks from Economist Radio", status: "Considering", slot: "Weekly", q: "Money Talks Economist" },
   { name: "Making Sense with Sam Harris", status: "Considering", slot: "Weekly", q: "Making Sense with Sam Harris" },
   { name: "Philosophize This!", status: "Considering", slot: "Weekly", q: "Philosophize This" },
-  { name: "The Jordan B. Peterson Podcast", status: "Considering", slot: "Weekly", q: "Jordan B Peterson Podcast" },
+  { name: "The Jordan B. Peterson Podcast", status: "Dropped", slot: "Weekly", q: "Jordan B Peterson Podcast", note: "Not scheduled - Jason: Sarah would not enjoy it" },
   { name: "The Jewish Thought Project", status: "Considering", slot: "Weekly", q: "The Jewish Thought Project" },
   { name: "The Office of Rabbi Sacks", status: "Considering", slot: "Weekly", q: "Rabbi Sacks", pick: "The Rabbi Sacks Legacy" },
   { name: "Breslev Torah Lessons", status: "Considering", slot: "Weekly", q: "Breslev Torah" },
