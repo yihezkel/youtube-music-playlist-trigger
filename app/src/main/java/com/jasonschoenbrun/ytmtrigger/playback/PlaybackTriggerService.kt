@@ -222,7 +222,16 @@ class PlaybackTriggerService : Service() {
 
             updateNotification("Launching ${schedule.name}…")
 
-            val needsAccessibility = schedule.enableShuffle || schedule.skipFirstTrack
+            // Everything below is the YouTube Music path; podcasts returned above.
+            //
+            // The accessibility service is needed for every YT Music entry, not
+            // only when shuffle or a skip is wanted. The deep link opens the
+            // playlist page without starting it - pressing Play is step 1 of the
+            // post-launch action. This used to be `enableShuffle ||
+            // skipFirstTrack`, so a schedule with both switched off launched YT
+            // Music, never pressed Play, failed all three attempts and left the
+            // playlist sitting on screen in silence.
+            val needsAccessibility = true
 
             // Auto-heal the A11y service if Android disabled it. Requires the
             // user to have granted WRITE_SECURE_SETTINGS via adb; if they
