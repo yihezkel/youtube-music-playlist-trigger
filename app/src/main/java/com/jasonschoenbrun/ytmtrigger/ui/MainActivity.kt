@@ -1125,12 +1125,12 @@ fun SelfTestScreen(onBack: () -> Unit) {
         val a11ySvc = com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
         val a11yEnf = com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer
         checks += SelfTestRow(
-            label = "Accessibility service running",
+            label = "Accessibility service verified",
             ok = a11ySvc.isResponsive(),
             details = if (a11ySvc.isResponsive()) {
                 "Required to press Play, enable shuffle, skip first track, and dismiss Premium upsells."
             } else if (a11ySvc.isRunning()) {
-                "The service is bound but unresponsive — it can't read the active window, so it won't receive events or press Play. Android reports it as enabled, which is why this needs its own check. Tap Restart service to force Android to re-bind it."
+                "Bound, but not verified since it last connected. The service is scoped to YouTube Music, so it receives no events at all until YouTube Music next opens — which is normal for a while after a restart or an update. If YouTube Music has opened since and this still says so, the binding is dead and needs restarting. The next trigger or self-test settles it either way."
             } else {
                 "Required to press Play, enable shuffle, skip first track, and dismiss Premium upsells. The service is not running."
             },

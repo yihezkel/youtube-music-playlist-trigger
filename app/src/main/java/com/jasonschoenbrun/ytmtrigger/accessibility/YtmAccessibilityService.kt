@@ -853,9 +853,20 @@ class YtmAccessibilityService : AccessibilityService() {
          * for a service that cannot do its job.
          *
          * Having received at least one event since connecting is the cheap,
-         * decisive proof that delivery works. A healthy service sees events
-         * as soon as any window changes — including this app's own screens
-         * opening — so by the time a checklist is rendered it has fired.
+         * decisive proof that delivery works. It is *not* proof of the
+         * opposite. This service is declared with
+         * `android:packageNames="com.google.android.apps.youtube.music"`, so
+         * Android only ever sends it events from YouTube Music — **not** from
+         * this app's own screens, as an earlier version of this comment
+         * wrongly claimed. After any re-bind it therefore sees nothing at all
+         * until YouTube Music next comes to the foreground, which can be
+         * hours, and this returns false for a perfectly healthy service.
+         *
+         * From inside this app that is indistinguishable from the dead-binding
+         * fault above: both look like "no events yet". Callers must report it
+         * as unverified rather than assert a fault. Opening YouTube Music —
+         * which the six-hourly self-test does anyway — settles it either way.
+         *
          * Within [RESPONSIVE_GRACE_MS] of binding we report healthy, because
          * "no window has changed yet" is not evidence of failure.
          *

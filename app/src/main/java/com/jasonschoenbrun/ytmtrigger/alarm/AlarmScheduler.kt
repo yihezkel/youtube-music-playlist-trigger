@@ -40,7 +40,30 @@ object AlarmScheduler {
     const val PREFLIGHT_LEAD_MIN = 6L
     private val FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
-    fun rescheduleAll(context: Context, schedules: List<Schedule>) {
+    /**
+     * Serialises [rescheduleAll].
+     *
+     * The body cancels every alarm and then re-arms them, which is only safe
+     * if one pass finishes before the next starts. It does not: on every app
+     * start three passes run within about 200 ms of each other - [YtmApp]'s
+     * startup re-arm, plus BootReceiver handling `LOCKED_BOOT_COMPLETED` and
+     * `BOOT_COMPLETED`, which Android re-delivers whenever the app leaves the
+     * stopped state (148 such deliveries in 15 days on a phone that had been
+     * up for five). A remote config sync adds more. The device log shows two
+     * passes inside their arming loops at once - two `Scheduled` lines for one
+     * id with no `Cancelled` between them - so a cancel from one pass can land
+     * after another has already armed that id, leaving it cancelled and the
+     * block silently not firing. This is almost certainly the "stale re-arm
+     * race after a config sync" that was being worked around by restarting the
+     * app twice.
+     *
+     * Serialising is enough: each pass is idempotent on its own, so three in a
+     * row simply converge. It deliberately does not try to skip the redundant
+     * passes, which is an optimisation rather than the correctness fix.
+     */
+    private val rescheduleLock = Any()
+
+    fun rescheduleAll(context: Context, schedules: List<Schedule>) = synchronized(rescheduleLock) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
             Logger.w("Alarm", "Cannot schedule exact alarms - permission missing")

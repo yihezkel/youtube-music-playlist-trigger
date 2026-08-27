@@ -11,9 +11,13 @@ import android.media.MediaPlayer
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.jasonschoenbrun.ytmtrigger.YtmApp
+import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
+import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
 import com.jasonschoenbrun.ytmtrigger.ui.MainActivity
@@ -51,6 +55,44 @@ class PodcastPlayerService : Service() {
     // not mistaken for an interruption worth resuming.
     private var finishedNaturally = false
 
+    /**
+     * Last position read off the player while it was healthy, in seconds.
+     *
+     * MediaPlayer's own `getCurrentPosition` is documented as invalid once the
+     * player has entered its Error state, and on this device it returns 0
+     * there. Without a sampled value an error therefore looked like "stopped
+     * at 0 seconds", which [PodcastResume.save] discards as below its minimum,
+     * so a part-heard episode was silently lost as well as the block. Sampling
+     * while playing gives both the retry and the resume mark a real position.
+     */
+    @Volatile private var lastKnownPosSec: Long = 0L
+
+    /** Errors survived on the current episode; reset when a new one starts. */
+    private var errorRetries = 0
+
+    /**
+     * Whether this episode ever actually reached playback.
+     *
+     * [PlaybackTriggerService] already records a failure when a podcast does
+     * not start within its own timeout, so recording again from the error
+     * handler would double-count one incident. The gap this class needed to
+     * close is the other one: playback that started fine and then died part
+     * way through, which nothing was reporting at all.
+     */
+    private var everStarted = false
+
+    private val ticker = Handler(Looper.getMainLooper())
+    private val samplePosition = object : Runnable {
+        override fun run() {
+            if (playing.get()) {
+                runCatching { player?.currentPosition }.getOrNull()
+                    ?.takeIf { it > 0 }
+                    ?.let { lastKnownPosSec = it / 1000L }
+            }
+            ticker.postDelayed(this, POSITION_SAMPLE_MS)
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -69,6 +111,9 @@ class PodcastPlayerService : Service() {
             return START_NOT_STICKY
         }
         startForeground(NOTIFICATION_ID, notification(title))
+        // A new episode, so previous retries no longer apply.
+        errorRetries = 0
+        everStarted = false
         play(url, title, startAtSec)
         return START_NOT_STICKY
     }
@@ -78,6 +123,7 @@ class PodcastPlayerService : Service() {
         currentAudioUrl = url
         currentTitle = title
         finishedNaturally = false
+        lastKnownPosSec = startAtSec
         val ms = MediaSession(this, "YTMTriggerPodcast").apply {
             setCallback(object : MediaSession.Callback() {
                 override fun onPause() { pause() }
@@ -105,6 +151,10 @@ class PodcastPlayerService : Service() {
                 }
                 it.start()
                 playing.set(true)
+                everStarted = true
+                lastKnownPosSec = startAtSec
+                ticker.removeCallbacks(samplePosition)
+                ticker.postDelayed(samplePosition, POSITION_SAMPLE_MS)
                 publishState(PlaybackState.STATE_PLAYING)
                 Logger.i("PodcastPlayer", "Playing", mapOf(
                     "title" to title,
@@ -145,14 +195,70 @@ class PodcastPlayerService : Service() {
             setOnErrorListener { _, what, extra ->
                 Logger.e("PodcastPlayer", "Playback error", mapOf(
                     "what" to what.toString(), "extra" to extra.toString(), "title" to title,
+                    "positionSec" to lastKnownPosSec.toString(),
+                    "retriesSoFar" to errorRetries.toString(),
                 ))
-                stopPlayback()
+                handlePlaybackError(url, title)
                 true
             }
             setDataSource(url)
             prepareAsync()
         }
         Logger.i("PodcastPlayer", "Preparing", mapOf("title" to title, "url" to url))
+    }
+
+    /**
+     * A stream died mid-episode. Recover rather than ending the whole block.
+     *
+     * The completion listener already carries a continuous schedule on to its
+     * next entry; this path used to do nothing but `stopPlayback()`, so one
+     * network hiccup ended the block silently and recorded nothing at all.
+     * Seen in production: a 48-minute episode failed 39 minutes in and left
+     * the remaining seven hours of its block quiet, with nothing in the
+     * failure list to show for it.
+     *
+     * A blip usually clears on a fresh prepare, so retry once from where the
+     * audio actually reached. If it fails again the source is probably
+     * genuinely bad, so give up on that episode, record why, and move on to
+     * the next entry instead of taking the block down with it.
+     */
+    private fun handlePlaybackError(url: String, title: String) {
+        if (errorRetries < MAX_ERROR_RETRIES) {
+            errorRetries++
+            val resumeFrom = lastKnownPosSec
+            Logger.i("PodcastPlayer", "Retrying after error", mapOf(
+                "title" to title,
+                "attempt" to errorRetries.toString(),
+                "fromSec" to resumeFrom.toString(),
+            ))
+            play(url, title, resumeFrom)
+            return
+        }
+        val next = queueScheduleId
+        // Only report if it had actually been playing: a podcast that never
+        // starts is already reported by PlaybackTriggerService's own timeout,
+        // and one incident should produce one entry in the failure list.
+        if (everStarted) {
+            val where = next?.let { id ->
+                runCatching {
+                    ScheduleRepository.get(this).all().firstOrNull { it.id == id }?.name
+                }.getOrNull()
+            }?.let { " in '$it'" }.orEmpty()
+            FailureLog.record(
+                this, FailureLog.KIND_TRIGGER,
+                "Podcast '$title'$where stopped with a playback error and would not restart.",
+            )
+        }
+        if (next != null) {
+            Logger.i("PodcastPlayer", "Advancing queue after error", mapOf(
+                "scheduleId" to next, "nextIndex" to (queueIndex + 1).toString(),
+            ))
+            stopPlayback(keepService = true)
+            PlaybackTriggerService.startQueued(this, next, queueIndex + 1)
+            stopSelf()
+        } else {
+            stopPlayback()
+        }
     }
 
     private fun publishState(state: Int) {
@@ -183,12 +289,18 @@ class PodcastPlayerService : Service() {
 
     private fun stopPlayback(keepService: Boolean = false) {
         val was = playing.getAndSet(false)
+        ticker.removeCallbacks(samplePosition)
         // Capture the position before releasing the player: an episode cut off
         // by a block's stop time should be resumable next time.
         if (was && !finishedNaturally) {
             val feed = currentFeedUrl
             val audio = currentAudioUrl
-            val posSec = runCatching { (player?.currentPosition ?: 0) / 1000L }.getOrDefault(0L)
+            // A player that has hit its Error state reports position 0, which
+            // PodcastResume.save would discard as below its minimum - losing
+            // the progress as well as the episode. Fall back to the last
+            // position sampled while it was healthy.
+            val liveSec = runCatching { (player?.currentPosition ?: 0) / 1000L }.getOrDefault(0L)
+            val posSec = if (liveSec > 0) liveSec else lastKnownPosSec
             val durSec = runCatching { (player?.duration ?: 0) / 1000L }.getOrDefault(0L)
             if (feed != null && audio != null) {
                 PodcastResume.save(this, feed, audio, currentTitle, posSec, durSec)
@@ -229,6 +341,10 @@ class PodcastPlayerService : Service() {
 
     companion object {
         const val NOTIFICATION_ID = 1004
+        /** How often to sample the play position while healthy. */
+        private const val POSITION_SAMPLE_MS = 10_000L
+        /** Retries of the same episode after a stream error, before moving on. */
+        private const val MAX_ERROR_RETRIES = 1
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_QUEUE_SCHEDULE = "queueScheduleId"

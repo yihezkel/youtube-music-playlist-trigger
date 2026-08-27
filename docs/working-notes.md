@@ -119,11 +119,28 @@ Anything changed for a test must be put back, and verified rather than assumed:
 & $adb shell "locksettings set-disabled true"
 & $adb shell "settings put secure lock_screen_lock_after_timeout 120000"
 & $adb shell "settings put system screen_off_timeout 120000"
-# volume: send as many keyevent 24 as the keyevent 25 you sent
+& $adb shell "cmd audio set-volume 3 15"              # media volume; see below
 ```
 
+**Restoring the volume is not what §4 used to say.** Sending `keyevent 24` back
+does nothing when the screen is off: with no active media session the key is
+absorbed rather than applied to `STREAM_MUSIC`, so fifteen presses changed
+nothing (they did not leak into the ring stream either — that was checked).
+Worse, a test schedule sets the volume to **0**, and index 0 on `STREAM_MUSIC`
+also sets the stream's **mute flag**, which `cmd media_session volume --set`
+will not clear — it reports "will set volume" and silently leaves
+`Muted: true`. The command that works is `cmd audio set-volume 3 15`.
+
+Note also that Android tracks media volume **per output device**: `dumpsys
+audio` showed `STREAM_MUSIC ... speaker: 0, bt_a2dp: 10` at the same moment.
+"The volume" always means the volume for the device currently in use.
+
+The phone's ring and notification streams are normally muted at 0 — that is its
+resting state, not something a test broke. Leave them alone.
+
 Check: `locksettings get-disabled` → `true`,
-`dumpsys trust | grep deviceLocked` → `0`, `Password quality: {0=0}`.
+`dumpsys trust | grep deviceLocked` → `0`, `Password quality: {0=0}`,
+`dumpsys audio | grep -A3 '^- STREAM_MUSIC:'` → `Muted: false`.
 
 The phone disconnected once mid-test with a PIN still set, which needed the
 owner to unlock it by hand. Restore early rather than late.
@@ -168,6 +185,18 @@ Facts that are easy to get wrong:
   `endOf(day)` = sunset + `shabatEndOffsetMin` (default 42). Block G's `+30` is
   therefore sunset + 72, and it follows that setting if it is ever changed. See
   §11 for why the two anchors are not duplicates.
+- **A podcast that dies mid-episode is retried once, then skipped.**
+  `PodcastPlayerService`'s error listener used to call `stopPlayback()` and
+  nothing else, so one stream error ended the whole block silently — it did not
+  advance the queue the way the completion listener does, and recorded no
+  failure. It now retries once from the last sampled position and, failing
+  that, records a failure and moves to the next entry.
+- **`MediaPlayer.getCurrentPosition()` returns 0 once the player has errored**,
+  and `PodcastResume.save` discards anything under 60 s, so an errored episode
+  used to lose its progress as well as its block. The position is now sampled
+  every 10 s while healthy and used as the fallback.
+- **`rescheduleAll` runs three times, concurrently, on every app start** — see
+  §11. It is now serialised; do not remove that lock.
 
 ---
 
@@ -353,6 +382,18 @@ what was got wrong. Match that.
 
 **Genuinely open:**
 
+- **A mid-stream network drop may stall silently rather than raise an error.**
+  Trying to reproduce the 08:54 fault by dropping wifi failed repeatedly: a
+  28-minute episode kept playing for **five minutes offline** with
+  `AudioPlaybackConfiguration ... state:started`, because MediaPlayer prefetches
+  most of the file. Cutting the network 0.06 s after playback began did not
+  raise an error either. So the retry/advance fix covers the *error* path, which
+  is what the production fault took, but a buffer that simply runs dry without
+  an `onError` would still leave a block quiet. Nothing has been seen doing
+  that; it is an untested gap rather than a known fault.
+  Practical consequence for testing: **you cannot induce a mid-stream error by
+  toggling wifi.** Test the never-started path instead, by going offline before
+  the block fires.
 - **The Weekly tab** still duplicates Google Home state. Left alone while the
   Google Home automations run in parallel.
 - **31 Google Home podcast automations** are still live alongside the app. He
@@ -402,6 +443,19 @@ what was got wrong. Match that.
 **Known and accepted:**
 
 - One guard run at 13:21:50 did not fire with ~10 s left while an identical
-  later run did. Never explained. Not seen since.
-- The stale re-arm race after a config sync — real, self-correcting, worked
-  around by restarting the app twice.
+  later run did. Never explained. **The `rescheduleAll` race below is a
+  plausible mechanism** — if a cancel from a second pass landed after a first
+  had armed that id, the alarm would simply be gone. Not proven, but the race
+  is now closed, so watch whether this recurs.
+- The stale re-arm race after a config sync — **found and fixed.**
+  `AlarmScheduler.rescheduleAll` cancels every alarm and then re-arms them, with
+  no synchronisation, and three passes run within ~200 ms on every app start:
+  `YtmApp`'s startup re-arm plus `BootReceiver` handling `LOCKED_BOOT_COMPLETED`
+  and `BOOT_COMPLETED`. Android **re-delivers both boot broadcasts whenever the
+  app leaves the stopped state**, which is why the log holds 148 "boots" over 15
+  days on a phone that had been up for five, and why every schedule is armed 3×
+  per start. The device log showed two passes inside their arming loops at once
+  — two `Scheduled` lines for one id with no `Cancelled` between them. The
+  method is now `synchronized`; verified afterwards by checking that every arm
+  is preceded by its own cancel (0 violations after, 2 before, using the same
+  detector so the check could actually fail).

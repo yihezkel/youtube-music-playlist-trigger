@@ -263,7 +263,7 @@ class PlaybackTriggerService : Service() {
             if (entry.kind == MediaKind.AlephBeta) {
                 val played = playAlephBeta(schedule, entry, choice.index)
                 if (!played && !skipToNextEntry(schedule, choice.index, "could not start")) {
-                    postFailure("Could not play '${entry.displayName}' in the Aleph Beta app")
+                    postFailure("Could not play '${entry.displayName}' for '${schedule.name}' in the Aleph Beta app")
                 }
                 return
             }
