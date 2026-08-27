@@ -66,6 +66,9 @@ class PlaybackTriggerService : Service() {
         // below, so a queue can never outlive the start of Shabat.
         val queueIndex = intent?.getIntExtra(EXTRA_QUEUE_INDEX, -1) ?: -1
         active.set(true)
+        // New playback supersedes any pause the user left behind, including a
+        // block paused and never resumed before the next one came round.
+        PlaybackPauser.clear("new trigger")
         Logger.i("PlaybackSvc", "onStartCommand", mapOf(
             "scheduleId" to (scheduleId ?: "null"),
             "manual" to manual.toString(),

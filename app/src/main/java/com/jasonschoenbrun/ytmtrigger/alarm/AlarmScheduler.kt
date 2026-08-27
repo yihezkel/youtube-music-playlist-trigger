@@ -71,7 +71,23 @@ object AlarmScheduler {
         // C-fix-3: cancel previous before re-arming all so we never have two
         // pending intents for the same schedule (which could double-fire).
         for (s in schedules) { cancel(context, s.id); if (!s.enabled) cancelStop(context, s.id) }
-        for (s in schedules) if (s.enabled) scheduleNext(context, s)
+        // Per-schedule, because the cancel loop above has already run: a single
+        // schedule that throws here used to abort the whole pass and leave every
+        // remaining alarm cancelled and never re-armed - every later block
+        // silently missed, with nothing but one stack trace in the log to show
+        // for it. Seen for real when a malformed timeMinutes of 1444 reached
+        // Schedule.localTime() and threw DateTimeException mid-loop.
+        for (s in schedules) {
+            if (!s.enabled) continue
+            try {
+                scheduleNext(context, s)
+            } catch (t: Throwable) {
+                Logger.e("Alarm", "Could not arm a schedule; carrying on with the rest", mapOf(
+                    "id" to s.id, "name" to s.name,
+                    "timeMinutes" to s.timeMinutes.toString(),
+                ), t = t)
+            }
+        }
         // Independent of any schedule, but this is the one place every caller
         // already goes through: boot, app start, edits and remote config.
         scheduleShabatPrep(context)

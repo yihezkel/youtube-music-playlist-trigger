@@ -195,6 +195,7 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             PermsCard(perms)
+            PlaybackCard()
             SectionCard(
                 title = "Remote control",
                 icon = Icons.Default.Cloud,
@@ -306,6 +307,56 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
             // it would just be a second door to the same room.
             HealthTile { onNav(Screen.SelfTest) }
             Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun PlaybackCard() {
+    val ctx = LocalContext.current
+    // Polled rather than observed: the state can change from a stop alarm, a
+    // queue advancing or the household pressing pause on the phone itself, none
+    // of which report back here.
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2000); tick++ } }
+    val snap = remember(tick) {
+        com.jasonschoenbrun.ytmtrigger.playback.PlaybackPauser.snapshot(ctx)
+    }
+    val paused = snap.state == com.jasonschoenbrun.ytmtrigger.playback.PlaybackPauser.State.Paused
+    val idle = snap.state == com.jasonschoenbrun.ytmtrigger.playback.PlaybackPauser.State.Idle
+    SectionCard(
+        title = "Playback",
+        icon = if (paused) Icons.Default.PlayArrow else Icons.Default.MusicNote,
+    ) {
+        Text(
+            when {
+                paused -> "Paused" + (snap.what?.let { " — $it" } ?: "")
+                idle -> "Nothing is playing."
+                else -> "Playing" + (snap.what?.let { " — $it" } ?: "")
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (paused) {
+            Text(
+                "The block is held where it is. It still ends at its stop time, " +
+                    "and Shabat still stops it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Button(
+            enabled = !idle || paused,
+            onClick = {
+                val p = com.jasonschoenbrun.ytmtrigger.playback.PlaybackPauser
+                if (paused) p.resume(ctx, reason = "home screen") else p.pause(ctx, reason = "home screen")
+                tick++
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(if (paused) Icons.Default.PlayArrow else Icons.Default.Pause, null)
+            Spacer(Modifier.width(8.dp))
+            Text(if (paused) "Resume" else "Pause")
         }
     }
 }

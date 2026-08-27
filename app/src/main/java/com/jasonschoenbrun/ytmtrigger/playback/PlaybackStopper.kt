@@ -28,6 +28,9 @@ object PlaybackStopper {
 
     /** @return true if a pause was dispatched by either mechanism. */
     fun stop(context: Context, reason: String): Boolean {
+        // A stop supersedes a pause: the episode is being ended, so there is
+        // nothing left to resume and the home screen must stop offering it.
+        PlaybackPauser.clear("stopped: $reason")
         // Our own podcast player first: it is the one thing we control
         // directly, and it publishes a session the loop below would otherwise
         // have to find among everything else playing.

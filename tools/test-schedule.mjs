@@ -31,8 +31,14 @@ cfg.schedules = cfg.schedules.filter((s) => s.name !== NAME && s.name !== NAME2)
 
 const deviceNow = execSync(`"${ADB}" shell "date +%H:%M"`).toString().trim();
 const [hh, mm] = deviceNow.split(":").map(Number);
-const start = hh * 60 + mm + lead;
-const stop = start + length;
+// Wrap into the day. Run at 23:58 with a 2-minute lead this used to produce
+// timeMinutes=1440, which Schedule.localTime() rejected with a
+// DateTimeException that aborted the whole re-arm pass and left every
+// remaining alarm cancelled. The app tolerates it now; the tool should not
+// have been emitting it either.
+const wrap = (m) => ((m % 1440) + 1440) % 1440;
+const start = wrap(hh * 60 + mm + lead);
+const stop = wrap(start + length);
 const fmt = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 if (mode !== "clean") {
@@ -75,7 +81,7 @@ if (mode !== "clean") {
       ...first,
       id: "zz-queue-test-2",
       name: NAME2,
-      timeMinutes: start + 60,      // deliberately far off; must never be used
+      timeMinutes: wrap(start + 60),      // deliberately far off; must never be used
       stopTimeMinutes: null,
       startsAfter: "zz-queue-test",
       playlistUrls: [`${TORAH} [Chain second]`],
@@ -93,7 +99,7 @@ if (mode !== "clean") {
       ...first,
       id: "zz-queue-test-2",
       name: NAME2,
-      timeMinutes: start + 60,
+      timeMinutes: wrap(start + 60),
       stopTimeMinutes: null,
       autoStopMinutes: null,
       startsAfter: "zz-queue-test",
@@ -105,7 +111,7 @@ if (mode !== "clean") {
   if (mode === "abfeed") {
     const pf = JSON.parse(readFileSync("private-feeds.json", "utf8"));
     const first = cfg.schedules[cfg.schedules.length - 1];
-    first.stopTimeMinutes = start + length;
+    first.stopTimeMinutes = wrap(start + length);
     first.podcastEpisodeMode = "Random";
     first.playlistUrls = [`${pf["Aleph Beta"]} [Aleph Beta]`, `${TORAH} [After Aleph Beta]`];
   }
@@ -113,7 +119,7 @@ if (mode !== "clean") {
   // where the subscription holds 68, so the app is the only way to the archive.
   if (mode === "alephbeta") {
     const first = cfg.schedules[cfg.schedules.length - 1];
-    first.stopTimeMinutes = start + length;
+    first.stopTimeMinutes = wrap(start + length);
     first.playlistUrls = [
       "https://www.alephbeta.org/playlist/a-book-like-no-other [A Book Like No Other]",
       `${TORAH} [After Aleph Beta]`,
@@ -130,7 +136,7 @@ if (mode !== "clean") {
   // later in the same block. The substitute should come from the block.
   if (mode === "locksub") {
     const first = cfg.schedules[cfg.schedules.length - 1];
-    first.stopTimeMinutes = start + length;
+    first.stopTimeMinutes = wrap(start + length);
     first.playlistUrls = [
       (cfg.defaultPlaylistUrls || [])[0],
       `${TORAH} [Podcast in this block]`,
@@ -140,14 +146,14 @@ if (mode !== "clean") {
   // the Settings defaults instead.
   if (mode === "locksub2") {
     const first = cfg.schedules[cfg.schedules.length - 1];
-    first.stopTimeMinutes = start + length;
+    first.stopTimeMinutes = wrap(start + length);
     first.playlistUrls = [(cfg.defaultPlaylistUrls || [])[0]];
   }
   // "musicend": a music entry in the middle of a queue. Nothing reports when a
   // playlist finishes, so the watcher has to notice and move on to entry 3.
   if (mode === "musicend") {
     const first = cfg.schedules[cfg.schedules.length - 1];
-    first.stopTimeMinutes = start + 30;
+    first.stopTimeMinutes = wrap(start + 30);
     first.playlistUrls = [
       `${TORAH} [Before music]`,
       (cfg.defaultPlaylistUrls || [])[0],

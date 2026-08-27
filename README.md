@@ -74,6 +74,14 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   or set a clock time to pause automatically. A stop time at or before the start time means
   the next day, so an overnight schedule stops in the morning. The console has a **Stop**
   button for the same thing on demand.
+- **Pause and resume a block** from a **Playback** card at the top of the home screen. This
+  is not the same as stopping it: stop ends the block and releases the episode, keeping only
+  a resume mark, whereas pause holds the player, its exact position and its place in the
+  queue, so resuming continues the same episode rather than choosing a new one. It works
+  whatever the block is playing through — this app's own podcast player, YouTube Music or
+  the Aleph Beta app — because it goes through media sessions. A paused block still ends at
+  its stop time and is still silenced before Shabat, and the end-of-playlist watcher holds
+  the queue still while paused instead of mistaking a pause for a finished playlist.
 - **Random playlist pick** with a rolling "don't repeat last 3" history.
 - **Named playlists** — anywhere a playlist URL is accepted (app and web console) you can
   add a name in brackets after it:

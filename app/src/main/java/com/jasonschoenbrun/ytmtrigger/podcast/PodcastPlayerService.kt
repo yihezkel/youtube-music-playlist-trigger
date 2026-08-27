@@ -98,6 +98,11 @@ class PodcastPlayerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { stopPlayback(); return START_NOT_STICKY }
+            // Pause and resume keep the player and its position alive, unlike
+            // stop, which releases it. The service stays in the foreground so
+            // Android does not reclaim it while the household is mid-block.
+            ACTION_PAUSE -> { pause(); return START_NOT_STICKY }
+            ACTION_RESUME -> { resume(); return START_NOT_STICKY }
         }
         val url = intent?.getStringExtra(EXTRA_URL)
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Podcast"
@@ -122,6 +127,7 @@ class PodcastPlayerService : Service() {
         stopPlayback(keepService = true)
         currentAudioUrl = url
         currentTitle = title
+        loadedTitle = title
         finishedNaturally = false
         lastKnownPosSec = startAtSec
         val ms = MediaSession(this, "YTMTriggerPodcast").apply {
@@ -275,24 +281,33 @@ class PodcastPlayerService : Service() {
     }
 
     private fun pause() {
+        if (!playing.get()) return
         runCatching { player?.takeIf { it.isPlaying }?.pause() }
         playing.set(false)
+        paused.set(true)
+        ticker.removeCallbacks(samplePosition)
         publishState(PlaybackState.STATE_PAUSED)
-        Logger.i("PodcastPlayer", "Paused")
+        Logger.i("PodcastPlayer", "Paused", mapOf("title" to currentTitle))
     }
 
     private fun resume() {
+        if (player == null) return
         runCatching { player?.start() }
         playing.set(true)
+        paused.set(false)
+        ticker.removeCallbacks(samplePosition)
+        ticker.postDelayed(samplePosition, POSITION_SAMPLE_MS)
         publishState(PlaybackState.STATE_PLAYING)
+        Logger.i("PodcastPlayer", "Resumed", mapOf("title" to currentTitle))
     }
 
     private fun stopPlayback(keepService: Boolean = false) {
         val was = playing.getAndSet(false)
+        val wasPaused = paused.getAndSet(false)
         ticker.removeCallbacks(samplePosition)
         // Capture the position before releasing the player: an episode cut off
         // by a block's stop time should be resumable next time.
-        if (was && !finishedNaturally) {
+        if ((was || wasPaused) && !finishedNaturally) {
             val feed = currentFeedUrl
             val audio = currentAudioUrl
             // A player that has hit its Error state reports position 0, which
@@ -313,8 +328,9 @@ class PodcastPlayerService : Service() {
         session?.isActive = false
         runCatching { session?.release() }
         session = null
-        if (was) Logger.i("PodcastPlayer", "Stopped")
+        if (was || wasPaused) Logger.i("PodcastPlayer", "Stopped")
         if (!keepService) {
+            loadedTitle = ""
             runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
             stopSelf()
         }
@@ -352,11 +368,33 @@ class PodcastPlayerService : Service() {
         const val EXTRA_FEED_URL = "feedUrl"
         const val EXTRA_START_AT_SEC = "startAtSec"
         const val ACTION_STOP = "com.jasonschoenbrun.ytmtrigger.PODCAST_STOP"
+        const val ACTION_PAUSE = "com.jasonschoenbrun.ytmtrigger.PODCAST_PAUSE"
+        const val ACTION_RESUME = "com.jasonschoenbrun.ytmtrigger.PODCAST_RESUME"
 
         private val playing = AtomicBoolean(false)
 
+        /**
+         * Held open while an episode is paused rather than stopped.
+         *
+         * Separate from [playing] because a paused episode is not playing but
+         * is very much still there: the player, its position and the queue
+         * position all survive, and [stop] must still be able to tear it down.
+         */
+        private val paused = AtomicBoolean(false)
+
         /** True while an episode is actually playing. */
         fun isPlaying(): Boolean = playing.get()
+
+        /** True while an episode is loaded but paused. */
+        fun isPaused(): Boolean = paused.get()
+
+        /** True while an episode is loaded, whether playing or paused. */
+        fun isActive(): Boolean = playing.get() || paused.get()
+
+        /** Title of the loaded episode, or blank. For the home screen. */
+        @Volatile private var loadedTitle: String = ""
+
+        fun nowPlaying(): String = loadedTitle
 
         /**
          * @param queueScheduleId set only for a continuous schedule, so the end
@@ -385,9 +423,26 @@ class PodcastPlayerService : Service() {
         }
 
         fun stop(context: Context) {
-            if (!playing.get()) return
+            // A paused episode is not "playing", but it is still holding the
+            // player and the foreground notification, so it must still be
+            // stoppable - otherwise pausing a block would make Stop a no-op.
+            if (!playing.get() && !paused.get()) return
             Logger.i("PodcastPlayer", "Stop requested")
             val i = Intent(context, PodcastPlayerService::class.java).setAction(ACTION_STOP)
+            runCatching { context.startService(i) }
+        }
+
+        /** Pause the current episode, keeping its position and queue place. */
+        fun pause(context: Context) {
+            if (!playing.get()) return
+            val i = Intent(context, PodcastPlayerService::class.java).setAction(ACTION_PAUSE)
+            runCatching { context.startService(i) }
+        }
+
+        /** Resume an episode paused by [pause]. */
+        fun resume(context: Context) {
+            if (!paused.get()) return
+            val i = Intent(context, PodcastPlayerService::class.java).setAction(ACTION_RESUME)
             runCatching { context.startService(i) }
         }
     }

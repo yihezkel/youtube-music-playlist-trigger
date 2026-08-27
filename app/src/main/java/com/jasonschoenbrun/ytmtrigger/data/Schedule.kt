@@ -97,12 +97,24 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
     val continuousPlay: Boolean = false,
     val lastPickedPlaylistIds: List<String> = emptyList(),
 ) {
-    fun localTime(): LocalTime = LocalTime.of(timeMinutes / 60, timeMinutes % 60)
+    /**
+     * The schedule's wall-clock time.
+     *
+     * [timeMinutes] is wrapped into the day rather than trusted, because it
+     * arrives from the remote console and from tooling as well as from the
+     * picker. A value of 1444 - which a generator produced by adding a lead to
+     * 23:58 without wrapping - used to throw `DateTimeException` here and take
+     * down the whole re-arm pass with it. 24:04 plainly means 00:04.
+     */
+    fun localTime(): LocalTime = LocalTime.of(wrapped(timeMinutes) / 60, wrapped(timeMinutes) % 60)
     fun stopLocalTime(): LocalTime? =
-        stopTimeMinutes?.let { LocalTime.of(it / 60, it % 60) }
+        stopTimeMinutes?.let { LocalTime.of(wrapped(it) / 60, wrapped(it) % 60) }
     fun dayOfWeekSet(): Set<DayOfWeek> = daysOfWeek.map { DayOfWeek.of(it) }.toSet()
 
     companion object {
+        /** Minutes-of-day, wrapped into 0..1439 and never negative. */
+        private fun wrapped(min: Int): Int = ((min % 1440) + 1440) % 1440
+
         fun default() = Schedule()
         fun fromDefaults(s: AppSettings) = Schedule(
             playlistUrls = s.defaultPlaylistUrls,

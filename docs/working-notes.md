@@ -160,6 +160,7 @@ owner to unlock it by hand. Restore early rather than late.
 | Music | `playback/YtmLauncher.kt`, `accessibility/YtmAccessibilityService.kt` | deep link, then press Play |
 | End of music | `playback/MusicEndWatcher.kt` | polls every 5 min; YT Music reports no end |
 | Stopping | `playback/PlaybackStopper.kt` | pauses **whatever is playing**, not one named app |
+| Pause / resume | `playback/PlaybackPauser.kt` | holds a block where it is; see §5 notes |
 | Lock handling | `playback/LockScreenGuard.kt`, `LockSafeFallback.kt`, `Announcer.kt` | see §6 |
 | Health | `health/HealthChecks.kt` | 14 checks, on the merged Health & self-test screen |
 
@@ -197,6 +198,27 @@ Facts that are easy to get wrong:
   every 10 s while healthy and used as the fallback.
 - **`rescheduleAll` runs three times, concurrently, on every app start** — see
   §11. It is now serialised; do not remove that lock.
+- **One bad schedule must never abort the re-arm pass.** `rescheduleAll` cancels
+  every alarm *before* arming any, so a throw part way through leaves the rest
+  cancelled and never re-armed — every later block silently missed. Each
+  `scheduleNext` is therefore wrapped individually. This is not theoretical: a
+  `timeMinutes` of 1440 reached `Schedule.localTime()` and threw
+  `DateTimeException`, and only a remote config arriving a second later
+  re-armed the phone.
+- **`Schedule.localTime()` wraps `timeMinutes` into the day** rather than
+  trusting it, because the value arrives from the console and from tooling as
+  well as the picker. 24:04 is taken to mean 00:04.
+- **`tools/test-schedule.mjs` wraps its times too.** Run at 23:58 with a
+  2-minute lead it used to emit `timeMinutes: 1440`, which is what produced the
+  above. **Be careful running device tests near midnight**; the arithmetic is
+  fixed, but the block itself still straddles the date boundary.
+- **Pause is not stop.** `PlaybackStopper` ends a block and releases the podcast
+  player; `PlaybackPauser` keeps the player, its position and its queue index.
+  Because a paused episode is not "playing", `PodcastPlayerService.stop` had to
+  learn about the paused state too, or Stop became a no-op on a paused block.
+  `MusicEndWatcher` also has to check the pause flag: paused and "the playlist
+  ran out" are indistinguishable from outside, and without the check pausing
+  music would skip to the next entry within five minutes.
 
 ---
 

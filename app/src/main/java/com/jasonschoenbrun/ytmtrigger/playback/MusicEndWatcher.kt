@@ -140,6 +140,18 @@ class MusicEndReceiver : BroadcastReceiver() {
             "playing" to playing.toString(),
             "state" to detail,
         ))
+        // A block the user paused is not a block that has finished. Paused and
+        // "the playlist ran out" look identical from here - both stop being
+        // PLAYING - so without this check pausing music would silently skip to
+        // the next entry within five minutes, which is the opposite of what
+        // pause is for. Keep watching so the end is still noticed after resume.
+        if (PlaybackPauser.isPaused()) {
+            Logger.i("MusicWatch", "Paused by the user; holding the queue", mapOf(
+                "scheduleId" to scheduleId,
+            ))
+            MusicEndWatcher.arm(context, scheduleId, queueIndex, pkg)
+            return
+        }
         if (playing) {
             MusicEndWatcher.arm(context, scheduleId, queueIndex, pkg)
             return
