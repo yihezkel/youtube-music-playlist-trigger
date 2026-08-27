@@ -246,10 +246,11 @@ class PlaybackTriggerService : Service() {
                 Logger.e("PlaybackSvc", "Cannot start an app-played entry", mapOf(
                     "scheduleId" to schedule.id, "entry" to name, "why" to lockProblem,
                 ))
-                // Move the queue on rather than ending the block. Music no
-                // longer has to be last, so a locked phone must not silence
-                // everything that was meant to follow it.
-                if (skipToNextEntry(schedule, choice.index, "phone locked")) return
+                // Play the part of the block that still works, and say why.
+                // Silence would be the worse answer: the household expected
+                // something at this hour, and podcasts play behind a lock
+                // perfectly well.
+                if (playLockSafeSubstitute(schedule, choice.index, name)) return
                 postFailure("Couldn't play '$name' for '${schedule.name}': $lockProblem")
                 return
             }
@@ -508,6 +509,23 @@ class PlaybackTriggerService : Service() {
             return false
         }
         val name = choice.label ?: entry.displayName
+        // Whether it was already playing decides what a "playing" reading means
+        // afterwards. Without this, arriving while YouTube Music happens to be
+        // playing looks exactly like having started it - which is how a run
+        // once reported success 8 ms after the call, faster than YouTube Music
+        // could possibly have acted.
+        val alreadyPlaying = MediaAppController.isPlaying(this, pkg)
+        if (alreadyPlaying) {
+            Logger.i("PlaybackSvc", "YouTube Music was already playing; leaving it alone", mapOf(
+                "scheduleId" to schedule.id,
+                "wanted" to name,
+                "nowPlaying" to (MediaAppController.nowPlaying(this, pkg) ?: "-"),
+            ))
+            if (schedule.continuousPlay) {
+                MusicEndWatcher.watch(this, schedule.id, choice.index, pkg)
+            }
+            return true
+        }
         // The URL first: it names the exact playlist, where a search only names
         // something like it.
         val attempts = listOf<Pair<String, () -> Boolean>>(
@@ -536,6 +554,50 @@ class PlaybackTriggerService : Service() {
             ))
         }
         return false
+    }
+
+    /**
+     * Play something that survives a locked phone, having said why.
+     *
+     * Preferring the block's own queue keeps the hour close to what was
+     * intended - the household picked those shows for this time - and only a
+     * block with nothing playable in it at all falls back to the Settings
+     * defaults.
+     *
+     * The announcement is spoken rather than posted, because nobody is looking
+     * at a phone in a kitchen, and it is awaited so the substitute does not
+     * talk over its own explanation.
+     *
+     * @return true when something was started.
+     */
+    private suspend fun playLockSafeSubstitute(
+        schedule: Schedule,
+        blockedIndex: Int,
+        blockedName: String,
+    ): Boolean {
+        val choice = LockSafeFallback.find(this, schedule, blockedIndex) ?: return false
+        Logger.i("PlaybackSvc", "Substituting a lock-safe entry", mapOf(
+            "scheduleId" to schedule.id,
+            "blocked" to blockedName,
+            "playing" to choice.label,
+            "source" to if (choice.fromSettings) "settings defaults" else "this block",
+            "queueIndex" to (choice.queueIndex?.toString() ?: "-"),
+        ))
+        Announcer.say(this, LockSafeFallback.announcement(blockedName, choice))
+
+        // An entry from this block keeps its place in the queue, so what
+        // follows it still follows it. One borrowed from Settings has no place
+        // in the queue, so it plays as a one-off and the block ends with it.
+        val parsed = MediaEntries.parse(MediaEntries.url(choice.entry))
+            .copy(label = MediaEntries.label(choice.entry), episodeMode = MediaEntries.episodeMode(choice.entry))
+        val index = choice.queueIndex ?: blockedIndex
+        val played = playPodcast(schedule, parsed, index)
+        if (!played) {
+            Logger.w("PlaybackSvc", "The substitute would not play either", mapOf(
+                "entry" to choice.label,
+            ))
+        }
+        return played
     }
 
     private fun setMediaVolume(percent: Int) {

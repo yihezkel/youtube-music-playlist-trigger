@@ -129,6 +129,80 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
 - **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
 - **Persistent logs** with in-app viewer, level filter, search, copy/share. 14-day retention. Diagnostic "EvalFix" markers let speculative fixes be evaluated and pruned over time.
 
+## Screen lock
+
+**Podcasts play with the phone locked. YouTube Music does not.** This is a
+platform boundary rather than a bug, and it was established by measurement on
+the device rather than inference.
+
+The difference is who does the playing. A podcast is played by this app itself,
+in a foreground service with no activity and no window, so a keyguard has
+nothing to refuse. Starting YouTube Music means opening *its* screen and pressing
+its Play button through the accessibility service — and Android will not let an
+app open a screen over a secure keyguard, which is correct behaviour. What the
+log shows is `Aborting: systemui bouncer is foreground`: the deep link launches
+YouTube Music, the lock screen takes the foreground back, and the Play press
+never lands.
+
+| Lock | Podcasts, queueing, volume, stop, Shabat mute | YouTube Music |
+|---|---|---|
+| None | works | works |
+| Swipe (no credential) | works | works |
+| PIN / pattern / password | works | **does not start** |
+
+A swipe lock is fine: it shows a keyguard but holds no credential, so
+`requestDismissKeyguard` clears it.
+
+### What was tried, and why it did not work
+
+Both of these are recorded so they are not re-attempted from scratch:
+
+- **MediaBrowserService** — the interface a car head unit or Android Auto uses to
+  browse and play someone's library, with no activity at all. YouTube Music
+  declares one (`.mediabrowser.MusicBrowserService`) and **refuses this app**:
+  `Connection failed`. It is allowlisted by caller signature. That is a
+  deliberate security boundary and not something to work around.
+- **Media session transport controls** — no allowlist, and service calls rather
+  than windows. YouTube Music advertises `PLAY_FROM_URI`, `PLAY_FROM_MEDIA_ID`
+  and `PLAY_FROM_SEARCH` (decoded from `actions=241335`). Both `playFromUri` and
+  `playFromSearch` are **accepted and do nothing**: YouTube Music stays
+  `STOPPED(1)`. Advertising an action is not honouring it, and honouring these
+  appears reserved for privileged callers such as Assistant. The app still tries
+  this route before giving up, because it costs seconds and would be the whole
+  answer if it ever started working.
+
+Reading a playlist's contents through the **YouTube Data API** is possible for a
+public playlist, but it returns metadata only — no audio. Obtaining audio would
+mean extracting stream URLs, which YouTube's terms prohibit, so it is not a
+route this project will take.
+
+### What happens instead
+
+A block does not fall silent. When an entry cannot start because the phone is
+locked, the app **says so out loud** and plays something that will work:
+
+> "Best can't play while the phone is locked. Playing Rabbi Breitowitz instead,
+> from this block."
+
+It looks in the block's own queue first, because the household chose those shows
+for that hour, and falls back to the default entries in Settings when a block is
+all music. The announcement is spoken rather than posted, since nobody is
+watching a phone in a kitchen, and it finishes before playback starts so it is
+not talked over.
+
+Note that this only helps if *something* reachable is a podcast. If a block is
+all music **and** the Settings defaults are all music, there is nothing to
+substitute and the block is skipped with a failure notification.
+
+### The one arrangement that gives you both
+
+If music mattered more than the lock, the fix is to stop asking another app to
+play it: anything this app plays itself works locked. That means music from
+files on the phone or from a feed served to it — the same machinery the podcast
+path already uses, including queue chaining, resume and stop-at-block-end. It
+needs the audio in a form the app can play, so it is not available for a
+streaming library.
+
 ## Install
 
 Download the APK from the [Releases page](../../releases) and sideload it. The app needs Android 14 (API 34) or newer.

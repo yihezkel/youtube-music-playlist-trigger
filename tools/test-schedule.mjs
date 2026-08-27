@@ -126,6 +126,23 @@ if (mode !== "clean") {
     first.playlistUrls = ["https://rss.buzzsprout.com/2113502.rss [A Book Like No Other | sequential]"];
     first.podcastEpisodeMode = "Sequential";
   }
+  // "locksub": a music entry that cannot play while locked, with a podcast
+  // later in the same block. The substitute should come from the block.
+  if (mode === "locksub") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = start + length;
+    first.playlistUrls = [
+      (cfg.defaultPlaylistUrls || [])[0],
+      `${TORAH} [Podcast in this block]`,
+    ];
+  }
+  // "locksub2": a music-only block, so the substitute has to be borrowed from
+  // the Settings defaults instead.
+  if (mode === "locksub2") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = start + length;
+    first.playlistUrls = [(cfg.defaultPlaylistUrls || [])[0]];
+  }
   // "musicend": a music entry in the middle of a queue. Nothing reports when a
   // playlist finishes, so the watcher has to notice and move on to entry 3.
   if (mode === "musicend") {
