@@ -155,7 +155,6 @@ fun AppNav() {
         Screen.Logs -> LogsScreen(onBack = { screen = Screen.Home })
         Screen.SelfTest -> SelfTestScreen(onBack = { screen = Screen.Home })
         Screen.Settings -> SettingsScreen(onBack = { screen = Screen.Home })
-        Screen.Health -> HealthScreen(onBack = { screen = Screen.Home })
     }
 }
 
@@ -166,7 +165,6 @@ sealed class Screen {
     data object Logs : Screen()
     data object SelfTest : Screen()
     data object Settings : Screen()
-    data object Health : Screen()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -300,10 +298,13 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                NavTile("Self-test", Icons.Default.BugReport, Modifier.weight(1f)) { onNav(Screen.SelfTest) }
                 NavTile("Settings", Icons.Default.Settings, Modifier.weight(1f)) { onNav(Screen.Settings) }
+                Spacer(Modifier.weight(1f))
             }
-            HealthTile { onNav(Screen.Health) }
+            // The health tile is the way in to the self-test screen: the colour
+            // is the reason to go there, and a separate "Self-test" tile beside
+            // it would just be a second door to the same room.
+            HealthTile { onNav(Screen.SelfTest) }
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -1236,17 +1237,47 @@ fun SelfTestScreen(onBack: () -> Unit) {
 
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text("Self-test") },
+            title = { Text("Health & self-test") },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
             actions = {
                 IconButton(onClick = { runChecks() }) { Icon(Icons.Default.Refresh, null) }
             },
         )
     }) { inner ->
+        val ctx2 = LocalContext.current
+        var tick by remember { mutableIntStateOf(0) }
+        LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(3000); tick++ } }
+        val report = remember(tick) { HealthChecks.run(ctx2) }
         Column(
             Modifier.padding(inner).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // The health report first: it answers "is anything wrong" in one
+            // line, which is the question someone opening this screen has.
+            // Worst first, so a problem never needs scrolling to.
+            HealthHeader(report)
+            val order = mapOf(Health.Broken to 0, Health.Degraded to 1, Health.Ok to 2)
+            for (c in report.checks.sortedBy { order[it.health] }) HealthRow(c)
+            Text(
+                "Green means everything the app can do, it can do. Orange means something " +
+                    "is wrong and the app already handles it. Red means something is wrong " +
+                    "and nothing covers it, so a block will be missed or silent.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Setup",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "The checks above say whether something is wrong. These say how to put it " +
+                    "right, and can act on it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             for (row in checks) SelfTestRowView(row)
 
             Spacer(Modifier.height(8.dp))
@@ -2034,47 +2065,6 @@ private fun HealthTile(onClick: () -> Unit) {
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun HealthScreen(onBack: () -> Unit) {
-    val ctx = LocalContext.current
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(3000); tick++ } }
-    val report = remember(tick) { HealthChecks.run(ctx) }
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Health check", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
-    ) { inner ->
-        Column(
-            Modifier.padding(inner).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            HealthHeader(report)
-            // Worst first: what is broken should not need scrolling to.
-            val order = mapOf(Health.Broken to 0, Health.Degraded to 1, Health.Ok to 2)
-            for (c in report.checks.sortedBy { order[it.health] }) HealthRow(c)
-            Text(
-                "Green means everything the app can do, it can do. Orange means something " +
-                    "is wrong and the app already handles it. Red means something is wrong " +
-                    "and nothing covers it, so a block will be missed or silent.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
 @Composable
 private fun HealthHeader(report: HealthReport) {
     val colour = colourFor(report.overall)
