@@ -50,3 +50,6 @@ tools/.ab-cache/
 tools/.ab-feed-token
 web/private-feeds/
 tools/private-feeds.json
+
+# Per-workspace MCP servers (Aleph Beta member library). Not committed.
+.mcp.json
