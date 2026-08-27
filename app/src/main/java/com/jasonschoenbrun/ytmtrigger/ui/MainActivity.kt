@@ -35,6 +35,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import com.jasonschoenbrun.ytmtrigger.health.Check
+import com.jasonschoenbrun.ytmtrigger.health.Health
+import com.jasonschoenbrun.ytmtrigger.health.HealthChecks
+import com.jasonschoenbrun.ytmtrigger.health.HealthReport
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -151,6 +155,7 @@ fun AppNav() {
         Screen.Logs -> LogsScreen(onBack = { screen = Screen.Home })
         Screen.SelfTest -> SelfTestScreen(onBack = { screen = Screen.Home })
         Screen.Settings -> SettingsScreen(onBack = { screen = Screen.Home })
+        Screen.Health -> HealthScreen(onBack = { screen = Screen.Home })
     }
 }
 
@@ -161,6 +166,7 @@ sealed class Screen {
     data object Logs : Screen()
     data object SelfTest : Screen()
     data object Settings : Screen()
+    data object Health : Screen()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -297,6 +303,7 @@ fun HomeScreen(onNav: (Screen) -> Unit) {
                 NavTile("Self-test", Icons.Default.BugReport, Modifier.weight(1f)) { onNav(Screen.SelfTest) }
                 NavTile("Settings", Icons.Default.Settings, Modifier.weight(1f)) { onNav(Screen.Settings) }
             }
+            HealthTile { onNav(Screen.Health) }
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -1953,6 +1960,188 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                 },
             )
+        }
+    }
+}
+
+// ---------------------------------------------------------------- health
+
+private val HealthGreen  = Color(0xFF3DDC84)
+private val HealthOrange = Color(0xFFFFB020)
+private val HealthRed    = Color(0xFFFF5252)
+
+private fun colourFor(h: Health): Color = when (h) {
+    Health.Ok -> HealthGreen
+    Health.Degraded -> HealthOrange
+    Health.Broken -> HealthRed
+}
+
+/**
+ * The home-screen button, coloured by the worst thing it found.
+ *
+ * Re-checked while the screen is showing rather than once, because most of what
+ * it looks at is a permission the user may be away changing right now, and a
+ * stale green light is worse than no light.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HealthTile(onClick: () -> Unit) {
+    val ctx = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(3000); tick++ } }
+    val report = remember(tick) { HealthChecks.run(ctx) }
+    val colour = colourFor(report.overall)
+    ElevatedCard(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = SurfaceElevated),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(44.dp).clip(CircleShape).background(colour.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    when (report.overall) {
+                        Health.Ok -> Icons.Default.CheckCircle
+                        Health.Degraded -> Icons.Default.Warning
+                        Health.Broken -> Icons.Default.Error
+                    },
+                    null,
+                    modifier = Modifier.size(26.dp),
+                    tint = colour,
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Health check", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    report.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colour,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight, null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HealthScreen(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(3000); tick++ } }
+    val report = remember(tick) { HealthChecks.run(ctx) }
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Health check", fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+    ) { inner ->
+        Column(
+            Modifier.padding(inner).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            HealthHeader(report)
+            // Worst first: what is broken should not need scrolling to.
+            val order = mapOf(Health.Broken to 0, Health.Degraded to 1, Health.Ok to 2)
+            for (c in report.checks.sortedBy { order[it.health] }) HealthRow(c)
+            Text(
+                "Green means everything the app can do, it can do. Orange means something " +
+                    "is wrong and the app already handles it. Red means something is wrong " +
+                    "and nothing covers it, so a block will be missed or silent.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun HealthHeader(report: HealthReport) {
+    val colour = colourFor(report.overall)
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = colour.copy(alpha = 0.12f)),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                when (report.overall) {
+                    Health.Ok -> Icons.Default.CheckCircle
+                    Health.Degraded -> Icons.Default.Warning
+                    Health.Broken -> Icons.Default.Error
+                },
+                null, tint = colour, modifier = Modifier.size(30.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(report.summary, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${report.checks.size} checks",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HealthRow(c: Check) {
+    val colour = colourFor(c.health)
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = SurfaceElevated),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(colour))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    c.title,
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(c.detail, style = MaterialTheme.typography.bodySmall, color = colour)
+            }
+            if (c.consequence != null) {
+                Text(
+                    c.consequence,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (c.fixAction != null) {
+                Text(
+                    "Fix: ${c.fixAction}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
         }
     }
 }
