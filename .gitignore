@@ -53,3 +53,6 @@ tools/private-feeds.json
 
 # Per-workspace MCP servers (Aleph Beta member library). Not committed.
 .mcp.json
+tools/.ab-mcp/
+tools/.ab-feed-slugs.json
+tools/.ab-missing.json

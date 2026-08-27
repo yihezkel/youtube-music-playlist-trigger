@@ -31,7 +31,7 @@ export const PODCASTS = [
   { name: "Uncanny Valley (WIRED)", status: "Doing", slot: "Daily", q: "Uncanny Valley WIRED" },
   { name: "TED Talks Daily", status: "Doing", slot: "Daily", q: "TED Talks Daily" },
   { name: "Into the Verse (Aleph Beta)", status: "Doing", slot: "Daily", q: "Into the Verse Aleph Beta" },
-  { name: "Aleph Beta", status: "Doing", slot: "Weekly", q: "Aleph Beta", privateFeed: true, note: "Rebuilt from Aleph Beta's own published episode metadata - their public RSS carries 4 episodes of A Book Like No Other where their site lists 136 across ten series. The audio was never paywalled; only the feed was pruned." },
+  { name: "Aleph Beta", status: "Doing", slot: "Weekly", q: "Aleph Beta", privateFeed: true, note: "Rebuilt from Aleph Beta's own published episode metadata - their public RSS carries 4 episodes of A Book Like No Other where their site lists 136. The audio was never paywalled; only the feed was pruned. Ten series: Parsha Cycles 1-3 (87 eps), Garden of Eden (9), The Mekallel (7), Megillat Esther (5), Matan Torah (8), Shir HaMaalot (4), The Shofar's Cry (5), Why Judaism Does That (11). Coverage checked against Aleph Beta's own member search index: 55 of 56 audio items it returned were already in the feed." },
   { name: "A Book Like No Other (Aleph Beta)", status: "Dropped", slot: "Daily", q: "A Book Like No Other Aleph Beta", note: "Superseded by the rebuilt 'Aleph Beta' feed, which carries the same content plus 132 more episodes" },
 
   // ---- News tab: active ----
