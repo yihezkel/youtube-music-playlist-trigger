@@ -12,16 +12,30 @@ const stats = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 
 import { BLOCKS, MODE, MUSIC, queues } from "./schedule-blocks.mjs";
 
+// Feed URLs that must never be committed - currently the rebuilt Aleph Beta
+// feed, whose path carries a token so it is not discoverable. Looked up by show
+// name, so schedule-blocks.mjs can name the show without holding the URL.
+const privateFeeds = (() => {
+  try { return JSON.parse(readFileSync("private-feeds.json", "utf8")); } catch { return {}; }
+})();
+
 const feed = (name) => {
+  if (privateFeeds[name]) {
+    const mode = MODE[name];
+    return `${privateFeeds[name]} [${name}${mode ? ` | ${mode}` : ""}]`;
+  }
   const s = stats.find((x) => x.name === name) || stats.find((x) => x.name.startsWith(name));
   if (!s?.feedUrl) throw new Error(`no feed for "${name}"`);
   const mode = MODE[name];
   return `${s.feedUrl} [${name}${mode ? ` | ${mode}` : ""}]`;
 };
 const median = (name) => {
+  if (privateFeeds[name]) return PRIVATE_MEDIAN[name] ?? 35;
   const s = stats.find((x) => x.name === name) || stats.find((x) => x.name.startsWith(name));
   return s?.durMedian ?? 0;
 };
+/** Typical episode length for feeds that are not in podcast-stats.json. */
+const PRIVATE_MEDIAN = { "Aleph Beta": 36 };
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync("./service-account.json", "utf8"))) });
 const db = admin.firestore();
 const ref = db.doc(DOC);

@@ -100,6 +100,15 @@ if (mode !== "clean") {
       playlistUrls: [`${TORAH} [Autostop follower]`],
     });
   }
+  // "abfeed": the rebuilt Aleph Beta feed. URL comes from the gitignored
+  // private-feeds.json so the token never lands in a tracked file.
+  if (mode === "abfeed") {
+    const pf = JSON.parse(readFileSync("private-feeds.json", "utf8"));
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = start + length;
+    first.podcastEpisodeMode = "Random";
+    first.playlistUrls = [`${pf["Aleph Beta"]} [Aleph Beta]`, `${TORAH} [After Aleph Beta]`];
+  }
   // "alephbeta": drive the Aleph Beta app. Their public feed carries 4 episodes
   // where the subscription holds 68, so the app is the only way to the archive.
   if (mode === "alephbeta") {

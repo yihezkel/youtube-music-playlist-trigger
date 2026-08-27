@@ -43,3 +43,10 @@ tools/node_modules/
 # Generated podcast statistics (regenerate with tools/podcast-stats.mjs)
 tools/podcast-stats.json
 tools/_*.mjs
+
+# Aleph Beta feed rebuilt from their published metadata: personal use, not for
+# redistribution, and the token makes the hosted path unguessable.
+tools/.ab-cache/
+tools/.ab-feed-token
+web/private-feeds/
+tools/private-feeds.json
