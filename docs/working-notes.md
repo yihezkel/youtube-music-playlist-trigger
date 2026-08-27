@@ -154,6 +154,11 @@ Facts that are easy to get wrong:
 - **Verification must not accept another app's audio.** `AudioManager.isMusicActive`
   is true for anything, so a launch once "verified" 133 ms after the intent —
   it was hearing the previous podcast. Require a YT Music session.
+- **The `Sunset` and `ShabatYomTovEnd` anchors measure their offset from
+  different instants.** Sunset's is from sunset; Shabat-ends' is from
+  `endOf(day)` = sunset + `shabatEndOffsetMin` (default 42). Block G's `+30` is
+  therefore sunset + 72, and it follows that setting if it is ever changed. See
+  §11 for why the two anchors are not duplicates.
 
 ---
 
@@ -314,24 +319,35 @@ what was got wrong. Match that.
 
 **Genuinely open:**
 
-- **Sunset vs Shabat-ends anchors.** He asked whether they are duplicates. The
-  *time* is derived (`endOf = sunset + endOffsetMin`); the *day selection* is
-  not — Shabat-ends fires only on Saturdays and Yom Tov end-days, and suppresses
-  the nightfall where Shabat runs into Yom Tov. Merging them would make the
-  offset ambiguous and fail silently (the Shabat gate would block it, so the
-  symptom is a missed block, not playback on Shabat). **An open offer stands to
-  reword the editor labels instead:** *"Sunset (every ticked day)"* /
-  *"Shabat/Yom Tov ends (only motzaei Shabat / Yom Tov)"*. He has not answered.
 - **The Weekly tab** still duplicates Google Home state. Left alone while the
   Google Home automations run in parallel.
 - **31 Google Home podcast automations** are still live alongside the app. He
   intended to delete them once satisfied.
-- **`store_memory` was failing** at the end of the session ("an unexpected error
-  occurred"), so the screenshot preference in §3 is not in agent memory. If it
-  is still broken, put it in `copilot-instructions.md` instead.
 
 **Closed — do not reopen without new information:**
 
+- **Sunset vs Shabat-ends anchors are not duplicates.** Asked and answered
+  against the code, not from memory. Three separate differences:
+  1. **Day selection.** `Sunset` yields a time on every ticked day.
+     `ShabatYomTovEnd` goes through `windowEndOn`, which returns null unless the
+     day is a Saturday or a Yom Tov end-day (`HebrewCalendarChecker.kt:145`) and
+     null *again* if the block is still in force a minute past the candidate
+     (`:148`), so Shabat running into Yom Tov correctly yields nothing. Ticked
+     days filter; they do not select.
+  2. **Different offset origin** — see §5. `+30` means two different clock
+     times under the two anchors.
+  3. **Substituting one for the other yields silence, not a wrong time.**
+     Sunset+30 on a Saturday is not after nightfall (sunset+42), so `evaluate()`
+     (`:88`) returns skip and the Shabat gate blocks it. The block simply never
+     plays.
+
+  Resolution: keep both. Jason chose to leave the **app** editor exactly as it
+  is — chips still read "Clock" / "Sunset" / "Shabat ends", and he declined
+  renaming the last to "Shabat/Yom Tov ends". The **web console** was the real
+  gap: it offered the same choice with no explanation at all, and now shows the
+  app's existing per-anchor wording under the dropdown (`ANCHOR_HINT` in
+  `web/index.html`). The console's dropdown still says "Shabat/Yom Tov ends"
+  while the app chip says "Shabat ends"; that mismatch was left deliberately.
 - Starting YouTube Music or the Aleph Beta app behind a secure lock (§6).
 - Implementing the schedule on Google Home — its automations play one podcast
   each and cannot queue.

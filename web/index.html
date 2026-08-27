@@ -167,6 +167,15 @@ const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
 // Sunday first, matching the app. Values stay ISO (Mon=1 … Sun=7).
 const DAYS = [['Su',7],['M',1],['Tu',2],['W',3],['Th',4],['F',5],['\u05E9',6]];
+// Wording kept identical to the app's schedule editor. The two anchors look
+// interchangeable in a dropdown - both move with sunset - but only one of them
+// also chooses the days. Without this the console offered the choice with no
+// explanation at all.
+const ANCHOR_HINT = {
+  Sunset: 'Fires relative to sunset, which shifts by over three hours across the year.',
+  ShabatYomTovEnd: 'Fires only on days a Shabat or Yom Tov window actually ends, ' +
+    'so other ticked days are skipped.',
+};
 let uid = null, deviceId = null, schedules = [], currentRevision = 0, loadedOk = false;
 
 function toast(msg) {
@@ -358,6 +367,8 @@ function renderSchedules() {
                title="Minutes from the anchor; negative means before it"
                style="flex:0 0 130px${anchor === 'FixedClock' ? ';display:none' : ''}" />
       </div>
+      <div class="hint" data-f="anchorHint"${anchor === 'FixedClock' ? ' style="display:none"' : ''}>${
+        ANCHOR_HINT[anchor] || ''}</div>
       <label>Stop time (optional — leave blank to play until stopped)</label>
       <input type="time" data-f="stop" value="${stop}" style="flex:0 0 130px" />
       <label>Days</label>
@@ -392,10 +403,13 @@ function renderSchedules() {
     // Only the control that applies to the chosen anchor is shown, so the
     // clock time and the offset can never be set to conflicting values.
     const anchorSel = div.querySelector('[data-f=anchor]');
+    const anchorHint = div.querySelector('[data-f=anchorHint]');
     anchorSel.onchange = () => {
       const clock = anchorSel.value === 'FixedClock';
       div.querySelector('[data-f=time]').style.display = clock ? '' : 'none';
       div.querySelector('[data-f=offset]').style.display = clock ? 'none' : '';
+      anchorHint.style.display = clock ? 'none' : '';
+      anchorHint.textContent = ANCHOR_HINT[anchorSel.value] || '';
     };
     div._read = () => {
       const days = [...div.querySelectorAll('[data-day]')].filter(c => c.checked).map(c => +c.dataset.day);
