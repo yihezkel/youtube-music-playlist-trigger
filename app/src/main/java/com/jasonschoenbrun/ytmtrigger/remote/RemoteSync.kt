@@ -16,6 +16,7 @@ import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
+import com.jasonschoenbrun.ytmtrigger.playback.YtmBrowserProbe
 import com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver
 import kotlinx.coroutines.tasks.await
 import kotlinx.serialization.encodeToString
@@ -260,6 +261,10 @@ object RemoteSync {
             true
         }
         RemoteCommands.STOP_NOW -> PlaybackStopper.stop(context, reason = "remote stop")
+        RemoteCommands.PROBE_BROWSER -> {
+            YtmBrowserProbe.run(context, query = arg)
+            true
+        }
         RemoteCommands.UPLOAD_LOGS -> {
             uploadLogs(context, days = arg?.toIntOrNull() ?: 3)
             true

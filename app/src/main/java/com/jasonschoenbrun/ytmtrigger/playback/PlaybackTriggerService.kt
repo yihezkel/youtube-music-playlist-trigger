@@ -235,6 +235,14 @@ class PlaybackTriggerService : Service() {
             val lockProblem = LockScreenGuard.describe(this)
             if (lockProblem != null) {
                 val name = choice.label ?: entry.displayName
+                // Before giving up: a media session is not a window. Transport
+                // controls are service calls, so a keyguard has nothing to
+                // refuse, and YouTube Music advertises PLAY_FROM_URI and
+                // PLAY_FROM_SEARCH on the session it publishes. If it honours
+                // either, music plays while locked after all.
+                if (entry.kind == MediaKind.YtmPlaylist || entry.kind == MediaKind.YtmTrack) {
+                    if (playViaSession(schedule, choice, entry)) return
+                }
                 Logger.e("PlaybackSvc", "Cannot start an app-played entry", mapOf(
                     "scheduleId" to schedule.id, "entry" to name, "why" to lockProblem,
                 ))
@@ -467,6 +475,67 @@ class PlaybackTriggerService : Service() {
         ))
         startQueued(this, schedule.id, index + 1)
         return true
+    }
+
+    /**
+     * Start YouTube Music through its media session rather than its screen.
+     *
+     * The screen is what a secure lock forbids. A media session is not a window:
+     * transport controls are service calls, so the keyguard has nothing to
+     * refuse, and any app with notification-listener access may send them - no
+     * allowlist, unlike the MediaBrowserService, which YouTube Music reserves
+     * for Android Auto and car head units and refused us outright.
+     *
+     * YouTube Music advertises PLAY_FROM_URI, PLAY_FROM_MEDIA_ID and
+     * PLAY_FROM_SEARCH. Advertising is not honouring, though - the Aleph Beta
+     * app advertises the same and acts on none of them - so both are tried and
+     * the result is measured rather than assumed.
+     *
+     * It needs a session to talk to, which means YouTube Music must have been
+     * used at least once since it was last force-stopped. That is the honest
+     * limit of this route.
+     */
+    private suspend fun playViaSession(
+        schedule: Schedule,
+        choice: PlaylistPicker.Choice,
+        entry: MediaEntry,
+    ): Boolean {
+        val pkg = YT_MUSIC_PKG
+        if (MediaAppController.session(this, pkg) == null) {
+            Logger.w("PlaybackSvc", "No YouTube Music session to drive while locked", mapOf(
+                "scheduleId" to schedule.id,
+            ))
+            return false
+        }
+        val name = choice.label ?: entry.displayName
+        // The URL first: it names the exact playlist, where a search only names
+        // something like it.
+        val attempts = listOf<Pair<String, () -> Boolean>>(
+            "playFromUri" to { MediaAppController.playFromUri(this, pkg, choice.url) },
+            "playFromSearch" to { MediaAppController.playFromSearch(this, pkg, name) },
+        )
+        for ((how, send) in attempts) {
+            if (!send()) continue
+            val deadline = System.currentTimeMillis() + SESSION_START_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadline) {
+                if (MediaAppController.isPlaying(this, pkg)) {
+                    Logger.i("PlaybackSvc", "Music started while locked, via the media session", mapOf(
+                        "scheduleId" to schedule.id, "how" to how, "entry" to name,
+                        "nowPlaying" to (MediaAppController.nowPlaying(this, pkg) ?: "-"),
+                    ))
+                    updateNotification("Playing ${schedule.name}")
+                    if (schedule.continuousPlay) {
+                        MusicEndWatcher.watch(this, schedule.id, choice.index, pkg)
+                    }
+                    return true
+                }
+                delay(1000)
+            }
+            Logger.w("PlaybackSvc", "Session route did not start playback", mapOf(
+                "how" to how, "entry" to name,
+            ))
+        }
+        return false
     }
 
     private fun setMediaVolume(percent: Int) {
@@ -809,6 +878,8 @@ class PlaybackTriggerService : Service() {
          * with resume in place the episode is not lost, only deferred.
          */
         const val MIN_EPISODE_SHARE = 0.5
+        /** How long to wait for the media-session route to produce audio. */
+        const val SESSION_START_TIMEOUT_MS = 20_000L
         /** How long to let the Aleph Beta app lay itself out before asking it to play. */
         const val ALEPH_BETA_LOAD_MS = 12_000L
         /** How long to wait for it to actually start. */

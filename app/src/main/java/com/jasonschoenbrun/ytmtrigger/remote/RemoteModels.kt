@@ -76,6 +76,8 @@ object RemoteCommands {
     const val STOP_NOW = "stopNow"
     const val RUN_SELF_TEST = "runSelfTest"
     const val UPLOAD_LOGS = "uploadLogs"
+    /** Probe YouTube Music's MediaBrowserService and log what it offers. */
+    const val PROBE_BROWSER = "probeBrowser"
 
     const val STATUS_PENDING = "pending"
     const val STATUS_DONE = "done"

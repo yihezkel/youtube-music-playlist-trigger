@@ -84,6 +84,19 @@ object MediaAppController {
         }
     }
 
+    /** Play a URI the app already knows how to resolve, e.g. a playlist link. */
+    fun playFromUri(context: Context, pkg: String, uri: String): Boolean {
+        val controls = session(context, pkg)?.transportControls ?: return false
+        return try {
+            controls.playFromUri(Uri.parse(uri), null)
+            Logger.i("MediaApp", "playFromUri sent", mapOf("pkg" to pkg, "uri" to uri.take(70)))
+            true
+        } catch (t: Throwable) {
+            Logger.w("MediaApp", "playFromUri failed", mapOf("pkg" to pkg), t = t)
+            false
+        }
+    }
+
     /** Resume whatever [pkg] already has loaded. */
     fun play(context: Context, pkg: String): Boolean {
         val controls = session(context, pkg)?.transportControls ?: return false
