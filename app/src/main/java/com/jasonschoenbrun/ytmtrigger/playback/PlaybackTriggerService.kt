@@ -224,9 +224,33 @@ class PlaybackTriggerService : Service() {
                 if (!played) postFailure("Could not play podcast for '${schedule.name}'")
                 return
             }
+
+            // Everything from here is played by another app, which means opening
+            // its screen - and a secure lock forbids that. Checked once, up
+            // front, rather than after three launch attempts have failed and the
+            // accessibility service has aborted with "systemui bouncer is
+            // foreground". Podcasts above are unaffected, which is why the check
+            // sits here and not at the top.
+            LockScreenGuard.log(this, schedule.id)
+            val lockProblem = LockScreenGuard.describe(this)
+            if (lockProblem != null) {
+                val name = choice.label ?: entry.displayName
+                Logger.e("PlaybackSvc", "Cannot start an app-played entry", mapOf(
+                    "scheduleId" to schedule.id, "entry" to name, "why" to lockProblem,
+                ))
+                // Move the queue on rather than ending the block. Music no
+                // longer has to be last, so a locked phone must not silence
+                // everything that was meant to follow it.
+                if (skipToNextEntry(schedule, choice.index, "phone locked")) return
+                postFailure("Couldn't play '$name' for '${schedule.name}': $lockProblem")
+                return
+            }
+
             if (entry.kind == MediaKind.AlephBeta) {
                 val played = playAlephBeta(schedule, entry, choice.index)
-                if (!played) postFailure("Could not play '${entry.displayName}' in the Aleph Beta app")
+                if (!played && !skipToNextEntry(schedule, choice.index, "could not start")) {
+                    postFailure("Could not play '${entry.displayName}' in the Aleph Beta app")
+                }
                 return
             }
 
@@ -374,6 +398,17 @@ class PlaybackTriggerService : Service() {
         launchYtMusic(choice, strategy)
     }
 
+    /**
+     * Wait until YouTube Music is actually playing.
+     *
+     * The bar is a YT Music media session in a playing state. AudioManager's
+     * isMusicActive is true for *any* app's audio, so it used to report success
+     * while the previous podcast in the same queue was still finishing - a
+     * launch was once "verified" 133 ms after the intent was sent, which YT
+     * Music cannot possibly have managed. It is still consulted, but only once
+     * no other app is holding a playing session, so it can cover the case where
+     * YT Music plays without publishing one.
+     */
     private suspend fun waitForPlayback(timeoutMs: Long): Boolean {
         val am = getSystemService(AudioManager::class.java)
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -383,12 +418,15 @@ class PlaybackTriggerService : Service() {
             val audioManagerPlaying = am?.isMusicActive == true
             val sessionStatus = MediaSessionProbe.ytMusicStatus(this)
             val mediaSessionPlaying = sessionStatus is MediaSessionProbe.Status.Playing
-            // F-fix-1: prefer MediaSession truth, fall back to AudioManager.
-            val playing = mediaSessionPlaying || audioManagerPlaying
+            // Someone else's audio must not be mistaken for ours.
+            val otherApp = MediaAppController.playingPackages(this)
+                .firstOrNull { it != MediaSessionListenerService.YT_MUSIC_PKG }
+            val playing = mediaSessionPlaying || (audioManagerPlaying && otherApp == null)
             if (iter % 5 == 0) {
                 Logger.d("PlaybackSvc", "Playback poll", mapOf(
                     "isMusicActive" to audioManagerPlaying.toString(),
                     "mediaSession" to sessionStatus::class.simpleName.orEmpty(),
+                    "otherAppPlaying" to (otherApp ?: "-"),
                     "elapsedMs" to (timeoutMs - (deadline - System.currentTimeMillis())).toString(),
                 ))
             }
@@ -403,6 +441,32 @@ class PlaybackTriggerService : Service() {
             iter++
         }
         return false
+    }
+
+    /**
+     * Hand a continuous block on to its next entry when this one cannot play.
+     *
+     * Without this a single unplayable entry ended the whole block: the trigger
+     * reported a failure and returned, and nothing scheduled after it ever ran.
+     * That was tolerable while music was always last in a queue, and stopped
+     * being so once the end-of-playlist watch made mid-queue music possible.
+     *
+     * @return true when the queue was advanced and the caller should stop.
+     */
+    private fun skipToNextEntry(schedule: Schedule, index: Int, why: String): Boolean {
+        if (!schedule.continuousPlay) return false
+        val entries = schedule.playlistUrls.size
+        // Only within this lap: wrapping here would retry the same unplayable
+        // entry for as long as the block lasts.
+        if (index + 1 >= entries) return false
+        Logger.i("PlaybackSvc", "Skipping to the next entry", mapOf(
+            "scheduleId" to schedule.id,
+            "from" to index.toString(),
+            "to" to (index + 1).toString(),
+            "why" to why,
+        ))
+        startQueued(this, schedule.id, index + 1)
+        return true
     }
 
     private fun setMediaVolume(percent: Int) {

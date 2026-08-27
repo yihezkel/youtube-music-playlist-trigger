@@ -137,6 +137,21 @@ object MediaAppController {
         else -> false
     }
 
+    /** Packages with a session in a playing state right now. */
+    fun playingPackages(context: Context): List<String> {
+        val mgr = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+            ?: return emptyList()
+        val listener = ComponentName(context, MediaSessionListenerService::class.java)
+        return try {
+            mgr.getActiveSessions(listener)
+                .filter { isActive(it.playbackState?.state) }
+                .map { it.packageName }
+                .distinct()
+        } catch (t: Throwable) {
+            emptyList()
+        }
+    }
+
     /**
      * Open [url] in [pkg], over the lock screen if need be.
      *
