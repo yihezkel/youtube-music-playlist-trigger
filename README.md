@@ -190,9 +190,20 @@ all music. The announcement is spoken rather than posted, since nobody is
 watching a phone in a kitchen, and it finishes before playback starts so it is
 not talked over.
 
-Note that this only helps if *something* reachable is a podcast. If a block is
-all music **and** the Settings defaults are all music, there is nothing to
-substitute and the block is skipped with a failure notification.
+Note that this only helps if *something* reachable is a podcast. Every block that
+contains music currently also contains a podcast, so the substitute comes from
+the block itself and the Settings defaults are never reached. They are insurance
+against a block that is all music — Rabbi Breitowitz Q&A and The Office of Rabbi
+Sacks sit at the end of the default list for that purpose. If a block were all
+music **and** the Settings defaults were all music, there would be nothing to
+substitute and the block would be skipped with a failure notification.
+
+The list is walked in order until something actually starts, because a
+substitute arrives late in its block and can be declined for being too long for
+what is left — the same half-episode rule that governs normal playback. That is
+why the fallback list holds both a long show and a short one: Rabbi Breitowitz
+runs about 71 minutes and needs 36 of block remaining, which erev Shabat has and
+a half-hour Landing block does not; Rabbi Sacks runs 10 and fits anywhere.
 
 ### The one arrangement that gives you both
 
