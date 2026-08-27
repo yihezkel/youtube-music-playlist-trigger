@@ -220,8 +220,13 @@ class PlaybackTriggerService : Service() {
             val entry = MediaEntries.parse(choice.url)
                 .copy(label = choice.label, episodeMode = choice.episodeMode)
             if (entry.kind == MediaKind.PodcastFeed || entry.kind == MediaKind.SpotifyShow) {
-                val played = playPodcast(schedule, entry, choice.index)
-                if (!played) postFailure("Could not play podcast for '${schedule.name}'")
+                // Declining an over-long episode is a deliberate outcome, not a
+                // failure: the block simply ends early rather than starting
+                // something it cannot get through.
+                val outcome = playPodcast(schedule, entry, choice.index)
+                if (outcome == PodcastOutcome.Failed) {
+                    postFailure("Could not play podcast for '${schedule.name}'")
+                }
                 return
             }
 
@@ -575,29 +580,45 @@ class PlaybackTriggerService : Service() {
         blockedIndex: Int,
         blockedName: String,
     ): Boolean {
-        val choice = LockSafeFallback.find(this, schedule, blockedIndex) ?: return false
-        Logger.i("PlaybackSvc", "Substituting a lock-safe entry", mapOf(
-            "scheduleId" to schedule.id,
-            "blocked" to blockedName,
-            "playing" to choice.label,
-            "source" to if (choice.fromSettings) "settings defaults" else "this block",
-            "queueIndex" to (choice.queueIndex?.toString() ?: "-"),
-        ))
-        Announcer.say(this, LockSafeFallback.announcement(blockedName, choice))
-
-        // An entry from this block keeps its place in the queue, so what
-        // follows it still follows it. One borrowed from Settings has no place
-        // in the queue, so it plays as a one-off and the block ends with it.
-        val parsed = MediaEntries.parse(MediaEntries.url(choice.entry))
-            .copy(label = MediaEntries.label(choice.entry), episodeMode = MediaEntries.episodeMode(choice.entry))
-        val index = choice.queueIndex ?: blockedIndex
-        val played = playPodcast(schedule, parsed, index)
-        if (!played) {
-            Logger.w("PlaybackSvc", "The substitute would not play either", mapOf(
-                "entry" to choice.label,
+        val candidates = LockSafeFallback.findAll(this, schedule, blockedIndex)
+        if (candidates.isEmpty()) return false
+        // Tried in order, because the first choice can still be declined for
+        // being too long for what is left of the block - which is exactly the
+        // situation a substitute is likely to meet, arriving late in a block.
+        // Announcing per attempt keeps the room told the truth rather than told
+        // about something that never played.
+        for (choice in candidates) {
+            Logger.i("PlaybackSvc", "Substituting a lock-safe entry", mapOf(
+                "scheduleId" to schedule.id,
+                "blocked" to blockedName,
+                "playing" to choice.label,
+                "source" to if (choice.fromSettings) "settings defaults" else "this block",
+                "queueIndex" to (choice.queueIndex?.toString() ?: "-"),
             ))
+            Announcer.say(this, LockSafeFallback.announcement(blockedName, choice))
+
+            // An entry from this block keeps its place in the queue, so what
+            // follows it still follows it. One borrowed from Settings has no
+            // place in the queue, so it plays as a one-off.
+            val parsed = MediaEntries.parse(MediaEntries.url(choice.entry))
+                .copy(
+                    label = MediaEntries.label(choice.entry),
+                    episodeMode = MediaEntries.episodeMode(choice.entry),
+                )
+            val index = choice.queueIndex ?: blockedIndex
+            when (playPodcast(schedule, parsed, index)) {
+                PodcastOutcome.Started -> return true
+                PodcastOutcome.TooLittleTimeLeft -> Logger.i(
+                    "PlaybackSvc", "Substitute too long for what is left; trying the next",
+                    mapOf("entry" to choice.label),
+                )
+                PodcastOutcome.Failed -> Logger.w(
+                    "PlaybackSvc", "Substitute would not play; trying the next",
+                    mapOf("entry" to choice.label),
+                )
+            }
         }
-        return played
+        return false
     }
 
     private fun setMediaVolume(percent: Int) {
@@ -759,21 +780,39 @@ class PlaybackTriggerService : Service() {
         return java.time.Duration.between(now, stop).seconds
     }
 
-    private suspend fun playPodcast(schedule: Schedule, entry: MediaEntry, queueIndex: Int): Boolean {
+    /**
+     * What came of trying to play a podcast entry.
+     *
+     * "Handled" and "playing" used to be the same answer, which was fine while
+     * the only caller was the normal queue - a block declining an over-long
+     * episode simply ends early, and that is correct. It stopped being fine
+     * once a substitute could be chosen for a locked phone: the substitute would
+     * be declined for the same reason, report success, and leave silence.
+     */
+    private enum class PodcastOutcome {
+        /** Audio is playing. */
+        Started,
+        /** Deliberately not started: too little of the block was left for it. */
+        TooLittleTimeLeft,
+        /** Wanted to play and could not. */
+        Failed,
+    }
+
+    private suspend fun playPodcast(schedule: Schedule, entry: MediaEntry, queueIndex: Int): PodcastOutcome {
         val feedUrl = when (entry.kind) {
             MediaKind.PodcastFeed -> entry.id
             MediaKind.SpotifyShow -> SpotifyFeedResolver.feedForShow(this, entry.id) ?: run {
                 Logger.e("PlaybackSvc", "No RSS feed found for Spotify show", mapOf(
                     "show" to entry.id, "name" to entry.displayName,
                 ))
-                return false
+                return PodcastOutcome.Failed
             }
-            else -> return false
+            else -> return PodcastOutcome.Failed
         }
         val episodes = PodcastCatalog.episodes(this, feedUrl)
         if (episodes.isEmpty()) {
             Logger.e("PlaybackSvc", "Feed produced no episodes", mapOf("feed" to feedUrl))
-            return false
+            return PodcastOutcome.Failed
         }
         // An episode left part-heard when a block ended takes precedence over
         // picking a new one: finishing what was started is the point of the
@@ -813,7 +852,7 @@ class PlaybackTriggerService : Service() {
                 "episodeSec" to playableSec.toString(),
                 "sharePlayable" to "%.2f".format(remainingSec.toDouble() / playableSec),
             ))
-            return true
+            return PodcastOutcome.TooLittleTimeLeft
         }
 
         Logger.i("PlaybackSvc", "Podcast episode chosen", mapOf(
@@ -839,12 +878,12 @@ class PlaybackTriggerService : Service() {
         while (System.currentTimeMillis() < deadline) {
             if (PodcastPlayerService.isPlaying()) {
                 Logger.i("PlaybackSvc", "Podcast playback verified", mapOf("title" to chosen.title))
-                return true
+                return PodcastOutcome.Started
             }
             delay(500)
         }
         Logger.e("PlaybackSvc", "Podcast did not start in time", mapOf("title" to chosen.title))
-        return false
+        return PodcastOutcome.Failed
     }
 
     /**

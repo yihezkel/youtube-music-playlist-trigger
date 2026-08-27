@@ -49,6 +49,34 @@ object LockSafeFallback {
         val label: String,
     )
 
+    /** Every lock-safe candidate, nearest first. */
+    fun findAll(context: Context, schedule: Schedule, skipIndex: Int): List<Choice> {
+        val out = mutableListOf<Choice>()
+        val urls = schedule.playlistUrls
+        for (step in 1..urls.size) {
+            val i = ((skipIndex + step) % urls.size + urls.size) % urls.size
+            if (i == skipIndex) continue
+            val raw = urls[i]
+            val parsed = MediaEntries.parse(raw)
+            if (!playsWhileLocked(parsed.kind)) continue
+            out += Choice(raw, i, false, parsed.displayName)
+        }
+        val defaults = SettingsRepository.get(context).current().defaultPlaylistUrls
+        for (raw in defaults) {
+            val parsed = MediaEntries.parse(raw)
+            if (!playsWhileLocked(parsed.kind)) continue
+            out += Choice(raw, null, true, parsed.displayName)
+        }
+        if (out.isEmpty()) {
+            Logger.w("LockFallback", "Nothing plays while locked", mapOf(
+                "scheduleId" to schedule.id,
+                "entries" to urls.size.toString(),
+                "defaults" to defaults.size.toString(),
+            ))
+        }
+        return out
+    }
+
     /**
      * Something in [schedule] or in Settings that will play while locked.
      *
@@ -57,33 +85,8 @@ object LockSafeFallback {
      * next playable thing the household would have heard anyway rather than
      * always the first entry.
      */
-    fun find(context: Context, schedule: Schedule, skipIndex: Int): Choice? {
-        val urls = schedule.playlistUrls
-        if (urls.isNotEmpty()) {
-            for (step in 1..urls.size) {
-                val i = ((skipIndex + step) % urls.size + urls.size) % urls.size
-                if (i == skipIndex) continue
-                val raw = urls[i]
-                val parsed = MediaEntries.parse(raw)
-                if (!playsWhileLocked(parsed.kind)) continue
-                return Choice(raw, i, false, parsed.displayName)
-            }
-        }
-        // Nothing in this block survives a lock - a music-only block, say - so
-        // fall back to the standing defaults.
-        val defaults = SettingsRepository.get(context).current().defaultPlaylistUrls
-        for (raw in defaults) {
-            val parsed = MediaEntries.parse(raw)
-            if (!playsWhileLocked(parsed.kind)) continue
-            return Choice(raw, null, true, parsed.displayName)
-        }
-        Logger.w("LockFallback", "Nothing plays while locked", mapOf(
-            "scheduleId" to schedule.id,
-            "entries" to urls.size.toString(),
-            "defaults" to defaults.size.toString(),
-        ))
-        return null
-    }
+    fun find(context: Context, schedule: Schedule, skipIndex: Int): Choice? =
+        findAll(context, schedule, skipIndex).firstOrNull()
 
     /** What to say out loud before playing the substitute. */
     fun announcement(blocked: String, choice: Choice): String {
