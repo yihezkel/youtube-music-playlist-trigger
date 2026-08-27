@@ -33,7 +33,41 @@ export const MODE = {
 
 /** How a mode reads on the sheet. Absent from MODE means the block default. */
 export const MODE_LABEL = { newest: "Newest", sequential: "In order" };
-export const modeLabel = (name) =>
+/**
+ * Shortest episode worth drawing, per show, in minutes.
+ *
+ * Some feeds carry two formats under one name, so a random draw is really a
+ * draw between formats. Measured from the live feeds rather than guessed:
+ *
+ *   Jews You Should Know   288 eps. 73 of them are "Torah You Should Know",
+ *                          a 3-7 minute Friday d'var Torah series that ran
+ *                          Nov 2020 - Jun 2022 - a quarter of the feed. There
+ *                          is nothing at all between 8 and 28 minutes, so any
+ *                          floor in that band keeps the same 211 interviews
+ *                          (median 54). They are also parsha-specific and
+ *                          years old, so a random draw was usually the wrong
+ *                          week as well as four minutes long.
+ *   Smash Boom Best        237 eps, 45 under 10 minutes (trailers and shorts)
+ *                          against a 30-45 minute debate format; empty from
+ *                          15 to 25. Floor keeps 191 (81%), median 37.
+ *   The School of Greatness  Different shape, and worth knowing: 1,978 eps
+ *                          with 247 in the 5-10 minute band and no real gap
+ *                          anywhere. That is a deliberate short format, not
+ *                          an anomaly, so this floor is a preference for the
+ *                          long interviews rather than a format separation.
+ *                          Keeps 1,635 (83%), median 68.
+ */
+export const MIN_MINUTES = {
+  "Jews You Should Know": 20,
+  "Smash Boom Best": 20,
+  "The School of Greatness": 20,
+};
+/** Median once MIN_MINUTES is applied, measured; used for block sizing. */
+export const FILTERED_MEDIAN = {
+  "Jews You Should Know": 54,
+  "Smash Boom Best": 37,
+  "The School of Greatness": 68,
+};export const modeLabel = (name) =>
   name === MUSIC ? "—" : (MODE_LABEL[MODE[name]] || "Random");
 
 // Music comes from the user's existing YT Music playlists, which live in the

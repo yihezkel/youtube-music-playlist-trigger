@@ -42,6 +42,7 @@ object PlaylistPicker {
             label = picked.label,
             kind = picked.kind,
             episodeMode = picked.episodeMode,
+            minMinutes = picked.minMinutes,
         )
     }
 
@@ -105,6 +106,7 @@ object PlaylistPicker {
             label = picked.label,
             kind = picked.kind,
             episodeMode = picked.episodeMode,
+            minMinutes = picked.minMinutes,
             index = resolved,
         )
     }
@@ -126,6 +128,11 @@ object PlaylistPicker {
          * brackets held.
          */
         val episodeMode: PodcastEpisodeMode? = null,
+        /**
+         * Shortest episode worth drawing, in minutes. Carried for the same
+         * reason as [episodeMode]: the brackets are gone by this point.
+         */
+        val minMinutes: Int? = null,
         /**
          * Which queue entry this is, after any wrap-lap skipping. Chaining uses
          * this rather than the requested index. Always 0 for a single pick.

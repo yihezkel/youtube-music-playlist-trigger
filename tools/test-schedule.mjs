@@ -115,6 +115,24 @@ if (mode !== "clean") {
     first.podcastEpisodeMode = "Random";
     first.playlistUrls = [`${pf["Aleph Beta"]} [Aleph Beta]`, `${TORAH} [After Aleph Beta]`];
   }
+  // "minlen": a feed carrying two formats under one name. Jews You Should Know
+  // holds 73 three-to-seven-minute divrei Torah among 288 episodes, with
+  // nothing between 8 and 28 minutes, so a 20-minute floor must leave exactly
+  // the 211 interviews. Run it repeatedly: without the floor roughly one draw
+  // in four is a four-minute episode.
+  if (mode === "minlen") {
+    const first = cfg.schedules[cfg.schedules.length - 1];
+    first.stopTimeMinutes = wrap(start + length);
+    first.podcastEpisodeMode = "Random";
+    first.playlistUrls = [
+      // "newest" alone would pick the 3-minute 2024 sign-off announcement,
+      // which sits at the top of this feed. Combined with the floor it must
+      // pick the newest *interview* instead - Episode 205, 55 minutes - which
+      // makes this a falsifiable test of both qualifiers and of their order.
+      "https://rss.libsyn.com/shows/104921/destinations/562825.xml [Jews You Should Know | newest | min 20]",
+      `${TORAH} [Chaser | sequential]`,
+    ];
+  }
   // "alephbeta": drive the Aleph Beta app. Their public feed carries 4 episodes
   // where the subscription holds 68, so the app is the only way to the archive.
   if (mode === "alephbeta") {

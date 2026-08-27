@@ -101,8 +101,11 @@ push([]);
 push(["5 · Open items"], "section");
 push(["Issue", "Detail"], "head");
 [
-  ["Jews You Should Know needs length-aware picking",
-   "Your note asked for it in a small slot on Sunday and a long slot after Wednesday. The feed mixes 3-minute Friday episodes with 45–100 minute interviews, and neither Google Home nor the app can currently filter by length — so it is scheduled as one Monday slot for now."],
+  // Deliberately one row, as it was: the yellow guidance columns to the right
+  // are aligned by row, so adding a row here would shift them against their
+  // content for every section below.
+  ["Jews You Should Know mixed two formats — now filtered by length",
+   "Measured from the feed: of 288 episodes, 73 are \"Torah You Should Know\", a 3-to-7-minute d'var Torah series published on Fridays between Nov 2020 and Jun 2022 — a quarter of the feed. So one random draw in four was a four-minute parsha thought, usually for the wrong week since they are parsha-specific and years old, instead of a 45-to-100-minute biography interview. The two formats separate cleanly: no episode falls between 8 and 28 minutes. The entry now carries a 20-minute minimum, which keeps all 211 interviews and excludes the short series. Nothing was ever lost to this — the block was not silent, it just moved on early. Smash Boom Best gets the same treatment (45 of 237 episodes under 10 minutes against a 30-to-45-minute debate). The School of Greatness is a different shape worth knowing: 247 of its 1,978 episodes sit in the 5-to-10 minute band with no gap anywhere, so that is a deliberate short format and the floor there is a preference for the long interviews rather than a format separation."],
 ].forEach((r) => push(r, "change"));
 push([]);
 

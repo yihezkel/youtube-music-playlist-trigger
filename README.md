@@ -40,6 +40,20 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
     setting could not express. Random suits evergreen archives; newest suits news and feeds
     that mix short and long formats; **in order** suits a serial that tells one story across
     numbered parts, where random produces part 1 followed by part 5 of a different series.
+  - **Minimum episode length** — some feeds carry two formats under one name, so a random
+    draw is really a draw between formats. `Jews You Should Know` publishes 45–100 minute
+    biography interviews and, in the same feed, 73 episodes of a 3–7 minute *Torah You
+    Should Know* series — a quarter of the feed, with nothing at all between 8 and 28
+    minutes. Adding `min 20` filters by length, so the entry picks the format rather than
+    the show:
+
+      https://rss.libsyn.com/shows/104921/....xml  [Jews You Should Know | min 20]
+      https://rss.libsyn.com/shows/104921/....xml  [Jews You Should Know | newest | min 20]
+
+    Qualifiers combine and may be given in any order. The floor applies only to the pool of
+    candidates, so an episode left part-heard is still resumed; episodes whose feed omits a
+    duration are kept, on the same principle as the half-episode rule; and a floor that
+    would exclude every episode is ignored rather than dropping the show from the block.
   - **In-order position is remembered per feed** and advances only when an episode is heard
     to the end, so a block that cuts one off resumes it rather than skipping past it. If the
     marked episode drops out of the feed, or the show has been heard through, it starts again

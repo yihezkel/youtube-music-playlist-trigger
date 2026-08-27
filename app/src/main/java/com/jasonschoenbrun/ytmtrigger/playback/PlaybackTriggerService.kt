@@ -221,7 +221,11 @@ class PlaybackTriggerService : Service() {
             // deep-link starts playing on its own.
             // Carry the label across: choice.url is already stripped of it.
             val entry = MediaEntries.parse(choice.url)
-                .copy(label = choice.label, episodeMode = choice.episodeMode)
+                .copy(
+                    label = choice.label,
+                    episodeMode = choice.episodeMode,
+                    minMinutes = choice.minMinutes,
+                )
             if (entry.kind == MediaKind.PodcastFeed || entry.kind == MediaKind.SpotifyShow) {
                 // Declining an over-long episode is a deliberate outcome, not a
                 // failure: the block simply ends early rather than starting
@@ -607,6 +611,7 @@ class PlaybackTriggerService : Service() {
                 .copy(
                     label = MediaEntries.label(choice.entry),
                     episodeMode = MediaEntries.episodeMode(choice.entry),
+                    minMinutes = MediaEntries.minMinutes(choice.entry),
                 )
             val index = choice.queueIndex ?: blockedIndex
             when (playPodcast(schedule, parsed, index)) {
@@ -823,15 +828,35 @@ class PlaybackTriggerService : Service() {
         // context rather than resuming mid-sentence.
         val pending = PodcastResume.get(this, feedUrl)
         val resumeEpisode = pending?.let { m -> episodes.firstOrNull { it.audioUrl == m.audioUrl } }
+        // A per-entry minimum length, for feeds carrying two formats under one
+        // name - see MediaEntry. Applied to the candidate pool only, so an
+        // episode already part-heard is still finished even if it falls below
+        // the floor. Episodes with no duration are kept, matching the rule the
+        // half-episode check below follows: unknown must not mean "skip". If
+        // the floor would leave nothing at all it is ignored rather than
+        // dropping the show from the block, because a filter that empties a
+        // feed is a mistake in the filter, not an instruction to go silent.
+        val minSec = (entry.minMinutes ?: 0) * 60L
+        val pool = if (minSec <= 0L) episodes else {
+            val kept = episodes.filter { (it.durationSec ?: Long.MAX_VALUE) >= minSec }
+            if (kept.isEmpty()) {
+                Logger.w("PlaybackSvc", "Minimum length excluded every episode; ignoring it", mapOf(
+                    "podcast" to entry.displayName,
+                    "minMinutes" to entry.minMinutes.toString(),
+                    "episodes" to episodes.size.toString(),
+                ))
+                episodes
+            } else kept
+        }
         // A per-entry mode wins over the schedule's: one block legitimately
         // mixes a news feed that must be newest with an archive that should be
         // shuffled and a serial that has to run in order.
         val mode = entry.episodeMode ?: schedule.podcastEpisodeMode
         val chosen = resumeEpisode ?: when (mode) {
-            PodcastEpisodeMode.Latest -> episodes.first()
-            PodcastEpisodeMode.Random -> episodes[Random.nextInt(episodes.size)]
-            PodcastEpisodeMode.Sequential -> PodcastSequence.next(this, feedUrl, episodes)
-        } ?: episodes.first()
+            PodcastEpisodeMode.Latest -> pool.first()
+            PodcastEpisodeMode.Random -> pool[Random.nextInt(pool.size)]
+            PodcastEpisodeMode.Sequential -> PodcastSequence.next(this, feedUrl, pool)
+        } ?: pool.first()
         val startAtSec = if (resumeEpisode != null && pending != null) {
             PodcastResume.resumeAtSec(pending)
         } else 0L
@@ -863,6 +888,8 @@ class PlaybackTriggerService : Service() {
             "mode" to if (resumeEpisode != null) "Resume" else mode.name,
             "modeFrom" to if (entry.episodeMode != null) "entry" else "schedule",
             "episodes" to episodes.size.toString(),
+            "eligible" to pool.size.toString(),
+            "minMinutes" to (entry.minMinutes?.toString() ?: "none"),
             "title" to chosen.title,
             "startAtSec" to startAtSec.toString(),
             "feedDurationSec" to (chosen.durationSec?.toString() ?: "unknown"),

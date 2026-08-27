@@ -169,6 +169,18 @@ Facts that are easy to get wrong:
 - **`PlaylistPicker.Choice.url` is the bare URL.** Brackets are stripped, so a
   label or per-entry episode mode must be carried on `Choice` explicitly. A
   first attempt at per-entry modes silently ignored every one of them.
+  **Adding a new per-entry qualifier means four edits, not one:** the field on
+  `MediaEntry`, the field on `Choice`, and *both* places in
+  `PlaybackTriggerService` that re-parse the bare URL and re-attach fields by
+  hand (`.copy(label = …, episodeMode = …)`). Miss one and the qualifier is
+  quietly dropped exactly as before.
+- **`min N` filters a feed by episode length**, for feeds carrying two formats
+  under one name — `[Jews You Should Know | min 20]`. Qualifiers combine and
+  may be reordered: `[Name | newest | min 20]`. It filters the candidate pool
+  only, so a part-heard episode is still resumed; episodes with no duration are
+  kept, matching the half-episode rule's "unknown must not mean skip"; and a
+  floor that would exclude everything is ignored rather than silencing the
+  show. See §11 for which shows use it and why.
 - **Queue chaining deliberately re-enters `PlaybackTriggerService`**, so the
   Shabat gate and in-call check apply to every item, not just the first.
 - **A block with no stop time does not wrap.** It plays its queue once and ends
@@ -423,6 +435,28 @@ what was got wrong. Match that.
 
 **Closed — do not reopen without new information:**
 
+- **"Jews You Should Know needs length-aware picking" — investigated and
+  settled.** The short episodes are not exceptions and not noise: they are a
+  named sub-series, *Torah You Should Know*, 73 numbered divrei Torah of 3-7
+  minutes published on Fridays between Nov 2020 and Jun 2022. That is **73 of
+  288 episodes, 25.3%** — one random draw in four. The two formats separate
+  cleanly: **no episode at all falls between 8 and 28 minutes**. They are also
+  parsha-specific and years old, so a random Monday draw was usually the wrong
+  week as well as four minutes long. The only other short items are three
+  summer PSAs and the May 2024 sign-off.
+
+  Resolved with a per-entry `min 20` (see §5). Two other scheduled shows have
+  the same shape and got the same treatment: **Smash Boom Best** (45 of 237
+  under 10 minutes against a 30-45 minute debate; empty from 15 to 25) and
+  **The School of Greatness** — which is worth distinguishing, because it is
+  *not* bimodal: 247 of its 1,978 episodes sit in the 5-10 minute band with no
+  gap anywhere, so that is a deliberate short format and the floor there is a
+  preference, not a format separation. Across the catalogue only 4 of 82 shows
+  with enough samples have `durP10 / durMedian < 0.25`.
+
+  The practical damage had been overstated: every block is a continuous queue,
+  so a four-minute draw never caused silence — it just advanced early. What was
+  lost was the intended slot, about one Monday in four.
 - **Sunset vs Shabat-ends anchors are not duplicates.** Asked and answered
   against the code, not from memory. Three separate differences:
   1. **Day selection.** `Sunset` yields a time on every ticked day.
