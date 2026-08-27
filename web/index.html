@@ -383,7 +383,7 @@ function renderSchedules() {
           <option value="Sequential"${s.podcastEpisodeMode === 'Sequential' ? ' selected' : ''}>In order (serials)</option>
         </select>
         Podcasts: which episode</label>
-      <div style="font-size:12px;color:var(--muted);margin:2px 0 6px">
+      <div class="hint" style="margin-bottom:6px">
         A single entry can override this: end its name with a mode, e.g.
         <code>&hellip;/feed.xml [The Indicator | newest]</code> or
         <code>[Business Wars | sequential]</code>.</div>

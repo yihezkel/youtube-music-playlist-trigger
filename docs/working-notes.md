@@ -12,7 +12,8 @@ than assumption, and what is deliberately left undone.
 
 ## 1. What this is, physically
 
-A dedicated Android phone (Motorola, `ZY22KJFNJM`, Android 14) sits in the house
+A dedicated Android phone (Motorola `moto g power 5G (2024)`, `ZY22KJFNJM`,
+Android 15 — it was 14 when these notes were first written) sits in the house
 and plays podcasts and music on a schedule, over Bluetooth or its own speaker.
 It is not the owner's personal phone. It is normally plugged in and reachable
 over adb, and it has **no lock screen set** — that matters, see §6.
@@ -58,6 +59,14 @@ the *pre-sync* schedules — a real race, not superstition.
 **Always run `clean`, then restart the app twice and confirm no
 `id=zz-queue-test` remains armed.** A test schedule left behind fires daily.
 This was got wrong once and left an alarm set for 01:14 the next morning.
+
+**Check that in the app's own log, not in `dumpsys alarm`.** An alarm entry
+there is tagged with the *action* — `tag=*walarm*:…ytmtrigger.SELFTEST_FIRE` —
+and never carries the schedule id, so `dumpsys alarm | grep zz-queue-test`
+matches nothing whether or not the test schedule exists. It reads like a clean
+result and is worthless. The app's `Alarm: Scheduled id=… name=…` lines are the
+real evidence; failing that, read the schedules out of the device config
+(`files/datastore/ytmtrigger.preferences_pb`, see §9).
 
 Reading the app's own log is usually more useful than logcat:
 
@@ -294,6 +303,31 @@ shaped `{revision, json}` — the app applies it only when `revision > applied`.
 **Check the token never reaches a tracked file:**
 `git grep -l $(cat tools/.ab-feed-token) HEAD` should find nothing.
 
+**Reading the device's own config** (23 schedules currently: the 20 production
+blocks plus three long-disabled leftovers named "Afternoon", "Temp" and one
+unnamed) means pulling `files/datastore/ytmtrigger.preferences_pb`. Note that
+`adb shell "run-as … cat file > /sdcard/x"` silently produces a **0-byte** file;
+go through base64 instead, which is text-safe both ways:
+
+```powershell
+$b64 = & $adb exec-out "run-as com.jasonschoenbrun.ytmtrigger base64 files/datastore/ytmtrigger.preferences_pb"
+[IO.File]::WriteAllBytes("prefs.pb", [Convert]::FromBase64String(($b64 -join '').Trim()))
+```
+
+The blob is a DataStore protobuf with the schedules as a JSON string inside it.
+**It also carries the Spotify client secret — parse out the fields you need and
+delete the pulled copy; never dump it wholesale.**
+
+### Deploying the web console
+
+`firebase deploy --only hosting --project music-trigger` (there is no
+`.firebaserc`, so `--project` is required). It publishes the whole `web/`
+directory — **12 files: `index.html` plus the 11 Aleph Beta feed files.** If
+`web/private-feeds/<token>/` is missing locally, deploying would remove the
+feeds from Hosting and break the app's podcast source. Check before deploying.
+The console cannot be tested from a `file://` copy: it fetches
+`/__/firebase/init.json`, which only Hosting serves.
+
 ---
 
 ## 10. How Jason likes to work
@@ -348,6 +382,17 @@ what was got wrong. Match that.
   app's existing per-anchor wording under the dropdown (`ANCHOR_HINT` in
   `web/index.html`). The console's dropdown still says "Shabat/Yom Tov ends"
   while the app chip says "Shabat ends"; that mismatch was left deliberately.
+
+  Confirmed on the device afterwards, from two independent log lines:
+  `Shabat prep … windowStart=2026-08-28 18:30:23` gives sunset(Fri 28) =
+  19:10:23 (startOffset 40), and block G armed at `2026-08-29 20:21:11` gives
+  endOf(Sat 29) = 19:51:11, so sunset(Sat 29) = 19:09:11 — 72 s earlier a day
+  later, which is right for late August. The `+30` therefore produced
+  sunset + 72 min. A `Sunset +30` schedule would have armed 19:39:11, inside
+  Shabat, and been silently gated. Also worth knowing: **only block G uses a
+  non-clock anchor. Nothing in production uses `Sunset` at all** — the option
+  exists in the editor and is currently unused, which is why the confusion was
+  purely at the editor level.
 - Starting YouTube Music or the Aleph Beta app behind a secure lock (§6).
 - Implementing the schedule on Google Home — its automations play one podcast
   each and cannot queue.
