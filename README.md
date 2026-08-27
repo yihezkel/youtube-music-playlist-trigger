@@ -220,6 +220,10 @@ Download the APK from the [Releases page](../../releases) and sideload it. The a
 
 ## Build from source
 
+Working on this? Read [`docs/working-notes.md`](docs/working-notes.md) first —
+build and device-test commands, the constraints that were established by
+measurement rather than assumption, and what is deliberately left undone.
+
 ```sh
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
