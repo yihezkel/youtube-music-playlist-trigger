@@ -4,8 +4,13 @@
 // Uses the iTunes Search API to find feeds (free, no auth, no Premium) and then
 // reads the feed directly. Deliberately avoids Spotify: its Web API needs a
 // Premium account and its public pages only render a dozen episodes.
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { PODCASTS } from "./podcast-list.mjs";
+
+/** Feed URLs that must not be committed; absent is fine. */
+const PRIVATE_FEEDS = (() => {
+  try { return JSON.parse(readFileSync("private-feeds.json", "utf8")); } catch { return {}; }
+})();
 
 const UA = { "User-Agent": "Mozilla/5.0 (podcast-schedule-audit)" };
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -32,6 +37,12 @@ function similar(a, b) {
 }
 
 async function resolveFeed(p) {
+  // A feed we host ourselves, whose URL carries a token and so must not be
+  // committed. Looked up by name from the gitignored private-feeds.json, and
+  // never sent to the iTunes directory - it is not listed there.
+  if (p.privateFeed && PRIVATE_FEEDS[p.name]) {
+    return { feedUrl: PRIVATE_FEEDS[p.name], itunesId: null, itunesName: p.name, confidence: 100 };
+  }
   const url = "https://itunes.apple.com/search?media=podcast&entity=podcast&limit=8&term=" +
     encodeURIComponent(p.q || p.name);
   const j = JSON.parse(await getText(url));

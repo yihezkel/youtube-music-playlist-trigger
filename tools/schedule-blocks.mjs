@@ -27,7 +27,8 @@ export const MODE = {
   "Business Wars": "sequential",
   "Business Movers": "sequential",
   "Unpacking Israeli History": "sequential",
-  "A Book Like No Other (Aleph Beta)": "sequential",
+  // Aleph Beta is deliberately not sequential: the rebuilt feed spans ten
+  // separate series, so running it in order would jump between them.
 };
 
 /** How a mode reads on the sheet. Absent from MODE means the block default. */
@@ -180,7 +181,7 @@ export const BLOCKS = [
     queues: [
       {
         label: "Sunday — Torah & Science", appName: "D Family Sun", days: [SUN], shows: [
-          ["A Book Like No Other (Aleph Beta)", "Close Tanach reading. Only 5 episodes in the feed, so it runs in order rather than repeating at random"],
+          ["Aleph Beta", "Rabbi Fohrman's close Tanach reading. Drawn from a feed rebuilt out of Aleph Beta's own published episode metadata: 136 episodes rather than the four their public feed carries"],
           ["SciShow Tangents", "Science panel game, genuinely funny. 4.9 stars, 338-episode archive"],
           ["Business Wars", "Sarah's favourite, and the rivalry stories hold teenagers easily"],
           ["Stuff You Should Know", "Your note said 2 more a week — this is one of them. 2,867 episodes to draw on"],
@@ -278,7 +279,7 @@ export const BLOCKS = [
     idea: "Parsha, then music. Needs no end time: the app blocks playback for Shabat and mutes the speaker 15 minutes before it starts.",
     queues: [{
       label: "Friday", appName: "F Erev Shabat", days: [FRI], shows: [
-        ["A Book Like No Other (Aleph Beta)", "Parsha-adjacent Torah for erev Shabat"],
+        ["Aleph Beta", "Torah for erev Shabat, from the rebuilt 136-episode feed"],
         ["Parsha Perspectives", "Recommended by Avi. Replaces Into the Verse, which your TODO asked to swap out"],
         [MUSIC, "Runs until the app mutes for Shabat"],
       ],

@@ -31,7 +31,8 @@ export const PODCASTS = [
   { name: "Uncanny Valley (WIRED)", status: "Doing", slot: "Daily", q: "Uncanny Valley WIRED" },
   { name: "TED Talks Daily", status: "Doing", slot: "Daily", q: "TED Talks Daily" },
   { name: "Into the Verse (Aleph Beta)", status: "Doing", slot: "Daily", q: "Into the Verse Aleph Beta" },
-  { name: "A Book Like No Other (Aleph Beta)", status: "Doing", slot: "Daily", q: "A Book Like No Other Aleph Beta" },
+  { name: "Aleph Beta", status: "Doing", slot: "Weekly", q: "Aleph Beta", privateFeed: true, note: "Rebuilt from Aleph Beta's own published episode metadata - their public RSS carries 4 episodes of A Book Like No Other where their site lists 136 across ten series. The audio was never paywalled; only the feed was pruned." },
+  { name: "A Book Like No Other (Aleph Beta)", status: "Dropped", slot: "Daily", q: "A Book Like No Other Aleph Beta", note: "Superseded by the rebuilt 'Aleph Beta' feed, which carries the same content plus 132 more episodes" },
 
   // ---- News tab: active ----
   { name: "Curiosity Daily", status: "Doing", slot: "News", q: "Curiosity Daily" },

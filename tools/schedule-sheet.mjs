@@ -16,7 +16,9 @@ const client = await auth.getClient();
 const api = (m, u, d) => client.request({ method: m, url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${u}`, data: d });
 
 const find = (n) => stats.find((s) => s.name === n) || stats.find((s) => s.name.startsWith(n));
-const mins = (n) => find(n)?.durMedian ?? null;
+const mins = (n) => find(n)?.durMedian ?? PRIVATE_MEDIAN[n] ?? null;
+/** Typical length for feeds that live outside podcast-stats.json. */
+const PRIVATE_MEDIAN = { "Aleph Beta": 36 };
 const label = (n) => (n === MUSIC ? "—" : (mins(n) ? `${mins(n)}m` : "—"));
 
 import { BLOCKS, MUSIC, modeLabel, queues } from "./schedule-blocks.mjs";
@@ -92,14 +94,13 @@ push(["4 · How it plays"], "section");
   ["Blocks that end with their queue", "The last block of a day has no stop time. It plays each show once and finishes with the last episode instead of being cut off mid-sentence, so its queue is sized to land near the nominal end rather than to outlast it. That covers the teen evening on weeknights, and both motzaei Shabat blocks."],
   ["Motzaei Shabat", "The kids' block starts 30 minutes after Shabat ends and simply plays its queue, about 40 minutes, whatever the season. The teen block then starts when the kids' block finishes rather than at a clock time. It used to stop at a fixed 20:30, which left the kids nine minutes in late August and two and a half hours to fill with music in December."],
   ["Music", "Music entries mean your existing YTM Trigger playlists. Rotating them keeps the kids' blocks from feeling like school. YouTube Music does not tell the app when a playlist ends, so the app checks every five minutes and moves the queue on when it has — which means a block no longer falls silent if a playlist runs out, and music no longer has to be the last thing in a queue."],
+  ["Aleph Beta", "Their public feed carries four episodes of A Book Like No Other where their own site lists 136 across ten series — the RSS was pruned, but the audio never was. The entry plays a feed rebuilt from the episode metadata they publish, so this slot now draws on 81 hours rather than four episodes."],
 ].forEach(([k, v]) => push(["", k, v], "note"));
 push([]);
 
 push(["5 · Open items"], "section");
 push(["Issue", "Detail"], "head");
 [
-  ["A Book Like No Other carries only its current series",
-   "Not a small show — a pruned feed. Aleph Beta keeps only the series in progress public: right now four parts of 'Yom Kippur and Yonah', plus a trailer the app now skips. Their whole catalogue behaves this way; Into the Verse shows 208-day gaps between consecutive episodes, which no weekly parsha show really has. The archive lives behind their subscription, not in the feed. So this slot will repeat within a series and change wholesale when Aleph Beta moves on — worth revisiting when it does."],
   ["Jews You Should Know needs length-aware picking",
    "Your note asked for it in a small slot on Sunday and a long slot after Wednesday. The feed mixes 3-minute Friday episodes with 45–100 minute interviews, and neither Google Home nor the app can currently filter by length — so it is scheduled as one Monday slot for now."],
 ].forEach((r) => push(r, "change"));
@@ -234,5 +235,5 @@ await api("POST", ":batchUpdate", { requests: req });
 console.log(`wrote "${TAB}": ${rows.length} rows`);
 
 const unmatched = [...new Set(queues().flatMap((q) => q.shows.map(([n]) => n)))]
-  .filter((n) => n !== MUSIC && !find(n));
+  .filter((n) => n !== MUSIC && !find(n) && !(n in PRIVATE_MEDIAN));
 console.log(unmatched.length ? `UNMATCHED SHOWS: ${unmatched.join(", ")}` : "all show names resolve");

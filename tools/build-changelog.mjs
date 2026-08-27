@@ -80,6 +80,9 @@ const mine = [
     "Meaningful People alone is about 76 minutes, so the block already ran past its nominal end; adding a second show pushed it to nearly 22:00."],
 
 
+  ["Added", "Aleph Beta", "D - Family Table (Sun), F - Erev Shabat",
+    "Replaces A Book Like No Other, which was the same content through a feed carrying four episodes. Aleph Beta prunes its public RSS but never restricted the audio - every episode page publishes the media URL, and the files are ordinary unauthenticated MP3s. Rebuilt from that published metadata: 136 episodes, 81h 43m, across ten series."],
+
   ["Not scheduled", "Making Sense with Sam Harris", "B - Sarah's Day",
     "Checked again rather than relying on the earlier conversation. The free feed mixes full episodes with paywall previews - 12 and 21 minute items next to 85 and 81 minute ones - so a random pick would often cut off mid-conversation. Left out until the app can filter by length."],
 

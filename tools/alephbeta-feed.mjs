@@ -13,10 +13,10 @@
 //
 // So this reassembles a feed from the metadata they publish for machines to
 // read, for one household that pays for a subscription. It is deliberately
-// polite: it reads only pages listed in their own sitemap, stays out of
-// everything robots.txt disallows (/api/, /admin/, /content-dynamic/), fetches
-// a few at a time with a pause between batches, and caches every page so a
-// rebuild costs almost nothing.
+// polite: it fetches and enforces robots.txt before anything else, reads only
+// pages listed in their own sitemap, fetches a few at a time with a pause
+// between batches (or their crawl-delay, whichever is longer), and caches every
+// page so a rebuild costs almost nothing.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
@@ -41,7 +41,64 @@ const token = existsSync(tokenFile)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// --- robots.txt ----------------------------------------------------------
+// Enforced rather than assumed. Until now this file only claimed to respect
+// robots.txt in a comment: the crawl happened to stay inside /content/ because
+// that is what it was told to fetch, so the guarantee held by luck rather than
+// by construction. If their sitemap ever listed a disallowed path, nothing
+// would have stopped it.
+const robots = { rules: [], crawlDelayMs: 0 };
+
+/** Turn a robots.txt path pattern into a matcher. Supports * and a trailing $. */
+function ruleToRegex(path) {
+  const escaped = path.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+  const body = escaped.replace(/\*/g, ".*");
+  return new RegExp("^" + (body.endsWith("$") ? body.slice(0, -1) + "$" : body));
+}
+
+async function loadRobots() {
+  const res = await fetch(`${SITE}/robots.txt`, { headers: { "user-agent": UA } });
+  if (!res.ok) throw new Error(`robots.txt returned ${res.status} - refusing to crawl blind`);
+  const text = await res.text();
+  let applies = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const [k, ...rest] = line.split(":");
+    const key = k.trim().toLowerCase();
+    const value = rest.join(":").trim();
+    if (key === "user-agent") {
+      // Only the wildcard group: we are not pretending to be a named crawler.
+      applies = value === "*";
+    } else if (applies && (key === "disallow" || key === "allow")) {
+      if (value) robots.rules.push({ allow: key === "allow", path: value, re: ruleToRegex(value) });
+    } else if (applies && key === "crawl-delay") {
+      const s = Number(value);
+      if (Number.isFinite(s) && s > 0) robots.crawlDelayMs = s * 1000;
+    }
+  }
+  console.log(`robots.txt: ${robots.rules.length} rules for *` +
+    (robots.crawlDelayMs ? `, crawl-delay ${robots.crawlDelayMs / 1000}s` : ""));
+  for (const r of robots.rules) console.log(`  ${r.allow ? "Allow  " : "Disallow"} ${r.path}`);
+}
+
+/** Standard longest-match-wins; Allow beats Disallow at equal length. */
+function allowed(url) {
+  const path = new URL(url).pathname + new URL(url).search;
+  let best = null;
+  for (const r of robots.rules) {
+    if (!r.re.test(path)) continue;
+    if (!best || r.path.length > best.path.length || (r.path.length === best.path.length && r.allow)) best = r;
+  }
+  return !best || best.allow;
+}
+
 async function get(url) {
+  if (!allowed(url)) {
+    // Loud, not silent: if their rules change, that is something to look at
+    // rather than something to quietly skip past.
+    throw new Error(`robots.txt disallows ${url}`);
+  }
   const key = join(CACHE, createHash("sha1").update(url).digest("hex") + ".html");
   if (!fresh && existsSync(key)) {
     const age = Date.now() - Number(readFileSync(key + ".t", "utf8") || 0);
@@ -123,6 +180,7 @@ ${items}
 }
 
 // --- crawl ---------------------------------------------------------------
+await loadRobots();
 const index = await get(`${SITE}/sitemap.xml`);
 const maps = [...index.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
   .filter((u) => /content-\d+\.xml$/.test(u));
@@ -145,7 +203,7 @@ for (let i = 0; i < pages.length; i += BATCH) {
     done++;
   }));
   if (done % 200 < BATCH) process.stdout.write(`  ${done}/${pages.length}\r`);
-  await sleep(PAUSE_MS);
+  await sleep(Math.max(PAUSE_MS, robots.crawlDelayMs));
 }
 console.log(`\nscanned ${done} pages (${errors} failed), found ${episodes.length} podcast episodes`);
 
