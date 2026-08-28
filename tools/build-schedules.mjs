@@ -79,6 +79,54 @@ const keep = cfg.schedules
 
 cfg.schedules = [...keep, ...built];
 
+/**
+ * The same rules as ScheduleChain.problems on the phone, applied here so a bad
+ * chain is caught before it is pushed rather than showing up as a block that
+ * silently never plays. A chained block gets no clock alarm at all, so nothing
+ * else in this file's arithmetic would notice.
+ */
+const chainProblems = (list) => {
+  const byId = new Map(list.map((s) => [s.id, s]));
+  const out = [];
+  for (const s of list.filter((x) => x.startsAfter)) {
+    if (s.startsAfter === s.id) out.push(`${s.name} follows itself`);
+    else if (!byId.has(s.startsAfter)) out.push(`${s.name} follows "${s.startsAfter}", which does not exist`);
+    else if (s.enabled && byId.get(s.startsAfter).enabled === false) {
+      out.push(`${s.name} follows "${byId.get(s.startsAfter).name}", which is disabled`);
+    }
+    // Cycles: walking the links must terminate.
+    const seen = new Set([s.id]);
+    let cur = s;
+    while (cur?.startsAfter) {
+      if (seen.has(cur.startsAfter)) {
+        if (cur.startsAfter === s.id && seen.size > 1) out.push(`${s.name} is in a loop of blocks that follow each other`);
+        break;
+      }
+      seen.add(cur.startsAfter);
+      cur = byId.get(cur.startsAfter);
+    }
+  }
+  for (const [after, group] of Object.entries(
+    list.filter((s) => s.enabled && s.startsAfter).reduce((m, s) => {
+      (m[s.startsAfter] ||= []).push(s); return m;
+    }, {}),
+  )) {
+    if (group.length > 1) {
+      out.push(`${group.slice(1).map((g) => g.name).join(", ")} also follow "${byId.get(after)?.name ?? after}", but only ${group[0].name} will run`);
+    }
+  }
+  return [...new Set(out)];
+};
+
+const chained = cfg.schedules.filter((s) => s.startsAfter).length;
+const problems = chainProblems(cfg.schedules);
+if (problems.length) {
+  console.error(`\nblock chaining is broken - refusing to push:`);
+  for (const p of problems) console.error(`  ${p}`);
+  process.exit(1);
+}
+console.log(`block chaining: ${chained} chained, all resolve`);
+
 console.log(`${built.length} blocks built, ${keep.length} existing kept`);
 for (const s of built) {
   console.log(`  ${s.name.padEnd(32)} d=${s.daysOfWeek.join("")} ${String(Math.floor(s.timeMinutes / 60)).padStart(2, "0")}:${String(s.timeMinutes % 60).padStart(2, "0")}` +

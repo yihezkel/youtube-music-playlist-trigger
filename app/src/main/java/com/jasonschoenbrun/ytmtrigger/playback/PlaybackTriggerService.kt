@@ -21,6 +21,7 @@ import com.jasonschoenbrun.ytmtrigger.alarm.AutoStop
 import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
 import com.jasonschoenbrun.ytmtrigger.calendar.calendarConfig
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
+import com.jasonschoenbrun.ytmtrigger.data.ScheduleChain
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.data.MediaEntries
@@ -184,7 +185,7 @@ class PlaybackTriggerService : Service() {
                     // than arming a clock time is the point: how long this
                     // queue ran depends on the episodes it drew, so no fixed
                     // offset would land on its end.
-                    val next = repo.all().firstOrNull { it.enabled && it.startsAfter == schedule.id }
+                    val next = ScheduleChain.next(repo.all(), schedule.id)
                     if (next != null) {
                         Logger.i("PlaybackSvc", "Starting the block that follows", mapOf(
                             "after" to schedule.id, "next" to next.id, "name" to next.name,

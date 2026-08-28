@@ -3,6 +3,7 @@ package com.jasonschoenbrun.ytmtrigger.alarm
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.jasonschoenbrun.ytmtrigger.data.ScheduleChain
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
@@ -37,9 +38,7 @@ class StopReceiver : BroadcastReceiver() {
         // for those this stop is the only signal that the block is over.
         // A block that ends with its queue has no stop alarm at all, so the two
         // paths cannot both fire for the same block.
-        val next = scheduleId?.let { id ->
-            repo.all().firstOrNull { it.enabled && it.startsAfter == id }
-        }
+        val next = scheduleId?.let { id -> ScheduleChain.next(repo.all(), id) }
         if (next != null) {
             Logger.i("StopReceiver", "Starting the block that follows", mapOf(
                 "after" to (scheduleId ?: "-"), "next" to next.id, "name" to next.name,

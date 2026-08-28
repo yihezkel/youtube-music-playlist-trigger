@@ -45,15 +45,6 @@ data class AppSettings(
      *  When null, the self-test picks the first default playlist. */
     val selfTestPlaylistUrl: String? = null,
     /**
-     * Spotify Web API client credentials, used only to list a show's episodes
-     * so one can be picked at random. Playback itself never uses them.
-     *
-     * Stored in the app's private DataStore and, when remote control is set
-     * up, in your own Firestore project under your own uid. Never logged.
-     */
-    val spotifyClientId: String? = null,
-    val spotifyClientSecret: String? = null,
-    /**
      * Hold the screen awake while YouTube Music is playing.
      *
      * Free-tier YouTube Music pauses anything you did not upload as soon as

@@ -14,7 +14,9 @@ import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import com.jasonschoenbrun.ytmtrigger.health.HealthChecks
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
+import com.jasonschoenbrun.ytmtrigger.playback.PlaybackPauser
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
 import com.jasonschoenbrun.ytmtrigger.playback.YtmBrowserProbe
 import com.jasonschoenbrun.ytmtrigger.selftest.SelfTestReceiver
@@ -108,8 +110,6 @@ object RemoteSync {
                 shabatStartOffsetMin = config.shabatStartOffsetMin ?: s.shabatStartOffsetMin,
                 shabatEndOffsetMin = config.shabatEndOffsetMin ?: s.shabatEndOffsetMin,
                 selfTestPlaylistUrl = config.selfTestPlaylistUrl ?: s.selfTestPlaylistUrl,
-                spotifyClientId = config.spotifyClientId ?: s.spotifyClientId,
-                spotifyClientSecret = config.spotifyClientSecret ?: s.spotifyClientSecret,
                 keepScreenOnWhilePlaying = config.keepScreenOnWhilePlaying
                     ?: s.keepScreenOnWhilePlaying,
                 dimWhileKeepingScreenOn = config.dimWhileKeepingScreenOn
@@ -169,8 +169,6 @@ object RemoteSync {
             shabatStartOffsetMin = s.shabatStartOffsetMin,
             shabatEndOffsetMin = s.shabatEndOffsetMin,
             selfTestPlaylistUrl = s.selfTestPlaylistUrl,
-            spotifyClientId = s.spotifyClientId,
-            spotifyClientSecret = s.spotifyClientSecret,
             keepScreenOnWhilePlaying = s.keepScreenOnWhilePlaying,
             dimWhileKeepingScreenOn = s.dimWhileKeepingScreenOn,
             schedules = ScheduleRepository.get(context).all(),
@@ -212,6 +210,24 @@ object RemoteSync {
             recentFailures = FailureLog.recent(context, days = 7).take(30).map {
                 FailureEntry(atMs = it.atMs, kind = it.kind, reason = it.reason)
             },
+            // The same checks the phone shows on its own Health screen, so the
+            // console does not have to keep its own, poorer, copy of "is this
+            // thing well".
+            healthChecks = runCatching {
+                HealthChecks.run(context).checks.map {
+                    HealthEntry(
+                        title = it.title,
+                        health = it.health.name,
+                        detail = it.detail,
+                        why = it.consequence,
+                        where = it.fixAction,
+                    )
+                }
+            }.getOrDefault(emptyList()),
+            playbackState = runCatching {
+                PlaybackPauser.snapshot(context).state.name
+            }.getOrNull(),
+            playbackWhat = runCatching { PlaybackPauser.snapshot(context).what }.getOrNull(),
         )
         device.set(
             mapOf(
@@ -261,6 +277,8 @@ object RemoteSync {
             true
         }
         RemoteCommands.STOP_NOW -> PlaybackStopper.stop(context, reason = "remote stop")
+        RemoteCommands.PAUSE_NOW -> PlaybackPauser.pause(context, reason = "remote pause")
+        RemoteCommands.RESUME_NOW -> PlaybackPauser.resume(context, reason = "remote resume")
         RemoteCommands.PROBE_BROWSER -> {
             YtmBrowserProbe.run(context, query = arg)
             true

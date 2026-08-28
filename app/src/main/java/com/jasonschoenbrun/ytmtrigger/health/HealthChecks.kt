@@ -17,6 +17,7 @@ import com.jasonschoenbrun.ytmtrigger.accessibility.YtmAccessibilityService
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.data.MediaEntries
 import com.jasonschoenbrun.ytmtrigger.data.MediaKind
+import com.jasonschoenbrun.ytmtrigger.data.ScheduleChain
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
@@ -83,6 +84,7 @@ object HealthChecks {
             backgroundRestricted(context),
             enabledSchedules(context),
             alarmsArmed(context),
+            scheduleChains(context),
             automaticTime(context),
             screenLock(context),
             accessibility(context),
@@ -187,6 +189,31 @@ object HealthChecks {
                     "permanent gap is not.",
             )
         }
+    }
+
+    /**
+     * The "follows another block" links.
+     *
+     * Only the schedule generator writes these today, so a broken link is
+     * unlikely — but when one is broken the symptom is silence with no error,
+     * which is exactly the shape of fault this screen exists to surface.
+     */
+    private fun scheduleChains(context: Context): Check {
+        val all = ScheduleRepository.get(context).all()
+        val chained = all.count { it.startsAfter != null }
+        val problems = ScheduleChain.problems(all)
+        if (chained == 0) return Check("Block chaining", Health.Ok, "No chained blocks")
+        if (problems.isEmpty()) {
+            return Check("Block chaining", Health.Ok, "$chained chained, all resolved")
+        }
+        return Check(
+            "Block chaining", Health.Broken,
+            "${problems.size} broken",
+            problems.joinToString("  ") { "\"${it.scheduleName}\" ${it.detail}." } +
+                "  A chained block is never armed from the clock, so it plays only when the " +
+                "block it names finishes. If that link is broken it simply never runs.",
+            "Schedules",
+        )
     }
 
     private fun automaticTime(context: Context): Check {

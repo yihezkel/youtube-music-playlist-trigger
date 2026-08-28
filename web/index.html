@@ -71,6 +71,8 @@
     <h2>Actions</h2>
     <div class="row">
       <button id="btnPlay">Play now</button>
+      <button id="btnPause" class="sec">Pause</button>
+      <button id="btnResume" class="sec">Resume</button>
       <button id="btnStop" class="sec">Stop</button>
       <button id="btnSelfTest" class="sec">Run self-test</button>
       <button id="btnLogs" class="sec">Request logs</button>
@@ -113,13 +115,6 @@
     <div class="hint">Shabat and Yom Tov are blocked from <em>start</em> minutes before sunset
       until <em>end</em> minutes after sunset, computed for these coordinates — so the window
       tracks the seasons instead of assuming a fixed clock time.</div>
-    <div class="row" style="margin-top:10px">
-      <div style="flex:1 1 200px"><label>Spotify client ID</label><input type="text" id="spotifyId" autocomplete="off" /></div>
-      <div style="flex:1 1 200px"><label>Spotify client secret</label><input type="password" id="spotifySecret" autocomplete="off" /></div>
-    </div>
-    <div class="hint">Optional. Used only to list a podcast show's episodes so one can be
-      picked at random; playback never uses it. Stored in your own Firebase project under
-      your own account, and never written to the app's logs.</div>
   </div>
 
   <div class="card">
@@ -344,8 +339,33 @@ async function loadState() {
     ${st.lastSelfTestFailureReason ? `<div class="kv"><span></span><span class="bad">${esc(st.lastSelfTestFailureReason)}</span></div>` : ''}
     <div class="kv"><span>Last skip</span><span>${when(st.lastSelfTestSkipMs)} ${esc(st.lastSelfTestSkipReason || '')}</span></div>
     <div class="kv"><span>Schedules</span><span>${st.scheduleCount ?? '\u2014'}</span></div>
-    <div class="kv"><span>Applied config revision</span><span>${st.appliedConfigRevision ?? '\u2014'}</span></div>`;
+    <div class="kv"><span>Applied config revision</span><span>${st.appliedConfigRevision ?? '\u2014'}</span></div>
+    ${st.playbackState ? `<div class="kv"><span>Playback</span><span>${esc(st.playbackState)}${
+      st.playbackWhat ? ' \u2014 ' + esc(st.playbackWhat) : ''}</span></div>` : ''}
+    ${renderHealth(st.healthChecks)}`;
   renderFailures(st.recentFailures || []);
+}
+
+/**
+ * The phone's own fourteen health checks.
+ *
+ * The three flags above predate this and are kept so the panel still says
+ * something useful when an older build is reporting. When the full list is
+ * present it is the better answer, because it is literally what the phone
+ * shows itself rather than a second, thinner opinion maintained here.
+ */
+function renderHealth(checks) {
+  if (!checks || !checks.length) return '';
+  const dot = { Ok: 'var(--ok)', Degraded: 'var(--warn)', Broken: 'var(--accent)' };
+  const bad = checks.filter((c) => c.health !== 'Ok');
+  const rows = checks.map((c) => `
+    <div class="kv" title="${esc([c.why, c.where].filter(Boolean).join(' \u2014 '))}">
+      <span><span style="color:${dot[c.health] || 'var(--dim)'}">\u25cf</span> ${esc(c.title)}</span>
+      <span${c.health === 'Broken' ? ' class="bad"' : ''}>${esc(c.detail)}</span>
+    </div>`).join('');
+  return `<div style="margin-top:10px"><label>Health (${
+    bad.length ? `${bad.length} of ${checks.length} need attention` : `all ${checks.length} OK`
+  })</label>${rows}</div>`;
 }
 
 /**
@@ -417,8 +437,6 @@ async function loadConfig() {
   $('lon').value = conf.longitude ?? 35.2137;
   $('startOff').value = conf.shabatStartOffsetMin ?? 40;
   $('endOff').value = conf.shabatEndOffsetMin ?? 42;
-  $('spotifyId').value = conf.spotifyClientId || '';
-  $('spotifySecret').value = conf.spotifyClientSecret || '';
   $('shuffle').checked = conf.defaultEnableShuffle !== false;
   $('skip').checked = conf.defaultSkipFirstTrack !== false;
   $('selfTestEnabled').checked = conf.selfTestEnabled !== false;
@@ -446,6 +464,13 @@ function renderSchedules() {
       `${String(Math.floor(s.stopTimeMinutes / 60)).padStart(2, '0')}:${String(s.stopTimeMinutes % 60).padStart(2, '0')}`;
     const anchor = s.timeAnchor || 'FixedClock';
     const offset = s.anchorOffsetMinutes ?? 0;
+    // A chained block is never armed from the clock, so its time field is
+    // inert. Read-only for now - see the README on making it editable.
+    const pred = s.startsAfter ? schedules.find((x) => x.id === s.startsAfter) : null;
+    const follows = !s.startsAfter ? '' :
+      pred ? `Starts when "${pred.name}" finishes, not at a clock time.` +
+             (pred.enabled === false ? ' That block is disabled, so this one will never run.' : '')
+           : 'Follows a block that no longer exists, so it will never run.';
     div.innerHTML = `
       <div class="row">
         <input type="text" data-f="name" placeholder="Name" value="${esc(s.name || '')}" />
@@ -467,6 +492,21 @@ function renderSchedules() {
         ANCHOR_HINT[anchor] || ''}</div>
       <label>Stop time (optional — leave blank to play until stopped)</label>
       <input type="time" data-f="stop" value="${stop}" style="flex:0 0 130px" />
+      ${follows ? `<div class="hint" style="color:var(--warn)">${esc(follows)}</div>` : ''}
+      <div class="row" style="margin-top:6px">
+        <div style="flex:1 1 130px">
+          <label>Volume % (blank = leave)</label>
+          <input type="number" data-f="vol" min="0" max="100" value="${s.targetVolumePercent ?? ''}" />
+        </div>
+        <div style="flex:1 1 150px">
+          <label>Auto-stop after N min</label>
+          <input type="number" data-f="autostop" min="1" value="${s.autoStopMinutes ?? ''}" />
+        </div>
+      </div>
+      <div class="days" style="margin-top:6px">
+        <label><input type="checkbox" data-f="shuffle" ${s.enableShuffle !== false ? 'checked' : ''}/> Shuffle</label>
+        <label><input type="checkbox" data-f="skipfirst" ${s.skipFirstTrack !== false ? 'checked' : ''}/> Skip first track</label>
+      </div>
       <label>Days</label>
       <div class="days">${DAYS.map(([n, v]) =>
         `<label><input type="checkbox" data-day="${v}" ${(s.daysOfWeek || []).includes(v) ? 'checked' : ''}/>${n}</label>`).join('')}</div>
@@ -524,6 +564,12 @@ function renderSchedules() {
         timeAnchor: anchorSel.value,
         anchorOffsetMinutes: Number(div.querySelector('[data-f=offset]').value) || 0,
         stopTimeMinutes: stopRaw ? sh * 60 + sm : null,
+        targetVolumePercent: div.querySelector('[data-f=vol]').value === ''
+          ? null : Number(div.querySelector('[data-f=vol]').value),
+        autoStopMinutes: div.querySelector('[data-f=autostop]').value === ''
+          ? null : Number(div.querySelector('[data-f=autostop]').value),
+        enableShuffle: div.querySelector('[data-f=shuffle]').checked,
+        skipFirstTrack: div.querySelector('[data-f=skipfirst]').checked,
         podcastEpisodeMode: div.querySelector('[data-f=podcastMode]').value,
         continuousPlay: div.querySelector('[data-f=continuous]').checked,
         playlistUrls: div.querySelector('[data-f=entries]')._read(),
@@ -563,8 +609,6 @@ $('save').onclick = async () => {
     longitude: parseFloat($('lon').value),
     shabatStartOffsetMin: parseInt($('startOff').value, 10),
     shabatEndOffsetMin: parseInt($('endOff').value, 10),
-    spotifyClientId: $('spotifyId').value.trim() || null,
-    spotifyClientSecret: $('spotifySecret').value.trim() || null,
     schedules: [...document.querySelectorAll('.sched')].map(d => d._read()),
   };
   await setDoc(cfgRef(), {
@@ -584,6 +628,8 @@ async function sendCommand(type, arg) {
 }
 $('btnPlay').onclick = () => sendCommand('playNow', schedules[0]?.id);
 $('btnStop').onclick = () => sendCommand('stopNow');
+$('btnPause').onclick = () => sendCommand('pauseNow');
+$('btnResume').onclick = () => sendCommand('resumeNow');
 $('btnSelfTest').onclick = () => sendCommand('runSelfTest');
 $('btnLogs').onclick = () => sendCommand('uploadLogs', '3');
 

@@ -96,7 +96,26 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   the Aleph Beta app — because it goes through media sessions. A paused block still ends at
   its stop time and is still silenced before Shabat, and the end-of-playlist watcher holds
   the queue still while paused instead of mistaking a pause for a finished playlist.
-- **Random playlist pick** with a rolling "don't repeat last 3" history.
+- **Blocks can follow other blocks.** A schedule can start when another one finishes
+  instead of at a clock time. Motzaei Shabat is why: the kids' block is anchored to
+  nightfall, so its start moves nearly three hours across the year, while the teen block
+  after it had a fixed 20:30 start — in midsummer they collided, in midwinter there was a
+  long gap. A fixed *offset* from nightfall would not fix it either, because how long the
+  first block runs depends on which episodes it happens to draw.
+
+  **This is deliberately read-only in the app and the console** — both show a chained block
+  saying "Starts when *X* finishes, not at a clock time", and neither lets you change it.
+  Only `tools/schedule-blocks.mjs` sets it.
+
+  **To make it editable** (a decision deferred, not refused) the groundwork is already
+  done: `ScheduleChain` holds the rules, `HealthChecks` surfaces a broken chain as a red
+  check, and `build-schedules.mjs` refuses to push a bad one. All four failure modes are
+  detected — a block following itself, a block following one that no longer exists or is
+  disabled, two blocks following the same predecessor (only the first would ever run), and
+  a loop. What is still missing is only the UI: a predecessor picker that excludes choices
+  that would create those states, and a decision about what should happen to a follower
+  when its predecessor is deleted.
+
 - **Entries are edited as fields, not as text.** Each playlist, song or podcast is its own
   row in the app and in the web console — URL, name, and for podcasts which episode to play
   and the shortest episode worth starting — with an **Add** button for the next one. The
@@ -153,7 +172,7 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   bottom of the Self-test screen and of the web console, or "No failures in the last week!"
   when there were none.
 - **Accessibility resilience** — if Android disables the accessibility service, the app re-enables it automatically (on launch, on boot, before every trigger and self-test, plus a live settings watcher). If a self-test fails with the service having done nothing at all, the app restarts its own process, which is the only recovery observed for that state. Requires a one-time `WRITE_SECURE_SETTINGS` grant; see setup below.
-- **Remote control** — change playlists and schedules, trigger playback, and read the phone's logs from a browser. Optional; see below.
+- **Remote control** — change playlists and schedules, trigger playback, pause, resume, stop, and read the phone's logs and all fourteen of its health checks from a browser. Optional; see below. The app and the console cover the same ground: every schedule field is editable in both, and both can pause, resume and stop.
 - **Manual trigger** from a **Play now** button on each schedule, or from a home-screen widget.
 - **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
 - **Persistent logs** with in-app viewer, level filter, search, copy/share. 14-day retention. Diagnostic "EvalFix" markers let speculative fixes be evaluated and pruned over time.

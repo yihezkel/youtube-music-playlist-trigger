@@ -27,8 +27,6 @@ data class RemoteConfig(
     val shabatStartOffsetMin: Int? = null,
     val shabatEndOffsetMin: Int? = null,
     val selfTestPlaylistUrl: String? = null,
-    val spotifyClientId: String? = null,
-    val spotifyClientSecret: String? = null,
     val keepScreenOnWhilePlaying: Boolean? = null,
     val dimWhileKeepingScreenOn: Boolean? = null,
     /** Full replacement for the schedule list when present. */
@@ -60,6 +58,26 @@ data class RemoteState(
     val appliedConfigRevision: Long,
     /** Last seven days of failures, newest first, for the console's chart. */
     val recentFailures: List<FailureEntry> = emptyList(),
+    /**
+     * The full health report, so the console shows the same fourteen checks as
+     * the phone rather than the three flags above. Those three predate this and
+     * are kept so an older console still renders.
+     */
+    val healthChecks: List<HealthEntry> = emptyList(),
+    /** Whether anything is playing or paused right now, for the console's controls. */
+    val playbackState: String? = null,
+    val playbackWhat: String? = null,
+)
+
+/** One health check, flattened for the console. */
+@kotlinx.serialization.Serializable
+data class HealthEntry(
+    val title: String,
+    /** "Ok", "Degraded" or "Broken". */
+    val health: String,
+    val detail: String,
+    val why: String? = null,
+    val where: String? = null,
 )
 
 /** A failure as shown to a person: when, which subsystem, and one sentence. */
@@ -74,6 +92,9 @@ data class FailureEntry(
 object RemoteCommands {
     const val PLAY_NOW = "playNow"
     const val STOP_NOW = "stopNow"
+    /** Hold the block where it is, keeping its position and queue place. */
+    const val PAUSE_NOW = "pauseNow"
+    const val RESUME_NOW = "resumeNow"
     const val RUN_SELF_TEST = "runSelfTest"
     const val UPLOAD_LOGS = "uploadLogs"
     /** Probe YouTube Music's MediaBrowserService and log what it offers. */

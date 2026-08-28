@@ -60,6 +60,7 @@ import com.jasonschoenbrun.ytmtrigger.data.MediaKind
 import com.jasonschoenbrun.ytmtrigger.data.PlaylistUrl
 import com.jasonschoenbrun.ytmtrigger.data.PodcastEpisodeMode
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
+import com.jasonschoenbrun.ytmtrigger.data.ScheduleChain
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.data.TimeAnchor
@@ -359,6 +360,23 @@ private fun PlaybackCard() {
             Icon(if (paused) Icons.Default.PlayArrow else Icons.Default.Pause, null)
             Spacer(Modifier.width(8.dp))
             Text(if (paused) "Resume" else "Pause")
+        }
+        // Stop is not pause. Pause holds the episode and its place in the
+        // queue; stop ends the block, releasing the player and leaving only a
+        // resume mark. The console has had this since the beginning; the app
+        // never did.
+        OutlinedButton(
+            enabled = !idle,
+            onClick = {
+                com.jasonschoenbrun.ytmtrigger.playback.PlaybackStopper
+                    .stop(ctx, reason = "home screen")
+                tick++
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Default.Stop, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Stop")
         }
     }
 }
@@ -1121,6 +1139,23 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                 )
             }
 
+            // A chained block is never armed from the clock, so the trigger
+            // time above is inert for it. Saying so beats leaving "Next: —"
+            // to be puzzled over.
+            val follows = remember(initial.startsAfter) {
+                ScheduleChain.describeFollows(repo.all(), initial)
+            }
+            if (follows != null) {
+                Text(
+                    follows,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (ScheduleChain.problems(repo.all()).any { it.scheduleId == initial.id }) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
             Text("Days of week", style = MaterialTheme.typography.titleSmall)
             DayOfWeekStrip(
                 selected = days.toSet(),
