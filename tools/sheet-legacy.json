@@ -218,5 +218,90 @@
  },
  "dailyExtras": [
   "16:37 - News routine (see the News rows below)"
+ ],
+ "weeklyGrid": [
+  [
+   "",
+   "Sunday",
+   "Monday",
+   "Tuesday",
+   "Wednesday",
+   "Thursday",
+   "Friday",
+   "Matza'ay Shabbat"
+  ],
+  [
+   "10:00",
+   "Life Kit (15 - 25 minutes, generally Mon + Tue + Thu)",
+   "The School of Greatness (43 - 120 minutes, Mon+Wed+Fri)",
+   "Life Kit (15 - 25 minutes, generally Mon + Tue + Thu)",
+   "",
+   "The School of Greatness (43 - 120 minutes, Mon+Wed+Fri)",
+   "Life Kit (15 - 25 minutes, generally Mon + Tue + Thu)"
+  ],
+  [
+   "14:00",
+   "No stupid questions (29 - 39)",
+   "Business Wars (30 - 40)",
+   "SciShow Tangents (30 - 45)",
+   "The Economist Asks (22 - 40)",
+   "Business Wars (30 - 40)",
+   "Honestly with Bari Weiss (36 - 122; Tues + Fri)"
+  ],
+  [
+   "14:40",
+   "The Mindset Mentor (17 - 21 minutes, Mon+Wed+Thu+Fri)",
+   "",
+   "The Mindset Mentor (17 - 21 minutes, Mon+Wed+Thu+Fri)",
+   "",
+   "The Mindset Mentor (17 - 21 minutes, Mon+Wed+Thu+Fri)",
+   "The Mindset Mentor (17 - 21 minutes, Mon+Wed+Thu+Fri)"
+  ],
+  [
+   "15:00",
+   "Daily",
+   "Daily",
+   "Daily",
+   "Daily",
+   "Daily",
+   "Daily"
+  ],
+  [
+   "15:00",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "15:15 - Shabat weather"
+  ],
+  [
+   "20:00",
+   "Freakonomics (30 - 60 minutes, Thursdays)",
+   "Sforimchatter (30 - 75 minutes, usually Sun + Wed)",
+   "Stuff You Should Know (15 - 75 minutes, Tues+Wed+Thurs+Sat)",
+   "StarTalk Radio (39 - 70 minutes, generally Tue+Fri)",
+   "Stuff You Should Know (15 - 75 minutes, Tues+Wed+Thurs+Sat)"
+  ],
+  [
+   "21:00",
+   "18Forty - Exploring Big Jewish Ideas (1 - 2 hours, every 5 - 8 days, usually every Tues)",
+   "The Q & A with Rabbi Breitowitz Podcast (40 - 120 minutes, Tues+Thurs)",
+   "Behind the Bima (1 - 2 hours, every Thursday)",
+   "The Q & A with Rabbi Breitowitz Podcast (40 - 120 minutes, Tues+Thurs)",
+   "Jews You Should Know (3 minutes on Fri, 45 - 100 minutes on Tues/Wed)"
+  ],
+  [
+   "22:00",
+   "Something You Should Know (41 - 55, Mon+Thu+Sat)",
+   "TED Radio Hour (50 - 55, Fri)",
+   "Something You Should Know (41 - 55, Mon+Thu+Sat)",
+   "Orthodox Conundrum (33 - 73, generally Mon or Tues)",
+   "This American Life (57 - 72, Mon)"
+  ],
+  [],
+  [
+   "Ideas, dropped shows, notes and TODOs now live in the 'Podcast Catalog' tab."
+  ]
  ]
 }
