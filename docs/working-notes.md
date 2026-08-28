@@ -90,6 +90,15 @@ powershell -NoProfile -File "$env:USERPROFILE\.copilot\Get-Screen.ps1" -Path sho
 powershell -NoProfile -File "$env:USERPROFILE\.copilot\Get-Screen.ps1" -Path tile.jpg -Crop "0,1600,1080,420" -Scale 0.7
 ```
 
+**Mute the phone before driving the UI, and look before you tap.** Every card in
+the Schedules list carries a large **Play now** button, and a blind
+`input tap` aimed at "the first schedule" lands on it. That happened at 02:42:
+YouTube Music started at full volume, in the house, in the middle of the night.
+`cmd audio set-volume 3 0` first, screenshot to find the target, tap the card's
+*title*, and restore the volume afterwards. Note also that the screen sleeps
+after two minutes, so a tap sequence built from an older screenshot can land
+somewhere else entirely — re-capture after any pause.
+
 Measured: raw `adb exec-out screencap` **1062 KB**, helper **7 KB**, cropped
 **3 KB** — still perfectly legible for reading a UI.
 
@@ -181,6 +190,15 @@ Facts that are easy to get wrong:
   kept, matching the half-episode rule's "unknown must not mean skip"; and a
   floor that would exclude everything is ignored rather than silencing the
   show. See §11 for which shows use it and why.
+- **The bracket grammar is now an internal storage format, not something anyone
+  types.** Both the app and the console edit entries as fields — URL, name,
+  episode mode, minimum length — and rebuild the string through
+  `MediaEntries.format`. Two consequences worth keeping in mind: the console
+  carries a **hand-written copy of the parser** in `web/index.html`
+  (`entryUrl`/`entryLabel`/`entryMode`/`entryMin`/`entryOther`/`entryFormat`),
+  which must be kept in step with `MediaEntry.kt`; and because a structured
+  editor rewrites the whole string, `MediaEntries.otherQualifiers` exists so a
+  qualifier neither side understands survives a save instead of vanishing.
 - **Queue chaining deliberately re-enters `PlaybackTriggerService`**, so the
   Shabat gate and in-call check apply to every item, not just the first.
 - **A block with no stop time does not wrap.** It plays its queue once and ends

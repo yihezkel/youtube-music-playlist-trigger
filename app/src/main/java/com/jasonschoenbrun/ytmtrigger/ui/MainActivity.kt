@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -568,6 +570,159 @@ private fun PlaylistEntryText(entry: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Structured editor for one entry: URL, name, and the podcast qualifiers.
+ *
+ * Entries are still *stored* as `url [Name | mode | min N]`, because the device
+ * config, the console and the schedule tooling all share that format. Only the
+ * editing changed: the qualifiers used to be free text the user had to know the
+ * grammar for, and a typo silently fell back to the schedule default rather
+ * than reporting anything.
+ *
+ * Anything the editor does not model is preserved via
+ * [MediaEntries.otherQualifiers], so opening and saving an entry cannot quietly
+ * discard part of it.
+ */
+@Composable
+private fun MediaEntryRow(
+    entry: String,
+    onChange: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    val parsed = remember(entry) { MediaEntries.parse(entry) }
+    val extra = remember(entry) { MediaEntries.otherQualifiers(entry) }
+    val isPodcast = parsed.kind == MediaKind.PodcastFeed || parsed.kind == MediaKind.SpotifyShow
+    // Rebuilt from the parts rather than edited as text, so the stored grammar
+    // stays in exactly one place: MediaEntries.format.
+    fun emit(
+        url: String = MediaEntries.url(entry),
+        label: String? = parsed.label,
+        mode: PodcastEpisodeMode? = parsed.episodeMode,
+        min: Int? = parsed.minMinutes,
+    ) = onChange(MediaEntries.format(url, label, mode, min, extra))
+
+    ElevatedCard(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = SurfaceElevated),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    kindLabel(parsed.kind),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (parsed.kind == MediaKind.Unknown) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null) }
+            }
+            OutlinedTextField(
+                value = MediaEntries.url(entry),
+                onValueChange = { emit(url = it) },
+                label = { Text("URL") },
+                singleLine = true,
+                isError = parsed.kind == MediaKind.Unknown,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = parsed.label.orEmpty(),
+                onValueChange = { emit(label = it.ifBlank { null }) },
+                label = { Text("Name (optional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (isPodcast) {
+                Text("Which episode", style = MaterialTheme.typography.labelMedium)
+                // Two rows of two rather than a wrapping flow: FlowRow is still
+                // experimental in this Compose version, and four fixed chips do
+                // not need it.
+                val modes = listOf(
+                    null to "Schedule default",
+                    PodcastEpisodeMode.Random to "Random",
+                    PodcastEpisodeMode.Latest to "Newest",
+                    PodcastEpisodeMode.Sequential to "In order",
+                )
+                for (pair in modes.chunked(2)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((mode, label) in pair) {
+                            FilterChip(
+                                selected = parsed.episodeMode == mode,
+                                onClick = { emit(mode = mode) },
+                                label = { Text(label) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = parsed.minMinutes?.toString().orEmpty(),
+                    onValueChange = { v ->
+                        emit(min = v.filter { it.isDigit() }.toIntOrNull()?.takeIf { it > 0 })
+                    },
+                    label = { Text("Shortest episode to play, minutes (optional)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    supportingText = {
+                        Text(
+                            "For feeds carrying two formats under one name — a show with " +
+                                "both 4-minute clips and hour-long interviews.",
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (extra.isNotEmpty()) {
+                Text(
+                    "Kept as written, not understood: ${extra.joinToString(" | ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+private fun kindLabel(kind: MediaKind): String = when (kind) {
+    MediaKind.YtmPlaylist -> "YouTube Music playlist"
+    MediaKind.YtmTrack -> "YouTube Music song"
+    MediaKind.PodcastFeed -> "Podcast feed"
+    MediaKind.SpotifyShow -> "Spotify show"
+    MediaKind.AlephBeta -> "Aleph Beta"
+    MediaKind.Unknown -> "Not a recognised link"
+}
+
+/** The whole list plus its Add button, shared by the schedule and settings screens. */
+@Composable
+private fun MediaEntryListEditor(
+    entries: androidx.compose.runtime.snapshots.SnapshotStateList<String>,
+    addLabel: String = "Add playlist, song or podcast",
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (i in entries.indices) {
+            key(i) {
+                MediaEntryRow(
+                    entry = entries[i],
+                    onChange = { entries[i] = it },
+                    onDelete = { entries.removeAt(i) },
+                )
+            }
+        }
+        OutlinedButton(
+            onClick = { entries.add("") },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Default.Add, null)
+            Spacer(Modifier.width(8.dp))
+            Text(addLabel)
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScheduleCard(
@@ -780,7 +935,6 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
     var timeMin by remember { mutableIntStateOf(initial.timeMinutes) }
     val days = remember { mutableStateListOf<Int>().apply { addAll(initial.daysOfWeek) } }
     val urls = remember { mutableStateListOf<String>().apply { addAll(initial.playlistUrls) } }
-    var newUrl by remember { mutableStateOf(TextFieldValue("")) }
     var enableShuffle by remember { mutableStateOf(initial.enableShuffle) }
     var skipFirst by remember { mutableStateOf(initial.skipFirstTrack) }
     var volPctText by remember { mutableStateOf(initial.targetVolumePercent?.toString().orEmpty()) }
@@ -810,7 +964,7 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                             enabled = enabled,
                             timeMinutes = timeMin,
                             daysOfWeek = days.toSet(),
-                            playlistUrls = urls.toList(),
+                            playlistUrls = urls.map { it.trim() }.filter { it.isNotBlank() },
                             enableShuffle = enableShuffle,
                             skipFirstTrack = skipFirst,
                             targetVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
@@ -981,24 +1135,8 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            Text("Playlists", style = MaterialTheme.typography.titleSmall)
-            for ((i, u) in urls.withIndex()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    PlaylistEntryText(u, Modifier.weight(1f))
-                    IconButton(onClick = { urls.removeAt(i) }) { Icon(Icons.Default.Delete, null) }
-                }
-            }
-            OutlinedTextField(
-                value = newUrl, onValueChange = { newUrl = it },
-                label = { Text("Add playlist, song or podcast URL - optionally \"... [Name]\"") },
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    IconButton(onClick = {
-                        val v = newUrl.text.trim()
-                        if (MediaEntries.isValid(v)) { urls.add(v); newUrl = TextFieldValue("") }
-                    }) { Icon(Icons.Default.Add, null) }
-                }
-            )
+            Text("Playlists and podcasts", style = MaterialTheme.typography.titleSmall)
+            MediaEntryListEditor(urls)
             // Only meaningful when the schedule contains a podcast, so it is
             // hidden otherwise rather than adding a control that does nothing.
             if (urls.any {
@@ -1027,8 +1165,8 @@ fun EditScheduleScreen(scheduleId: String?, onDone: () -> Unit) {
                 Text(
                     "Random suits evergreen archives, Newest suits news and feeds that mix " +
                         "short and long formats, In order suits a show that tells one story " +
-                        "across numbered parts.\n\nA single entry can override this by ending " +
-                        "its name with a mode, e.g.  …/feed.xml [The Indicator | newest]",
+                        "across numbered parts.\n\nEach entry above can override this, and " +
+                        "can set a shortest-episode length of its own.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1784,7 +1922,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     val urls = remember(settings.defaultPlaylistUrls) {
         mutableStateListOf<String>().apply { addAll(settings.defaultPlaylistUrls) }
     }
-    var newUrl by remember { mutableStateOf(TextFieldValue("")) }
     var volPctText by remember(settings.defaultVolumePercent) {
         mutableStateOf(settings.defaultVolumePercent?.toString().orEmpty())
     }
@@ -1835,7 +1972,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 IconButton(onClick = {
                     repo.update {
                         it.copy(
-                            defaultPlaylistUrls = urls.toList(),
+                            defaultPlaylistUrls = urls.map { it.trim() }.filter { it.isNotBlank() },
                             defaultVolumePercent = volPctText.toIntOrNull()?.coerceIn(0, 100),
                             defaultEnableShuffle = enableShuffle,
                             defaultSkipFirstTrack = skipFirst,
@@ -1872,23 +2009,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
             )
             Text("Default playlists", style = MaterialTheme.typography.titleSmall)
-            for ((i, u) in urls.withIndex()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    PlaylistEntryText(u, Modifier.weight(1f))
-                    IconButton(onClick = { urls.removeAt(i) }) { Icon(Icons.Default.Delete, null) }
-                }
-            }
-            OutlinedTextField(
-                value = newUrl, onValueChange = { newUrl = it },
-                label = { Text("Add playlist, song or podcast URL - optionally \"... [Name]\"") },
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    IconButton(onClick = {
-                        val v = newUrl.text.trim()
-                        if (MediaEntries.isValid(v)) { urls.add(v); newUrl = TextFieldValue("") }
-                    }) { Icon(Icons.Default.Add, null) }
-                }
-            )
+            MediaEntryListEditor(urls)
             OutlinedTextField(
                 value = volPctText, onValueChange = { volPctText = it.filter { c -> c.isDigit() } },
                 label = { Text("Default media volume % (blank = don't change)") },

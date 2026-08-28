@@ -138,17 +138,36 @@ object MediaEntries {
                 .toIntOrNull()?.takeIf { it > 0 }
         }
 
+    /**
+     * Qualifiers that are neither a known mode nor a length floor.
+     *
+     * A structured editor rebuilds the entry text from the fields it knows
+     * about, so without this anything it does not model - a future qualifier,
+     * or a typo worth keeping so it can be corrected - would be silently
+     * dropped the first time the entry was opened and saved.
+     */
+    fun otherQualifiers(entry: String): List<String> =
+        qualifiers(entry).filter { q ->
+            q !in setOf(
+                "newest", "latest", "random", "shuffle",
+                "sequential", "inorder", "in-order", "order",
+            ) && !(q.startsWith("min") && q.removePrefix("min").trim().removePrefix("=").trim().toIntOrNull() != null)
+        }
+
     fun format(
         url: String,
         label: String?,
         mode: PodcastEpisodeMode? = null,
         minMinutes: Int? = null,
+        extra: List<String> = emptyList(),
     ): String {
-        val inside = listOfNotNull(
-            label?.trim()?.ifBlank { null },
-            mode?.name?.lowercase(),
-            minMinutes?.takeIf { it > 0 }?.let { "min $it" },
-        ).joinToString(" | ")
+        val inside = (
+            listOfNotNull(
+                label?.trim()?.ifBlank { null },
+                mode?.name?.lowercase(),
+                minMinutes?.takeIf { it > 0 }?.let { "min $it" },
+            ) + extra.map { it.trim() }.filter { it.isNotBlank() }
+            ).joinToString(" | ")
         return if (inside.isBlank()) url.trim() else "${url.trim()} [$inside]"
     }
 

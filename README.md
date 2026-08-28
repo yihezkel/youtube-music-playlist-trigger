@@ -97,8 +97,15 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   its stop time and is still silenced before Shabat, and the end-of-playlist watcher holds
   the queue still while paused instead of mistaking a pause for a finished playlist.
 - **Random playlist pick** with a rolling "don't repeat last 3" history.
-- **Named playlists** — anywhere a playlist URL is accepted (app and web console) you can
-  add a name in brackets after it:
+- **Entries are edited as fields, not as text.** Each playlist, song or podcast is its own
+  row in the app and in the web console — URL, name, and for podcasts which episode to play
+  and the shortest episode worth starting — with an **Add** button for the next one. The
+  stored form is unchanged (`url [Name | mode | min N]`), because the device config, the
+  console and the schedule tooling all share that one grammar; only the editing changed, so
+  nobody has to remember the bracket syntax or discover that a typo silently fell back to
+  the default. Anything the fields don't model is carried through untouched and flagged
+  rather than dropped.
+- **Named playlists** — anywhere a playlist URL is accepted you can give it a name:
   `https://music.youtube.com/playlist?list=PLKNLlLCOCLas&si=txZZ [Quora]`.
   Lists then show the name with the URL underneath. The name is cosmetic — playback always
   uses the playlist ID — so labelled and bare URLs are interchangeable.
