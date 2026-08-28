@@ -35,10 +35,22 @@ function reasonFor(show) {
   // Keep only the parts that read as a reason. A "When:" fragment is a
   // scheduling detail, and a TODO is something the user intends to do next -
   // neither explains why a show was added or dropped, and presenting one as
-  // the reason would be worse than leaving the cell blank.
-  const parts = note.replace(/^\[[^\]]*\]\s*/, "").split("|")
+  // the reason would be worse than leaving the cell blank. "Done:" and
+  // "Superseded:" are settled TODOs rewritten in place, so they are still the
+  // user's intent rather than a reason, and are filtered for the same cause.
+  //
+  // A note carries its source sheet as a "[Weekly]"/"[News]" tag, and only the
+  // first one is stripped above, so a later segment arrives as "[News] TODO:
+  // ...". Testing the raw segment therefore missed those and leaked the TODO
+  // into the reason column; ignore any leading tag when deciding, while
+  // leaving it in place for segments that are kept.
+  const label = /^\[[^\]]*\]\s*/;
+  const parts = note.replace(label, "").split("|")
     .map((s) => s.trim())
-    .filter((s) => s && !/^When:/i.test(s) && !/^TODO:/i.test(s));
+    .filter((s) => {
+      const body = s.replace(label, "").trim();
+      return body && !/^When:/i.test(body) && !/^(TODO|Done|Superseded)\b/i.test(body);
+    });
   return parts.join(" | ");
 }
 
