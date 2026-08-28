@@ -1,8 +1,28 @@
+// HISTORICAL - DO NOT RUN. Kept only to record how sheet-legacy.json was first
+// built.
+//
+// It cannot work any more and would do damage if it did. The Weekly, Daily and
+// News tabs it reads have all been deleted, so the first request throws. And it
+// writes only { notes, durations, context }, while sheet-legacy.json has since
+// grown `slots` (where each show sat in the old routine), `dailyExtras` and
+// `weeklyGrid` (the old timetable, captured verbatim when the Weekly tab went).
+// Running it would drop all three and overwrite the wording that has been
+// edited by hand since - the settled TODOs, rewritten in place as "Done (...)"
+// and "Superseded (...)".
+//
+// sheet-legacy.json is now the source, and is edited directly.
+//
 // Extract the Notes / TODO wording and recorded durations from the Weekly,
 // Daily and News tabs into tools/sheet-legacy.json.
 //
 // Run this BEFORE trimming those tabs. Once their lower halves are removed the
 // wording only survives here, and the catalog is generated from this file.
+throw new Error(
+  "sheet-legacy.mjs is historical and must not be run: its source tabs are " +
+  "deleted, and it would drop slots, dailyExtras and weeklyGrid from " +
+  "sheet-legacy.json. Edit sheet-legacy.json directly.",
+);
+/* eslint-disable no-unreachable */
 import { GoogleAuth } from "google-auth-library";
 import { writeFileSync } from "node:fs";
 

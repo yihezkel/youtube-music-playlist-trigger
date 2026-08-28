@@ -172,7 +172,7 @@ const body = rows.map((r) => {
 const legend = [
   [],
   ["How to read this tab"],
-  ["Your notes", "The Notes and TODO wording you had written on the Weekly/Daily/News tabs, carried over before those were trimmed. Read-only history - write new thoughts in the 'Our preferences' column."],
+  ["Your notes", "The Notes and TODO wording you had written on the old Weekly/Daily/News tabs, carried over before those tabs were removed. Read-only history - write new thoughts in the 'Our preferences' column."],
   ["Our preferences", "Yours to write in - e.g. 'Sarah loves this', 'too long for the morning'. Kept intact when this tab is regenerated, and read back when we next reassess the line-up."],
   ["Status: Considering", "Shows you had already noted as ideas."],
   ["Status: Suggested by AI", "Shows proposed here that were not previously on the sheet."],

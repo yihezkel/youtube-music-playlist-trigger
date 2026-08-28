@@ -322,11 +322,19 @@ that form, so this is parked.
 
 <https://docs.google.com/spreadsheets/d/<SHEET_ID>>
 
-Four tabs: **Weekly** (the old Google Home record), **Podcast Catalog**,
-**Schedule**, **Schedule change log**. The schedule tab was called "Recommended
-Schedule" while it was still a proposal; `schedule-sheet.mjs` renames it in
-place on its next run, because re-creating it under the new name would strand
-the guidance columns and column widths Jason set by hand.
+Three tabs: **Podcast Catalog**, **Schedule**, **Schedule change log**. The
+schedule tab was called "Recommended Schedule" while it was still a proposal;
+`schedule-sheet.mjs` renames it in place on its next run, because re-creating it
+under the new name would strand the guidance columns and column widths Jason set
+by hand.
+
+The original **Weekly**, **Daily** and **News** tabs are gone. They held the
+Google Home routine the app replaced. Everything on them lives in
+`tools/sheet-legacy.json`: per-show notes and TODOs in `notes`, the lengths
+Jason had recorded in `durations`, where each show sat in `slots`, and the old
+weekly timetable verbatim in `weeklyGrid`. Nothing generates from any of it —
+it is history, and the catalog's read-only "Your notes" column is the only
+place it surfaces.
 
 | Tool | Builds |
 |---|---|
