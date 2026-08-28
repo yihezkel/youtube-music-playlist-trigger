@@ -53,6 +53,11 @@ object SelfTestRunner {
     private const val POLL_INTERVAL_MS: Long = 300
     /** Slower sample for the timeline so the JSON record stays compact. */
     private const val TIMELINE_SAMPLE_INTERVAL_MS: Long = 1_000
+    /**
+     * How recently YouTube Music must have published a media session for that
+     * to count as evidence it launched during this attempt.
+     */
+    private const val MEDIA_SESSION_EVIDENCE_MS: Long = 60_000
     /** Wait this long for the queued A11y action coroutine to finish so we
      *  can attach its step trace to the attempt. */
     private const val A11Y_RESULT_TIMEOUT_MS: Long = 6_000
@@ -471,26 +476,42 @@ object SelfTestRunner {
         YtmAccessibilityService.currentForegroundPackage()?.let {
             return ForegroundLookup(it, "a11y")
         }
-        return try {
+        val usage = runCatching {
             val usm = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
-                ?: return ForegroundLookup(null, "none: no UsageStatsManager")
-            val now = System.currentTimeMillis()
-            val events = usm.queryEvents(now - 5_000, now)
             var last: String? = null
-            val ev = android.app.usage.UsageEvents.Event()
-            while (events.hasNextEvent()) {
-                events.getNextEvent(ev)
-                if (ev.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                    ev.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
-                ) {
-                    last = ev.packageName
+            if (usm != null) {
+                val now = System.currentTimeMillis()
+                val events = usm.queryEvents(now - 5_000, now)
+                val ev = android.app.usage.UsageEvents.Event()
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(ev)
+                    if (ev.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                        ev.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
+                    ) {
+                        last = ev.packageName
+                    }
                 }
             }
-            if (last != null) ForegroundLookup(last, "usagestats")
-            else ForegroundLookup(null, "none: a11y silent and usagestats empty")
-        } catch (t: Throwable) {
-            ForegroundLookup(null, "none: usagestats threw ${t.javaClass.simpleName}")
+            last
+        }.getOrNull()
+        if (usage != null) return ForegroundLookup(usage, "usagestats")
+
+        // Third source, and the only one that does not depend on either the
+        // accessibility binding or an appop the app cannot grant itself: if
+        // YouTube Music is publishing a media session it plainly launched,
+        // whatever the other two can or cannot see. Not literally "foreground",
+        // so it is named as the weaker evidence it is - but it is the
+        // difference between recording "it never opened" and "we were blind",
+        // which is the distinction this whole field exists to make.
+        MediaSessionListenerService.ytMusicLastSeenMs()?.let { seen ->
+            if (System.currentTimeMillis() - seen < MEDIA_SESSION_EVIDENCE_MS) {
+                return ForegroundLookup(
+                    MediaSessionListenerService.YT_MUSIC_PKG,
+                    "mediasession (a11y silent, usagestats unavailable)",
+                )
+            }
         }
+        return ForegroundLookup(null, "none: a11y silent, usagestats unavailable, no YTM session")
     }
 
     private fun currentForegroundApp(context: Context): String? =

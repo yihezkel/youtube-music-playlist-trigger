@@ -80,6 +80,7 @@ class MediaSessionListenerService : NotificationListenerService() {
     /** Follow YT Music's session, if it is among the active ones. */
     private fun attach(controllers: List<MediaController>) {
         val ytm = controllers.firstOrNull { it.packageName == YT_MUSIC_PKG }
+        if (ytm != null) ytmSessionSeenAtMs.set(System.currentTimeMillis())
         if (ytm != null && ytm.sessionToken == watched?.sessionToken) {
             onStateChanged(ytm.playbackState?.state)
             return
@@ -147,6 +148,21 @@ class MediaSessionListenerService : NotificationListenerService() {
 
     companion object {
         const val YT_MUSIC_PKG = "com.google.android.apps.youtube.music"
+
+        /**
+         * When YouTube Music was last seen publishing a media session.
+         *
+         * This is the evidence that turns "the accessibility service has seen
+         * no events" from ambiguous into decisive. The service is scoped to
+         * YouTube Music, so silence is perfectly normal while YouTube Music has
+         * not run — but if it *has* run since the service bound, and still
+         * nothing arrived, the binding is dead rather than merely unexercised.
+         * Read by [com.jasonschoenbrun.ytmtrigger.accessibility.A11yPermissionEnforcer].
+         */
+        val ytmSessionSeenAtMs = java.util.concurrent.atomic.AtomicLong(0L)
+
+        /** Epoch millis YouTube Music last had a session, or null if never. */
+        fun ytMusicLastSeenMs(): Long? = ytmSessionSeenAtMs.get().takeIf { it > 0 }
 
         @Volatile private var connected: Boolean = false
 

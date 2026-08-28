@@ -108,6 +108,24 @@ class PodcastPlayerService : Service() {
                                 "note" to "playing, no error raised - a silent stall looks like this",
                             ))
                         }
+                        // A stall that does not clear is the same problem as an
+                        // error that was never raised: the block goes quiet
+                        // with nothing to show for it. Treat it the same way -
+                        // retry the episode once from here, then move on - so
+                        // recovery does not depend on MediaPlayer bothering to
+                        // tell us. Deliberately far more patient than the
+                        // report above, because buffering on a slow connection
+                        // is not a fault.
+                        if (stalledSamples >= STALL_GIVE_UP_SAMPLES) {
+                            Logger.w("PodcastPlayer", "Stalled too long; recovering", mapOf(
+                                "title" to currentTitle,
+                                "stalledForSec" to (stalledSamples * POSITION_SAMPLE_MS / 1000).toString(),
+                            ))
+                            stalledSamples = 0
+                            stallReported = false
+                            currentAudioUrl?.let { url -> handlePlaybackError(url, currentTitle) }
+                            return
+                        }
                     } else {
                         if (stallReported) {
                             Logger.i("PodcastPlayer", "Position advancing again", mapOf(
@@ -394,6 +412,8 @@ class PodcastPlayerService : Service() {
         private const val POSITION_SAMPLE_MS = 10_000L
         /** Samples with the position unchanged before calling it a stall. */
         private const val STALL_SAMPLES = 3
+        /** Samples unchanged before giving up on the episode and recovering. */
+        private const val STALL_GIVE_UP_SAMPLES = 12
         /** Retries of the same episode after a stream error, before moving on. */
         private const val MAX_ERROR_RETRIES = 1
         const val EXTRA_URL = "url"

@@ -281,6 +281,19 @@ object HealthChecks {
     }
 
     private fun accessibility(context: Context): Check {
+        // Checked before the ordinary "is it bound" question, because a dead
+        // binding reports itself as bound and healthy everywhere else.
+        if (A11yPermissionEnforcer.isProvablyDead()) {
+            return Check(
+                "Accessibility service", Health.Broken,
+                "Bound but delivering nothing",
+                "YouTube Music has run since this service connected and the service received " +
+                    "no events at all, so it cannot press Play and music will not start. " +
+                    "Podcasts are unaffected. Restarting the app does not fix this and neither " +
+                    "does switching the service off and on — the phone has to be rebooted.",
+                "Restart the phone",
+            )
+        }
         if (YtmAccessibilityService.isRunning()) {
             return Check("Accessibility service", Health.Ok, "Running")
         }
@@ -403,8 +416,14 @@ object HealthChecks {
         // failed four days ago and has worked since is history rather than a
         // present fault - often the cause is already fixed. Older failures are
         // still reported, because a pattern is worth seeing.
-        val dayAgo = System.currentTimeMillis() - 24 * 60 * 60 * 1000
-        val today = entries.count { it.atMs >= dayAgo }
+        //
+        // "Today" has to mean the calendar day. This counted a rolling 24 hours
+        // instead, so at 15:32 it reached back to 15:32 the previous day and
+        // reported eight failures "today" on a day that had none - every one of
+        // them from a test run the night before. Reuse the per-day counts the
+        // chart is drawn from, so the number under the light and the last bar
+        // of the chart cannot disagree.
+        val today = FailureLog.dailyCounts(entries).last()
         return if (today == 0) {
             Check(
                 "Recent failures", Health.Ok,

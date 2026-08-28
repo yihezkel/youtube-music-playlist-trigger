@@ -10,8 +10,10 @@ import android.os.Looper
 import android.provider.Settings
 import com.jasonschoenbrun.ytmtrigger.alarm.AlarmScheduler
 import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
+import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackTriggerService
+import com.jasonschoenbrun.ytmtrigger.playback.YtmLauncher
 import kotlinx.coroutines.delay
 import kotlin.system.exitProcess
 
@@ -69,6 +71,67 @@ object A11yPermissionEnforcer {
      * report the phone unhealthy whenever it was simply idle.
      */
     enum class Liveness { NotBound, Healthy, Unknown, Unresponsive }
+
+    /**
+     * Whether the binding is provably dead, rather than merely unexercised.
+     *
+     * The service is scoped to YouTube Music, so "no events since connecting"
+     * is the normal resting state and proves nothing on its own — which is why
+     * this fault went five audible alerts without being pinned down. But
+     * YouTube Music publishing a media session is independent evidence that it
+     * actually ran. If it ran *after* the service connected and the service
+     * still received nothing, the binding is dead.
+     *
+     * A grace period after the evidence avoids calling it dead in the moments
+     * between YouTube Music starting and the first window event arriving.
+     *
+     * Two independent kinds of evidence, because one alone is not enough:
+     *
+     * - A launch *we* initiated. This is the strong signal. Bringing YouTube
+     *   Music to the front necessarily changes the window, so receiving
+     *   nothing afterwards means delivery is broken. It catches a binding that
+     *   dies mid-session, which the self-test hit at 12:44 on 28 Aug: the
+     *   launcher fired, YouTube Music published track metadata a second later,
+     *   and the accessibility automation still reported a11ySteps=0, so nothing
+     *   ever pressed play.
+     *
+     *   This rests on the screen being awake, because an activity started with
+     *   the display off never becomes visible and so fires no window event.
+     *   That holds for every real launch: they all go through
+     *   KeyguardDismissActivity, which wakes the device first. It is not true
+     *   of a launch forced over adb, which is how a screen-off test read as a
+     *   dead binding on 28 Aug when the binding was in fact healthy.
+     * - YouTube Music merely appearing, with no event since we connected. This
+     *   is the weaker signal, and is deliberately restricted to "no event at
+     *   all", the signature seen after every install. Without that restriction
+     *   it would misfire whenever YouTube Music was resumed while already
+     *   running, since that changes no window and so produces no event.
+     *
+     * Known cure: reboot the phone. Restarting our own process does not clear
+     * it, and neither does unbinding and rebinding the service — both were
+     * tried twice on 28 Aug. It has also recovered on its own, between the
+     * failure at 12:44 and the next success at 13:44 that day.
+     */
+    fun isProvablyDead(): Boolean {
+        if (!YtmAccessibilityService.isRunning()) return false
+        val now = System.currentTimeMillis()
+        val connectedAt = YtmAccessibilityService.msSinceConnected()?.let { now - it } ?: return false
+        val lastEventAt = YtmAccessibilityService.msSinceLastEvent()?.let { now - it }
+
+        val launchedAt = YtmLauncher.lastLaunchAtMs()
+        if (launchedAt != null && launchedAt > connectedAt && now - launchedAt >= PROOF_GRACE_MS) {
+            if (lastEventAt == null || lastEventAt < launchedAt) return true
+        }
+
+        val ytmSeenAt = MediaSessionListenerService.ytMusicLastSeenMs() ?: return false
+        // YouTube Music has not run since we bound, so silence is expected.
+        if (ytmSeenAt <= connectedAt) return false
+        if (now - ytmSeenAt < PROOF_GRACE_MS) return false
+        return lastEventAt == null
+    }
+
+    /** Time allowed between YouTube Music appearing and the first event. */
+    private const val PROOF_GRACE_MS = 30_000L
 
     /**
      * Classify the service. Blocks on a binder call, so background threads

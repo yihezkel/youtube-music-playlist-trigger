@@ -66,6 +66,7 @@ start until the phone is rebooted. Podcasts are unaffected. After any install,
 verify with a cold start:
 
 ```powershell
+& $adb shell "input keyevent KEYCODE_WAKEUP"   # REQUIRED - see below
 & $adb shell "am force-stop com.google.android.apps.youtube.music"
 & $adb shell "am start -n com.google.android.apps.youtube.music/com.google.android.apps.youtube.music.activities.MusicActivity"
 # then count A11y: WindowStateChanged in today's app log - it must increase
@@ -482,12 +483,22 @@ what was got wrong. Match that.
   afterwards. The 14 and 19 Aug alerts did each follow an install by about an
   hour. So installing reliably causes it, and something else can too.
 
-  **Test it with a cold start.** `monkey`, and `am start -n` against an
-  already-running task, both resume YouTube Music without producing a window
-  change, so the probe reports "dead" for a perfectly live service. Always
+  **Test it with a cold start, and wake the screen first.** `monkey`, and
+  `am start -n` against an already-running task, both resume YouTube Music
+  without producing a window change, so the probe reports "dead" for a
+  perfectly live service. Always
   `am force-stop com.google.android.apps.youtube.music` first, then
   `am start -n …/.activities.MusicActivity`, then count
   `A11y: WindowStateChanged` lines in the app's log.
+
+  The wake matters just as much as the force-stop. An activity started while
+  the display is asleep never becomes visible, so it fires no window event at
+  all, and the test reads zero events against a healthy binding. This produced
+  a false "the reboot did not cure it" on 28 Aug; waking the screen and
+  repeating the identical test gave two events immediately. Send
+  `input keyevent KEYCODE_WAKEUP` and confirm `mWakefulness=Awake` before
+  drawing any conclusion. Real triggers are unaffected, because they go
+  through `KeyguardDismissActivity`, which wakes the device itself.
 
 - **`ytmCameToForeground` cannot be trusted when the binding is dead.**
   `SelfTestRunner.currentForegroundApp` prefers the accessibility service and

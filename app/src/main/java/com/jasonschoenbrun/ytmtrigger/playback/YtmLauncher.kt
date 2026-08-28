@@ -38,6 +38,18 @@ object YtmLauncher {
 
     private val seq = AtomicLong(0)
     private val lastResult = AtomicReference<LaunchResult?>(null)
+    private val lastLaunchAt = AtomicLong(0)
+
+    /**
+     * When we last asked Android to bring YouTube Music up, or 0.
+     *
+     * Used to tell a dead accessibility binding from a merely quiet one. A
+     * launch we initiate always puts YouTube Music's window in front, so it
+     * must produce a window-state event; a YouTube Music media session
+     * appearing on its own need not, because a resume of an already-running
+     * task changes no window.
+     */
+    fun lastLaunchAtMs(): Long? = lastLaunchAt.get().takeIf { it > 0 }
 
     /**
      * Launch YT Music using [strategy] for [id].
@@ -104,6 +116,7 @@ object YtmLauncher {
                 }
             }
         }
+        lastLaunchAt.set(System.currentTimeMillis())
         Logger.i("YtmLauncher", "Launching YT Music", mapOf(
             "strategy" to strategy.name,
             "uri" to launch.dataString.orEmpty(),

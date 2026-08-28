@@ -7,6 +7,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
 import com.jasonschoenbrun.ytmtrigger.log.Logger
 import java.util.concurrent.TimeUnit
 
@@ -49,7 +50,13 @@ class A11yHealthWorker(
                 "bound" to bound.toString(),
                 "canReadWindow" to readable.toString(),
                 "liveness" to state.name,
-                "sawEventSinceConnect" to YtmAccessibilityService.isResponsive().toString(),
+                // Named for what it returns, not for what it sounds like.
+                // isResponsive() is true either when an event has arrived or
+                // while still inside the grace period after connecting, so
+                // logging it as "sawEventSinceConnect" printed true beside
+                // "lastEventMinAgo=never" and read as a contradiction.
+                // lastEventMinAgo already carries whether an event arrived.
+                "responsive" to YtmAccessibilityService.isResponsive().toString(),
                 "connectedMinAgo" to minutes(YtmAccessibilityService.msSinceConnected()),
                 "lastEventMinAgo" to minutes(YtmAccessibilityService.msSinceLastEvent()),
                 "interactive" to (pm?.isInteractive?.toString() ?: "?"),
@@ -79,6 +86,18 @@ class A11yHealthWorker(
                 Logger.w("A11yHealth", "No accessibility event has ever arrived since binding", mapOf(
                     "connectedMinAgo" to minutes(connectedMs),
                     "note" to "normal if YouTube Music has not opened; the fault looks identical",
+                ))
+            }
+            // And the case where it is not merely suspicious but provable.
+            if (A11yPermissionEnforcer.isProvablyDead()) {
+                Logger.e("A11yHealth", "Binding is provably dead", mapOf(
+                    "connectedMinAgo" to minutes(connectedMs),
+                    "lastEventMinAgo" to minutes(YtmAccessibilityService.msSinceLastEvent()),
+                    "ytMusicSeenMinAgo" to minutes(
+                        MediaSessionListenerService.ytMusicLastSeenMs()
+                            ?.let { System.currentTimeMillis() - it },
+                    ),
+                    "cure" to "reboot; process restart and rebinding do not clear it",
                 ))
             }
         } catch (t: Throwable) {
