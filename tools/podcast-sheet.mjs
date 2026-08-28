@@ -238,9 +238,24 @@ if (existing) {
 // values are written here - cell colours are a separate thing and survive.
 const HEAD_OUT = HEAD.slice();
 HEAD_OUT[USER_COL] = userHeading;
+// Pad every row to the full width. Sheets only writes the cells it is given, so
+// a short row - the blank spacers and the one-cell legend headings especially -
+// left whatever the previous run had put there still showing. Renaming the
+// schedule tab shifted the legend down by a row and produced two "What is not
+// here" lines, one naming the old tab, because the spacer above it wrote
+// nothing at all.
+const grid = [HEAD_OUT, ...body, ...legend]
+  .map((r) => Array.from({ length: HEAD.length }, (_, i) => r[i] ?? ""));
 await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, {
-  values: [HEAD_OUT, ...body, ...legend],
+  values: grid,
 });
+// And clear anything below, for the run where the catalog gets shorter.
+if (existing) {
+  const had = existing.properties.gridProperties?.rowCount || grid.length;
+  if (had > grid.length) {
+    await api("POST", `/values/${encodeURIComponent(`${TAB}!A${grid.length + 1}:AZ${had}`)}:clear`, {});
+  }
+}
 
 
 const dataEnd = 1 + body.length;
