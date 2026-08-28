@@ -343,6 +343,63 @@ place it surfaces.
 | `tools/build-changelog.mjs` | Schedule change log |
 | `tools/build-schedules.mjs` | the device config — pass `push` to write |
 | `tools/schedule-blocks.mjs` | **the single source for the schedule** |
+| `tools/guidance.mjs` | reads the yellow guidance columns; no writes |
+| `tools/archive-guidance.mjs` | files applied guidance into the notes column |
+
+### Change guidance from us
+
+Jason writes what he wants changed into the yellow **"Change guidance from us"**
+columns, and asks in a Copilot CLI session for the schedule to be reworked with
+it in mind. Four such columns exist: `Podcast Catalog!E`, and one per section on
+the schedule tab at `F5`, `I16` and `G25`.
+
+The loop, in order:
+
+1. `node tools/guidance.mjs` lists anything pending. Exit code 10 means there
+   is something, 0 means there is not, so a script can branch without parsing.
+2. Make the actual change, in `schedule-blocks.mjs` and wherever else it belongs.
+3. Add the row to the list in `build-changelog.mjs`, then run it.
+4. `node tools/archive-guidance.mjs --all` moves each piece of guidance into the
+   notes cell beside it, stamped `Applied <date>`, and empties the yellow cell.
+   Use `--dry-run` first. It writes the note before clearing the guidance, so an
+   interruption leaves the text somewhere rather than nowhere.
+
+Things that will catch you out:
+
+- **Catalog guidance is keyed to the show, schedule guidance is keyed to the
+  row.** `podcast-sheet.mjs` reads column E back and re-emits it against the
+  show name, so it follows a row that moves when statuses re-sort. The schedule
+  tab has no such key: its guidance is positional, which is why a section's row
+  count must never change. Verified by writing a marker into all four columns
+  and rebuilding both tabs - all four survived.
+- **Only the catalog has an agreed destination** for applied guidance, column F
+  "Your notes". The schedule tab has no notes column, so `archive-guidance.mjs`
+  refuses those cells rather than inventing somewhere to put the text.
+- **A header is only a header if something sits to its left.** The catalog's own
+  legend contains a row reading "Change guidance from us" in column A, and
+  matching on the words alone turned that into a phantom header with fifteen
+  phantom items beneath it.
+
+### The fortnightly check
+
+A Windows scheduled task, **"YTM Trigger - check schedule guidance"**, runs
+`tools/check-guidance.ps1` at 09:00 every second Sunday. It runs
+`guidance.mjs --notify`, which opens a GitHub issue titled *"Change guidance
+pending on the schedule sheet"* when anything is waiting, and does nothing at
+all when nothing is. It logs to `%LOCALAPPDATA%\ytm-trigger-guidance.log`.
+
+It is deliberately read-only and involves no AI: it never edits the schedule,
+costs no credits, and cannot act on guidance by itself. Reworking the schedule
+stays something Jason asks for.
+
+- It only runs while he is logged on, because `gh` reads its token from the
+  Windows credential store, which a task running as SYSTEM cannot reach.
+- Duplicate issues are avoided by listing open issues and matching the title in
+  code, **not** by `gh issue list --search`: search is a separate index that lags
+  creation by seconds to minutes, so a second run soon after the first did not
+  see the issue it had just opened.
+- Remove it with
+  `Unregister-ScheduledTask -TaskName "YTM Trigger - check schedule guidance"`.
 
 **`schedule-blocks.mjs` is the only place the schedule is defined.** The device
 builder and the sheet renderer both derive from it. They used to hold separate

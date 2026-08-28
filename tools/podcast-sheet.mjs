@@ -172,8 +172,8 @@ const body = rows.map((r) => {
 const legend = [
   [],
   ["How to read this tab"],
-  ["Your notes", "The Notes and TODO wording you had written on the old Weekly/Daily/News tabs, carried over before those tabs were removed. Read-only history - write new thoughts in the 'Our preferences' column."],
-  ["Our preferences", "Yours to write in - e.g. 'Sarah loves this', 'too long for the morning'. Kept intact when this tab is regenerated, and read back when we next reassess the line-up."],
+  ["Your notes", "The Notes and TODO wording you had written on the old Weekly/Daily/News tabs, carried over before those tabs were removed. Also where guidance ends up once it has been acted on, stamped 'Applied <date>'. History rather than an inbox - write new thoughts in the yellow column instead."],
+  ["Change guidance from us", "Yours to write in, and the one place we look. Say what you want different - 'too long for the morning', 'Sarah loves this, more of it' - and ask in a Copilot session for the schedule to be reworked. Kept intact when this tab is regenerated, and keyed to the show, so it follows a row that moves. Once a change is made the text moves into 'Your notes' with the date, the cell is emptied, and a row appears on the change log. A check runs every fortnight and opens a GitHub issue if anything is sitting here unread."],
   ["Status: Considering", "Shows you had already noted as ideas."],
   ["Status: Suggested by AI", "Shows proposed here that were not previously on the sheet."],
   ["Rating (ratings)", "Apple Podcasts star average, with the number of ratings behind it. Apple is used because it publishes by far the largest public pool of podcast ratings - Spotify publishes none."],
