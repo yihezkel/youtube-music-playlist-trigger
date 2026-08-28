@@ -1,4 +1,4 @@
-// Build the "Recommended Schedule" tab.
+// Build the "Schedule" tab.
 //
 // Blocks are queues, not timetables: each block has a start and a stop, and its
 // shows play back to back until the stop. Episode lengths vary threefold within
@@ -7,7 +7,9 @@ import { readFileSync } from "node:fs";
 import { GoogleAuth } from "google-auth-library";
 
 const ID = "<SHEET_ID>";
-const TAB = "Recommended Schedule";
+const TAB = "Schedule";
+/** What the tab was called before; renamed in place on the next run. */
+const PREVIOUS_TAB = "Recommended Schedule";
 const stats = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 const legacy = JSON.parse(readFileSync("sheet-legacy.json", "utf8"));
 
@@ -131,6 +133,27 @@ push(["Applied to Google Home and to the YTM Trigger app. The app is the live sy
 // content, which is what keeps the guidance columns untouched - each one sits
 // immediately to the right of its section's last column.
 const meta = (await api("GET", "?fields=sheets.properties")).data;
+// The tab was called "Recommended Schedule" while it was still a proposal. It
+// is generated from schedule-blocks.mjs, the same source the phone's config is
+// built from, so it is simply the schedule and is named that way now.
+//
+// Renaming has to move the existing sheet rather than let the lookup below miss
+// and create a new one. Everything Jason has done by hand lives on that sheet -
+// the yellow guidance columns, the narrowed C and F, the Overflow wrapping -
+// and a new tab would start with none of it while his work sat orphaned under
+// the old name.
+{
+  const previous = meta.sheets.find((s) => s.properties.title === PREVIOUS_TAB);
+  const already = meta.sheets.find((s) => s.properties.title === TAB);
+  if (previous && !already) {
+    await api("POST", ":batchUpdate", { requests: [{ updateSheetProperties: {
+      properties: { sheetId: previous.properties.sheetId, title: TAB },
+      fields: "title",
+    } }] });
+    previous.properties.title = TAB;
+    console.log(`renamed "${PREVIOUS_TAB}" to "${TAB}"`);
+  }
+}
 const old = meta.sheets.find((s) => s.properties.title === TAB);
 const fresh = !old;
 let sheetId;

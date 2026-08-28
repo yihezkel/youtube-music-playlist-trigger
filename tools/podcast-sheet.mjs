@@ -188,7 +188,7 @@ const legend = [
   ["Type: News brief", "A Google Assistant news briefing, not a podcast. No public RSS, so these cannot move to the YTM Trigger app by feed."],
   ["Match confidence", "Name similarity between the label and the matched feed. Low values are not necessarily wrong - renamed shows score low but are correct (see Notes)."],
   [],
-  ["What is not here", "This tab describes shows, not when they play. Current scheduling lives on 'Recommended Schedule'; every past addition and removal lives on 'Schedule change log'."],
+  ["What is not here", "This tab describes shows, not when they play. Current scheduling lives on 'Schedule'; every past addition and removal lives on 'Schedule change log'."],
   [`Generated ${new Date().toISOString().slice(0, 16).replace("T", " ")} from public RSS feeds (iTunes directory) and Apple Podcasts ratings.`],
 ];
 

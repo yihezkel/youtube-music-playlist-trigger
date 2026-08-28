@@ -323,12 +323,15 @@ that form, so this is parked.
 <https://docs.google.com/spreadsheets/d/<SHEET_ID>>
 
 Four tabs: **Weekly** (the old Google Home record), **Podcast Catalog**,
-**Recommended Schedule**, **Schedule change log**.
+**Schedule**, **Schedule change log**. The schedule tab was called "Recommended
+Schedule" while it was still a proposal; `schedule-sheet.mjs` renames it in
+place on its next run, because re-creating it under the new name would strand
+the guidance columns and column widths Jason set by hand.
 
 | Tool | Builds |
 |---|---|
 | `tools/podcast-sheet.mjs` | Podcast Catalog (103 shows) |
-| `tools/schedule-sheet.mjs` | Recommended Schedule |
+| `tools/schedule-sheet.mjs` | Schedule |
 | `tools/build-changelog.mjs` | Schedule change log |
 | `tools/build-schedules.mjs` | the device config — pass `push` to write |
 | `tools/schedule-blocks.mjs` | **the single source for the schedule** |

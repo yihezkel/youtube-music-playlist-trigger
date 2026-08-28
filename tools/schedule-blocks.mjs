@@ -2,7 +2,7 @@
 //
 // This file is the only definition of what plays when. build-schedules.mjs
 // turns it into app schedules and pushes them to the device; schedule-sheet.mjs
-// renders the same data onto the "Recommended Schedule" tab.
+// renders the same data onto the "Schedule" tab.
 //
 // It exists because those two used to hold separate hand-maintained copies, and
 // they had already drifted: the sheet showed music opening the Landing block
