@@ -441,6 +441,43 @@ what was got wrong. Match that.
 
 **Genuinely open:**
 
+- **The self-test alert has fired five times in the retained logs, not once.**
+  14 Aug 18:36, 19 Aug 22:49, 20 Aug 12:00, 20 Aug 18:00 and 28 Aug 12:44 — each
+  time all three launch strategies timed out and the phone played its audible
+  alarm in the house. This used to be filed below as "could not be reproduced…
+  probably an artefact". That was wrong, and it is the most important open fault
+  here.
+
+  On 28 Aug it was caught live and confirmed independently of the app:
+  `dumpsys window` showed `mCurrentFocus` on YouTube Music's `MusicActivity`
+  while the accessibility service received **zero** events — its own counters
+  read `sawEventSinceConnect=false lastEventMinAgo=never`, and no
+  `WindowStateChanged` line appeared. Android meanwhile listed the service under
+  `Enabled services` and not under `Crashed services`. The binding is live as
+  far as the platform is concerned and simply never delivers.
+
+  **The app's own recovery did not clear it.** The documented remedy — restart
+  our own process — ran at 12:44:38 and the service was still inert afterwards.
+
+  **What did clear it is not established.** A manual unbind/rebind through
+  secure settings and then a reboot were both tried; it was working afterwards.
+  The probe used between those steps launched YouTube Music with `monkey`, and
+  that turned out to be unreliable — immediately after the reboot it also
+  reported no events, while an explicit
+  `am start -n …/.activities.MusicActivity` moments later produced them. So the
+  rebind may well have worked and been mis-measured. **Test this with
+  `am start -n` and the explicit activity, never `monkey`.**
+
+- **`ytmCameToForeground` cannot be trusted when the binding is dead.**
+  `SelfTestRunner.currentForegroundApp` prefers the accessibility service and
+  falls back to UsageStats, which is not granted. The forensic record therefore
+  says `ytmCameToForeground=false` whether YouTube Music failed to open *or*
+  opened and could not be seen — the two faults that most need telling apart.
+  On 28 Aug it recorded `false` while the window really was foreground. The
+  20 Aug runs recorded `true` with `a11yStarted=n/a`, which is a genuinely
+  different signature. Worth recording it as unknown rather than false when the
+  service is unresponsive, so the record stops confirming itself.
+
 - **A mid-stream network drop may stall silently rather than raise an error.**
   Trying to reproduce the 08:54 fault by dropping wifi failed repeatedly: a
   28-minute episode kept playing for **five minutes offline** with
@@ -518,8 +555,9 @@ what was got wrong. Match that.
 - Starting YouTube Music or the Aleph Beta app behind a secure lock (§6).
 - Implementing the schedule on Google Home — its automations play one podcast
   each and cannot queue.
-- Reproducing the "zombie accessibility service" state — could not be
-  reproduced; the earlier sighting was probably an artefact.
+- Reproducing the "zombie accessibility service" state — **reopened; see the
+  open items above.** It has now happened five times and was confirmed live on
+  28 Aug, so the earlier verdict that it was probably an artefact is withdrawn.
 
 **Known and accepted:**
 
