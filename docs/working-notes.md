@@ -113,6 +113,13 @@ Two adb traps, both hit for real:
   Capture to the device and `adb pull` instead.
 - `adb shell "... | tail"` on a multi-megabyte log throws `ENOBUFS` through
   Node's `execSync`. Use `tail -N` device-side and pass `maxBuffer`.
+- **PowerShell hands unrecognised operators to the command as arguments, and
+  curl bundles short flags.** `curl.exe -s $url -join "\`n" | Select-String …`
+  does not join anything: curl reads `-join` as `-j -o in` and writes the body
+  to a file called **`in`**, leaving stdout empty. The visible symptom was a
+  match count of 0, which reads like "the feed is broken" rather than "the
+  output went somewhere else" — and the stray file then got committed. Put the
+  output in a variable first, then operate on it.
 
 Also: **PowerShell `.Replace()` on multi-line strings fails silently** because
 of CRLF. It caused at least four phantom "bugs" in one day. Use the `edit` tool.
