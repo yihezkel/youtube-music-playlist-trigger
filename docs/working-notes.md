@@ -60,6 +60,17 @@ the *pre-sync* schedules — a real race, not superstition.
 `id=zz-queue-test` remains armed.** A test schedule left behind fires daily.
 This was got wrong once and left an alarm set for 01:14 the next morning.
 
+**Installing the APK reliably kills the accessibility service** — see §11. It
+comes back bound and never delivers another event, so YouTube Music will not
+start until the phone is rebooted. Podcasts are unaffected. After any install,
+verify with a cold start:
+
+```powershell
+& $adb shell "am force-stop com.google.android.apps.youtube.music"
+& $adb shell "am start -n com.google.android.apps.youtube.music/com.google.android.apps.youtube.music.activities.MusicActivity"
+# then count A11y: WindowStateChanged in today's app log - it must increase
+```
+
 **Check that in the app's own log, not in `dumpsys alarm`.** An alarm entry
 there is tagged with the *action* — `tag=*walarm*:…ytmtrigger.SELFTEST_FIRE` —
 and never carries the schedule id, so `dumpsys alarm | grep zz-queue-test`
@@ -459,14 +470,24 @@ what was got wrong. Match that.
   **The app's own recovery did not clear it.** The documented remedy — restart
   our own process — ran at 12:44:38 and the service was still inert afterwards.
 
-  **What did clear it is not established.** A manual unbind/rebind through
-  secure settings and then a reboot were both tried; it was working afterwards.
-  The probe used between those steps launched YouTube Music with `monkey`, and
-  that turned out to be unreliable — immediately after the reboot it also
-  reported no events, while an explicit
-  `am start -n …/.activities.MusicActivity` moments later produced them. So the
-  rebind may well have worked and been mis-measured. **Test this with
-  `am start -n` and the explicit activity, never `monkey`.**
+  **Reproduced deterministically on 28 Aug, and the cure narrowed down.**
+  Installing the debug APK over adb left the binding dead **both** times it was
+  tried (12:12 and 14:18). Unbinding and rebinding through secure settings —
+  confirmed by `A11y: Service destroyed` followed by `Service connected` — did
+  **not** fix it, tested twice. A **reboot did**, tested twice. So the earlier
+  uncertainty about which step cured it is resolved: it is the reboot.
+
+  **An install is not the only trigger.** Both alerts on 20 Aug (12:00 and
+  18:00) happened with no `MY_PACKAGE_REPLACED` that day until 21:58, hours
+  afterwards. The 14 and 19 Aug alerts did each follow an install by about an
+  hour. So installing reliably causes it, and something else can too.
+
+  **Test it with a cold start.** `monkey`, and `am start -n` against an
+  already-running task, both resume YouTube Music without producing a window
+  change, so the probe reports "dead" for a perfectly live service. Always
+  `am force-stop com.google.android.apps.youtube.music` first, then
+  `am start -n …/.activities.MusicActivity`, then count
+  `A11y: WindowStateChanged` lines in the app's log.
 
 - **`ytmCameToForeground` cannot be trusted when the binding is dead.**
   `SelfTestRunner.currentForegroundApp` prefers the accessibility service and

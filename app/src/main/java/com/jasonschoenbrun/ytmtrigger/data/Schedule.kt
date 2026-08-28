@@ -1,5 +1,6 @@
 package com.jasonschoenbrun.ytmtrigger.data
 
+import com.jasonschoenbrun.ytmtrigger.log.Logger
 import kotlinx.serialization.Serializable
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -112,8 +113,28 @@ data class Schedule(    val id: String = UUID.randomUUID().toString(),
     fun dayOfWeekSet(): Set<DayOfWeek> = daysOfWeek.map { DayOfWeek.of(it) }.toSet()
 
     companion object {
+        /**
+         * Values already reported by [wrapped], so a schedule evaluated in a
+         * loop cannot fill the log with the same complaint. The occurrence
+         * search walks a fortnight, calling [localTime] on every candidate day.
+         */
+        private val warnedOutOfRange = java.util.Collections.synchronizedSet(mutableSetOf<Int>())
+
         /** Minutes-of-day, wrapped into 0..1439 and never negative. */
-        private fun wrapped(min: Int): Int = ((min % 1440) + 1440) % 1440
+        private fun wrapped(min: Int): Int {
+            val w = ((min % 1440) + 1440) % 1440
+            if (w != min && warnedOutOfRange.add(min)) {
+                // Silently correcting this is right - it keeps one malformed
+                // schedule from taking down a whole re-arm pass - but silently
+                // *hiding* it is not. A value outside the day came from
+                // somewhere, and that somewhere is a bug worth finding.
+                Logger.w("Schedule", "Time outside the day; wrapping", mapOf(
+                    "given" to min.toString(),
+                    "used" to w.toString(),
+                ))
+            }
+            return w
+        }
 
         fun default() = Schedule()
         fun fromDefaults(s: AppSettings) = Schedule(

@@ -47,8 +47,24 @@ object PodcastResume {
         positionSec: Long,
         durationSec: Long,
     ) {
-        if (positionSec < MIN_SAVE_SEC) return
+        // Both of these discard a position, and both used to do it in silence.
+        // That is how 39 minutes of a part-heard episode disappeared without a
+        // trace when an errored MediaPlayer reported its position as 0: the
+        // save simply did not happen, and nothing said so.
+        if (positionSec < MIN_SAVE_SEC) {
+            Logger.d("PodcastResume", "Not saving; barely started", mapOf(
+                "title" to title,
+                "positionSec" to positionSec.toString(),
+                "minSec" to MIN_SAVE_SEC.toString(),
+            ))
+            return
+        }
         if (durationSec > 0 && positionSec >= durationSec - NEAR_END_SEC) {
+            Logger.i("PodcastResume", "Not saving; effectively finished", mapOf(
+                "title" to title,
+                "positionSec" to positionSec.toString(),
+                "durationSec" to durationSec.toString(),
+            ))
             clear(context, feedUrl)
             return
         }

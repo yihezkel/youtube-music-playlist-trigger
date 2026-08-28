@@ -65,6 +65,22 @@ class A11yHealthWorker(
                     "lastEventMinAgo" to minutes(YtmAccessibilityService.msSinceLastEvent()),
                 ))
             }
+            // A service that has been bound for a long time and has *never*
+            // been given a single event is the shape of the fault that took
+            // five audible alerts to pin down. It is not proof - the service is
+            // scoped to YouTube Music, so a quiet stretch is normal - but a
+            // whole hour of it is worth a standing line in the log, because
+            // when the next self-test fails this is the first thing anyone
+            // reading backwards will want to know.
+            val connectedMs = YtmAccessibilityService.msSinceConnected()
+            if (connectedMs != null && connectedMs > NEVER_DELIVERED_WARN_MS &&
+                YtmAccessibilityService.msSinceLastEvent() == null
+            ) {
+                Logger.w("A11yHealth", "No accessibility event has ever arrived since binding", mapOf(
+                    "connectedMinAgo" to minutes(connectedMs),
+                    "note" to "normal if YouTube Music has not opened; the fault looks identical",
+                ))
+            }
         } catch (t: Throwable) {
             Logger.w("A11yHealth", "sample failed", t = t)
         }
@@ -76,6 +92,9 @@ class A11yHealthWorker(
 
     companion object {
         private const val UNIQUE_NAME = "a11y-health"
+
+        /** Milliseconds bound with no event at all before that is worth a warning. */
+        private const val NEVER_DELIVERED_WARN_MS = 60L * 60 * 1000
 
         fun ensureScheduled(context: Context) {
             val request = PeriodicWorkRequestBuilder<A11yHealthWorker>(15, TimeUnit.MINUTES).build()

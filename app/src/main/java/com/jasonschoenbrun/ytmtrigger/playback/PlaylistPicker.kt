@@ -18,9 +18,9 @@ object PlaylistPicker {
      * would have silently dropped every song and podcast from the rotation.
      */
     fun pick(repo: ScheduleRepository, schedule: Schedule, rand: Random = Random.Default): Choice? {
-        val pool = schedule.playlistUrls
-            .map { MediaEntries.parse(it) }
-            .filter { it.kind != MediaKind.Unknown }
+        val parsed = schedule.playlistUrls.map { MediaEntries.parse(it) }
+        val pool = parsed.filter { it.kind != MediaKind.Unknown }
+        logDropped(schedule, parsed)
         if (pool.isEmpty()) {
             Logger.w("Picker", "Empty playlist pool", mapOf("scheduleId" to schedule.id))
             return null
@@ -68,9 +68,9 @@ object PlaylistPicker {
      * land straight back on the entry just skipped.
      */
     fun at(schedule: Schedule, index: Int, wrap: Boolean = true): Choice? {
-        val pool = schedule.playlistUrls
-            .map { MediaEntries.parse(it) }
-            .filter { it.kind != MediaKind.Unknown }
+        val parsed = schedule.playlistUrls.map { MediaEntries.parse(it) }
+        val pool = parsed.filter { it.kind != MediaKind.Unknown }
+        logDropped(schedule, parsed)
         if (pool.isEmpty()) {
             Logger.w("Picker", "Empty playlist pool", mapOf("scheduleId" to schedule.id))
             return null
@@ -109,6 +109,24 @@ object PlaylistPicker {
             minMinutes = picked.minMinutes,
             index = resolved,
         )
+    }
+
+    /**
+     * Reports entries dropped for being unrecognised.
+     *
+     * They are filtered out so one bad line cannot take a block down, but
+     * doing that in silence means a typo removes a show from the rotation with
+     * nothing to show for it — the block just quietly gets shorter.
+     */
+    private fun logDropped(schedule: Schedule, parsed: List<MediaEntry>) {
+        val bad = parsed.filter { it.kind == MediaKind.Unknown }
+        if (bad.isEmpty()) return
+        Logger.w("Picker", "Ignoring unrecognised entries", mapOf(
+            "scheduleId" to schedule.id,
+            "dropped" to bad.size.toString(),
+            "of" to parsed.size.toString(),
+            "entries" to bad.joinToString(" | ") { it.raw.take(60) },
+        ))
     }
 
     /** True when replaying [entry] would hand back the episode it already played. */

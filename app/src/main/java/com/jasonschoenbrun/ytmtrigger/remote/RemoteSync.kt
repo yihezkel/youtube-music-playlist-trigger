@@ -14,6 +14,7 @@ import com.jasonschoenbrun.ytmtrigger.data.ScheduleRepository
 import com.jasonschoenbrun.ytmtrigger.data.SettingsRepository
 import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.log.Logger
+import com.jasonschoenbrun.ytmtrigger.health.Health
 import com.jasonschoenbrun.ytmtrigger.health.HealthChecks
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
 import com.jasonschoenbrun.ytmtrigger.playback.PlaybackPauser
@@ -214,7 +215,23 @@ object RemoteSync {
             // console does not have to keep its own, poorer, copy of "is this
             // thing well".
             healthChecks = runCatching {
-                HealthChecks.run(context).checks.map {
+                HealthChecks.run(context).checks.also { checks ->
+                    // Logged as well as uploaded. The report is computed on
+                    // every sync anyway, and having a history of it in the log
+                    // is what lets anyone reading backwards see when something
+                    // started going wrong rather than only that it is wrong
+                    // now. Only the checks that are not Ok, so the line stays
+                    // short on a healthy day.
+                    val bad = checks.filter { it.health != Health.Ok }
+                    if (bad.isEmpty()) {
+                        Logger.i("Health", "All checks OK", mapOf("count" to checks.size.toString()))
+                    } else {
+                        Logger.w("Health", "Checks needing attention", mapOf(
+                            "count" to "${bad.size} of ${checks.size}",
+                            "checks" to bad.joinToString(" | ") { "${it.title}=${it.health}: ${it.detail}" },
+                        ))
+                    }
+                }.map {
                     HealthEntry(
                         title = it.title,
                         health = it.health.name,

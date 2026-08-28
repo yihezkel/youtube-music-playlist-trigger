@@ -1,6 +1,7 @@
 package com.jasonschoenbrun.ytmtrigger.alarm
 
 import android.content.Context
+import com.jasonschoenbrun.ytmtrigger.log.Logger
 
 /**
  * When a running block is due to stop, for blocks stopped by duration rather
@@ -19,6 +20,10 @@ object AutoStop {
     fun record(context: Context, scheduleId: String, atMs: Long) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putLong(scheduleId, atMs).apply()
+        Logger.i("AutoStop", "Block end recorded", mapOf(
+            "scheduleId" to scheduleId,
+            "endsAt" to FMT.format(java.util.Date(atMs)),
+        ))
     }
 
     /** Epoch millis this block stops, or null when it is not running or has passed. */
@@ -29,7 +34,14 @@ object AutoStop {
     }
 
     fun clear(context: Context, scheduleId: String) {
+        val had = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getLong(scheduleId, 0L) > 0L
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().remove(scheduleId).apply()
+        // Only worth a line when there was something to clear; otherwise every
+        // stop of a clock-stopped block would log a no-op.
+        if (had) Logger.i("AutoStop", "Block end cleared", mapOf("scheduleId" to scheduleId))
     }
+
+    private val FMT = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
 }

@@ -354,6 +354,10 @@ object SelfTestRunner {
             "outcome" to outcome.name,
             "elapsedMs" to (attemptEnd - attemptStart).toString(),
             "ytmCameToForeground" to waitResult.ytmCameToForeground.toString(),
+            // Read these two together. "false" with source "none: …" means we
+            // were blind, not that YouTube Music stayed shut.
+            "foregroundSource" to waitResult.lastForegroundSource,
+            "foregroundAtEnd" to (waitResult.lastForegroundApp ?: "unknown"),
             "a11yStarted" to (a11yResult?.started?.toString() ?: "n/a"),
             "a11ySteps" to (a11yResult?.steps?.size?.toString() ?: "0"),
             "runId" to runId,
@@ -380,6 +384,14 @@ object SelfTestRunner {
         val audioTimeline: List<TimelineSample>,
         val ytmCameToForeground: Boolean,
         val lastForegroundApp: String?,
+        /**
+         * Which mechanism answered, or why neither could.
+         *
+         * Without this, [ytmCameToForeground] being false means either
+         * "YouTube Music did not open" or "we could not see that it did", and
+         * those want opposite fixes.
+         */
+        val lastForegroundSource: String,
     )
 
     /**
@@ -398,6 +410,7 @@ object SelfTestRunner {
         var nextTimelineMs = attemptStartMs
         var ytmEverForeground = false
         var lastForegroundApp: String? = null
+        var lastForegroundSource = "not sampled"
         while (System.currentTimeMillis() < deadline) {
             val now = System.currentTimeMillis()
             val status = MediaSessionProbe.ytMusicStatus(context)
@@ -406,15 +419,16 @@ object SelfTestRunner {
                 val elapsed = now - attemptStartMs
                 mediaTimeline += TimelineSample(elapsed, status::class.simpleName.orEmpty())
                 audioTimeline += TimelineSample(elapsed, audioPlaying.toString())
-                val fg = currentForegroundApp(context)
-                if (fg != null) {
-                    lastForegroundApp = fg
-                    if (fg == YtmAccessibilityService.YT_MUSIC_PKG) ytmEverForeground = true
+                val fg = currentForegroundAppDetailed(context)
+                lastForegroundSource = fg.source
+                if (fg.pkg != null) {
+                    lastForegroundApp = fg.pkg
+                    if (fg.pkg == YtmAccessibilityService.YT_MUSIC_PKG) ytmEverForeground = true
                 }
                 nextTimelineMs = now + TIMELINE_SAMPLE_INTERVAL_MS
             }
             if (status is MediaSessionProbe.Status.Playing) {
-                return WaitResult(true, mediaTimeline, audioTimeline, ytmEverForeground, lastForegroundApp)
+                return WaitResult(true, mediaTimeline, audioTimeline, ytmEverForeground, lastForegroundApp, lastForegroundSource)
             }
             // Fallback: isMusicActive often goes true before the MediaSession
             // is observable. Accept it as a positive signal too, but require it
@@ -422,12 +436,12 @@ object SelfTestRunner {
             if (audioPlaying) {
                 delay(POLL_INTERVAL_MS)
                 if (am?.isMusicActive == true) {
-                    return WaitResult(true, mediaTimeline, audioTimeline, ytmEverForeground, lastForegroundApp)
+                    return WaitResult(true, mediaTimeline, audioTimeline, ytmEverForeground, lastForegroundApp, lastForegroundSource)
                 }
             }
             delay(POLL_INTERVAL_MS)
         }
-        return WaitResult(false, mediaTimeline, audioTimeline, ytmEverForeground, lastForegroundApp)
+        return WaitResult(false, mediaTimeline, audioTimeline, ytmEverForeground, lastForegroundApp, lastForegroundSource)
     }
 
     /**
@@ -439,10 +453,27 @@ object SelfTestRunner {
      * grant itself. Relying on UsageStats alone made [ytmCameToForeground] a
      * false negative on devices without that grant.
      */
-    private fun currentForegroundApp(context: Context): String? {
-        YtmAccessibilityService.currentForegroundPackage()?.let { return it }
+    /**
+     * Returns the package name of whatever app is currently foreground, and
+     * **where the answer came from**.
+     *
+     * The source matters. This prefers the accessibility service and falls back
+     * to UsageStats, which is an appop the app cannot grant itself and does not
+     * have — so when the accessibility binding is dead, both fail and the
+     * caller gets null. That is indistinguishable, in the recorded run, from
+     * "YouTube Music genuinely never opened". On 28 Aug a run recorded
+     * `ytmCameToForeground=false` while `dumpsys window` showed YouTube Music
+     * focused the whole time; the record was confirming its own blindness.
+     */
+    private data class ForegroundLookup(val pkg: String?, val source: String)
+
+    private fun currentForegroundAppDetailed(context: Context): ForegroundLookup {
+        YtmAccessibilityService.currentForegroundPackage()?.let {
+            return ForegroundLookup(it, "a11y")
+        }
         return try {
-            val usm = context.getSystemService(android.app.usage.UsageStatsManager::class.java) ?: return null
+            val usm = context.getSystemService(android.app.usage.UsageStatsManager::class.java)
+                ?: return ForegroundLookup(null, "none: no UsageStatsManager")
             val now = System.currentTimeMillis()
             val events = usm.queryEvents(now - 5_000, now)
             var last: String? = null
@@ -450,13 +481,20 @@ object SelfTestRunner {
             while (events.hasNextEvent()) {
                 events.getNextEvent(ev)
                 if (ev.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                    ev.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                    ev.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
+                ) {
                     last = ev.packageName
                 }
             }
-            last
-        } catch (_: Throwable) { null }
+            if (last != null) ForegroundLookup(last, "usagestats")
+            else ForegroundLookup(null, "none: a11y silent and usagestats empty")
+        } catch (t: Throwable) {
+            ForegroundLookup(null, "none: usagestats threw ${t.javaClass.simpleName}")
+        }
     }
+
+    private fun currentForegroundApp(context: Context): String? =
+        currentForegroundAppDetailed(context).pkg
 
     private fun finishRecord(
         runId: String,

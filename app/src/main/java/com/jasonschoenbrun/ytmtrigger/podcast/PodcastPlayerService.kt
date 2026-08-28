@@ -82,12 +82,43 @@ class PodcastPlayerService : Service() {
     private var everStarted = false
 
     private val ticker = Handler(Looper.getMainLooper())
+    /** Consecutive position samples that found the clock standing still. */
+    private var stalledSamples = 0
+    private var stallReported = false
     private val samplePosition = object : Runnable {
         override fun run() {
             if (playing.get()) {
-                runCatching { player?.currentPosition }.getOrNull()
+                val now = runCatching { player?.currentPosition }.getOrNull()
                     ?.takeIf { it > 0 }
-                    ?.let { lastKnownPosSec = it / 1000L }
+                    ?.let { it / 1000L }
+                if (now != null) {
+                    // A stream that dies without raising onError just stops
+                    // advancing: MediaPlayer sits in a buffering state and says
+                    // nothing. That is an open question in the notes, and it is
+                    // invisible unless something watches the clock. Position is
+                    // sampled anyway, so noticing costs one comparison.
+                    if (now == lastKnownPosSec) {
+                        stalledSamples++
+                        if (stalledSamples >= STALL_SAMPLES && !stallReported) {
+                            stallReported = true
+                            Logger.w("PodcastPlayer", "Position has stopped advancing", mapOf(
+                                "title" to currentTitle,
+                                "positionSec" to now.toString(),
+                                "stalledForSec" to (stalledSamples * POSITION_SAMPLE_MS / 1000).toString(),
+                                "note" to "playing, no error raised - a silent stall looks like this",
+                            ))
+                        }
+                    } else {
+                        if (stallReported) {
+                            Logger.i("PodcastPlayer", "Position advancing again", mapOf(
+                                "title" to currentTitle, "positionSec" to now.toString(),
+                            ))
+                        }
+                        stalledSamples = 0
+                        stallReported = false
+                    }
+                    lastKnownPosSec = now
+                }
             }
             ticker.postDelayed(this, POSITION_SAMPLE_MS)
         }
@@ -159,6 +190,8 @@ class PodcastPlayerService : Service() {
                 playing.set(true)
                 everStarted = true
                 lastKnownPosSec = startAtSec
+                stalledSamples = 0
+                stallReported = false
                 ticker.removeCallbacks(samplePosition)
                 ticker.postDelayed(samplePosition, POSITION_SAMPLE_MS)
                 publishState(PlaybackState.STATE_PLAYING)
@@ -359,6 +392,8 @@ class PodcastPlayerService : Service() {
         const val NOTIFICATION_ID = 1004
         /** How often to sample the play position while healthy. */
         private const val POSITION_SAMPLE_MS = 10_000L
+        /** Samples with the position unchanged before calling it a stall. */
+        private const val STALL_SAMPLES = 3
         /** Retries of the same episode after a stream error, before moving on. */
         private const val MAX_ERROR_RETRIES = 1
         const val EXTRA_URL = "url"

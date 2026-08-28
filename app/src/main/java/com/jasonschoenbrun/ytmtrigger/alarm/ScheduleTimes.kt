@@ -4,6 +4,7 @@ import com.jasonschoenbrun.ytmtrigger.calendar.HebrewCalendarChecker
 import com.jasonschoenbrun.ytmtrigger.calendar.SolarCalculator
 import com.jasonschoenbrun.ytmtrigger.data.Schedule
 import com.jasonschoenbrun.ytmtrigger.data.TimeAnchor
+import com.jasonschoenbrun.ytmtrigger.log.Logger
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -35,10 +36,31 @@ object ScheduleTimes {
             // block would be a different, wrong, answer here.
             TimeAnchor.Sunset ->
                 SolarCalculator.sunset(date, cfg.latitude, cfg.longitude)?.plusMinutes(offset)
+                    ?: nullBecause(schedule, date, "no sunset at this latitude")
 
             TimeAnchor.ShabatYomTovEnd ->
                 HebrewCalendarChecker.windowEndOn(date, cfg)?.plusMinutes(offset)
+                    ?: nullBecause(schedule, date, "no Shabat or Yom Tov window ends on this day")
         }
+    }
+
+    /**
+     * Records *why* a day yielded no occurrence.
+     *
+     * "Could not compute next trigger" on its own has been logged before with
+     * no way to tell an ordinary weekday for a Shabat-ends schedule - which is
+     * expected and harmless - from a location that can produce no sunset at
+     * all, which is not. Debug level because the common case is normal and
+     * happens for every non-matching day of the fortnight the search walks.
+     */
+    private fun nullBecause(schedule: Schedule, date: LocalDate, why: String): LocalDateTime? {
+        Logger.d("Anchor", "No occurrence", mapOf(
+            "id" to schedule.id,
+            "date" to date.toString(),
+            "anchor" to schedule.timeAnchor.name,
+            "why" to why,
+        ))
+        return null
     }
 
     /** Human-readable summary of the anchor, for the schedule list and logs. */
