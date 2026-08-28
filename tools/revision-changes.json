@@ -1,42 +1,6 @@
 {
  "changes": [
   {
-   "date": "2022-03-12",
-   "change": "Added",
-   "show": "Sforimchatter",
-   "key": "sforimchatter"
-  },
-  {
-   "date": "2022-03-12",
-   "change": "Added",
-   "show": "Stuff You Should Know",
-   "key": "stuff you should know"
-  },
-  {
-   "date": "2022-03-12",
-   "change": "Added",
-   "show": "StarTalk Radio",
-   "key": "startalk radio"
-  },
-  {
-   "date": "2022-03-12",
-   "change": "Added",
-   "show": "18Forty - Exploring Big Jewish Ideas",
-   "key": "18forty exploring big jewish ideas"
-  },
-  {
-   "date": "2022-03-12",
-   "change": "Added",
-   "show": "The Q & A with Rabbi Breitowitz Podcast",
-   "key": "q rabbi breitowitz"
-  },
-  {
-   "date": "2022-03-12",
-   "change": "Added",
-   "show": "Jews You Should Know",
-   "key": "jews you should know"
-  },
-  {
    "date": "2022-06-03",
    "change": "Removed",
    "show": "Mom Tips",
@@ -51,7 +15,7 @@
   {
    "date": "2022-12-10",
    "change": "Added",
-   "show": "Hidden brain",
+   "show": "Hidden Brain",
    "key": "hidden brain"
   },
   {
@@ -63,8 +27,8 @@
   {
    "date": "2022-12-10",
    "change": "Added",
-   "show": "Into the Verse",
-   "key": "into verse"
+   "show": "Into the Verse - A Parsha Podcast",
+   "key": "into verse parsha"
   },
   {
    "date": "2022-12-17",
@@ -87,19 +51,25 @@
   {
    "date": "2023-11-18",
    "change": "Added",
-   "show": "What Does Judaism Say About by Rabbi Dr. Nachum Amsel",
-   "key": "what does judaism say about rabbi dr nachum amsel"
+   "show": "What Does Judaism Say About...?",
+   "key": "what does judaism say about"
+  },
+  {
+   "date": "2024-02-10",
+   "change": "Added",
+   "show": "A Book Like No Other",
+   "key": "book like no other"
   },
   {
    "date": "2024-09-29",
    "change": "Added",
-   "show": "Tzarich Iyun https://open.spotify.com/show/1meeZtAPtIBKatLScU2Mw0",
-   "key": "tzarich iyun https open spotify com 1meeztaptibkatlscu2mw0"
+   "show": "Tzarich Iyun",
+   "key": "tzarich iyun"
   },
   {
    "date": "2025-01-01",
    "change": "Added",
-   "show": "Honestly by Bari Weiss",
+   "show": "Honestly with Bari Weiss",
    "key": "honestly bari weiss"
   },
   {
@@ -111,25 +81,19 @@
   {
    "date": "2025-04-30",
    "change": "Added",
-   "show": "A Book Like No Other",
-   "key": "book like no other"
-  },
-  {
-   "date": "2025-04-30",
-   "change": "Added",
    "show": "Curiosity Weekly",
    "key": "curiosity weekly"
   },
   {
    "date": "2025-04-30",
    "change": "Added",
-   "show": "Uncanny Valley WIRED",
+   "show": "Uncanny Valley (WIRED)",
    "key": "uncanny valley wired"
   },
   {
    "date": "2025-05-01",
    "change": "Added",
-   "show": "Ask Haviv anything",
+   "show": "Ask Haviv Anything",
    "key": "ask haviv anything"
   },
   {
@@ -149,24 +113,6 @@
    "change": "Added",
    "show": "Parsha Perspectives",
    "key": "parsha perspectives"
-  },
-  {
-   "date": "2025-11-27",
-   "change": "Added",
-   "show": "Into the Verse - A Parsha Podcast",
-   "key": "into verse parsha"
-  },
-  {
-   "date": "2025-11-27",
-   "change": "Removed",
-   "show": "KMTT - the Torah Podcast",
-   "key": "kmtt torah"
-  },
-  {
-   "date": "2025-11-27",
-   "change": "Removed",
-   "show": "Talking Talmud",
-   "key": "talking talmud"
   }
  ],
  "notes": [

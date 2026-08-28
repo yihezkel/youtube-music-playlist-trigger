@@ -62,6 +62,90 @@ def norm(s):
 SOURCE_TABS = {"weekly", "daily", "news"}
 
 
+def _canonical_names():
+    """Known show names, longest first, normalised for matching.
+
+    The diff keys a show by whatever text survived cleaning, so the key moved
+    whenever the wording around the name moved. Two cases did real damage:
+    a cell longer than 70 characters was dropped outright, and the trailing
+    parenthetical was only stripped when it ended the cell, which it does not
+    when a TODO follows it. So "The Q & A with Rabbi Breitowitz Podcast (40 -
+    120 minutes, Tues+Thurs) Change to twice a week" produced no key at all,
+    and tidying that note away later looked exactly like adding the show.
+
+    Matching each cell to a known name instead makes the key stable no matter
+    what is written around it.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    names = set()
+    legacy = os.path.join(here, "sheet-legacy.json")
+    if os.path.exists(legacy):
+        with open(legacy, encoding="utf8") as fh:
+            data = json.load(fh)
+        names.update(data.get("notes", {}))
+        names.update(data.get("durations", {}))
+        names.update(data.get("slots", {}))
+    listing = os.path.join(here, "podcast-list.mjs")
+    if os.path.exists(listing):
+        with open(listing, encoding="utf8") as fh:
+            names.update(re.findall(r'name:\s*"([^"]+)"', fh.read()))
+    out = {}
+    for n in names:
+        k = norm(n)
+        # Very short keys match far too much: "wired" would swallow every WIRED
+        # feed, and the diff would stop distinguishing them.
+        if len(k) < 6:
+            continue
+        # Several sources list the same show, and two spellings that normalise
+        # alike must not become two entries: the "points at exactly one show"
+        # test below counts them separately and then refuses a good match.
+        # Keep the longest spelling, which reads best in the changelog.
+        if k not in out or len(n) > len(out[k]):
+            out[k] = n
+    return sorted(out.items(), key=lambda p: -len(p[0]))
+
+
+CANON = _canonical_names()
+
+# Renames. The sheet used one name for a show and later another, and without
+# this the diff reports the new spelling as a brand new show years after the
+# real addition. Kept as an explicit list rather than inferred, because a
+# near-identical name is just as often a genuinely different feed: Torat Imecha
+# publishes both a Nach Yomi and a Parsha podcast.
+ALIASES = {
+    # Aleph Beta's parsha podcast, added 2022-12-10 and relabelled 2025-11-27.
+    "into verse aleph beta": "into verse parsha",
+    "into verse": "into verse parsha",
+}
+
+
+def canonical(value):
+    """(key, display name) for a cell naming a known show, else (None, None)."""
+    s = str(value)
+    s = re.sub(r"https?://\S+", " ", s)
+    # Every parenthetical, wherever it sits - not just a trailing one.
+    s = re.sub(r"\([^)]*\)", " ", s)
+    k = norm(s)
+    if len(k) < 6:
+        return None, None
+    if k in ALIASES:
+        k = ALIASES[k]
+    for cn, disp in CANON:
+        if k == cn or k.startswith(cn + " "):
+            return cn, disp
+    # A cell may hold an older, shorter form of a name that has since grown:
+    # "Into the Verse (Aleph Beta)" became "Into the Verse - A Parsha Podcast",
+    # and treating those as two shows invented an addition four years after the
+    # real one. Accept the shorter form only when it points at exactly one known
+    # show, so genuinely distinct siblings stay distinct - "torat imecha" leads
+    # to both the Nach Yomi and the Parsha feeds and is left alone.
+    if len(k) >= 8:
+        starts = [(cn, disp) for cn, disp in CANON if cn.startswith(k + " ")]
+        if len(starts) == 1:
+            return starts[0]
+    return None, None
+
+
 def shows_in(path):
     wb = load_workbook(path, data_only=True, read_only=True)
     found = {}
@@ -73,6 +157,12 @@ def shows_in(path):
             continue
         for row in ws.iter_rows(values_only=True):
             for cell in row:
+                if cell is None:
+                    continue
+                key, disp = canonical(cell)
+                if key:
+                    found.setdefault(key, disp)
+                    continue
                 name = clean(cell)
                 if not name:
                     continue

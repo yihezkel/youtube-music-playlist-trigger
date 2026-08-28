@@ -157,6 +157,8 @@ const note = [
   ["About this log"],
   ["This session's rows", "Written from what was actually changed on 26 Aug 2026. All timing changes are collapsed into the single 'Timing' row."],
   ["Your earlier rows", "Reconstructed by comparing the 38 revisions Google exposes for this file, back to 11 Mar 2022. Google only keeps milestone revisions, not every edit, so a date means 'on or before' and changes made and undone between milestones are invisible."],
+  ["Why it starts in mid-2022", "The oldest revision Google still holds, 11 Mar 2022, already contained a full timetable of 119 shows. Anything you were already listening to by then has no 'Added' row, because there is no earlier revision to have added it against. The first real event on record is 3 Jun 2022."],
+  ["Shows are matched by name", "A show is tracked by matching each cell to a known show name. Keying on the cell text instead made any edit near a name look like a change: tidying 'Sforimchatter (30 - 75 minutes, usually Sun + Wed) Do twice/week' down to 'Sforimchatter' once produced six false 'Added' rows dated 12 Mar 2022 for shows that were already in the grid the day before."],
   ["Blank reasons", "No note explaining the change was found anywhere on the sheet. Left blank rather than guessed at."],
 ];
 
@@ -190,7 +192,20 @@ if (old) {
     title: TAB, gridProperties: { rowCount: rows.length + 20, columnCount: HEAD.length, frozenRowCount: 1 } } } }] });
   sheetId = made.data.replies[0].addSheet.properties.sheetId;
 }
-await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, { values: [HEAD, ...rows, ...note] });
+// Pad to the full width and clear anything below, for the same reason the
+// catalog builder does: Sheets writes only the cells it is given, so short
+// rows and a shrinking grid both leave the previous run's text on display.
+// Correcting the reconstruction dropped this log from 90 rows to 81 and left a
+// stale "Saturday to Shabbos" row stranded at the bottom.
+const grid = [HEAD, ...rows, ...note]
+  .map((r) => Array.from({ length: HEAD.length }, (_, i) => r[i] ?? ""));
+await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, { values: grid });
+if (old) {
+  const had = old.properties.gridProperties?.rowCount || grid.length;
+  if (had > grid.length) {
+    await api("POST", `/values/${encodeURIComponent(`${TAB}!A${grid.length + 1}:F${had}`)}:clear`, {});
+  }
+}
 
 const dataEnd = 1 + rows.length;
 const req = [
