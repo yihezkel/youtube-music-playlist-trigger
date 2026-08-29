@@ -1,10 +1,21 @@
 # YTM Trigger
 
-Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at a scheduled time, opens YouTube Music, and plays a randomly chosen playlist — over Bluetooth or the built-in speaker.
+Android app that turns a spare phone into a scheduled kitchen radio: at the times you set it
+plays podcasts and YouTube Music playlists — over Bluetooth or the built-in speaker — and
+keeps itself working without anyone picking it up.
+
+Built for a household in Israel, so the schedule follows sunset and nightfall rather than the
+clock, and nothing plays on Shabat or Yom Tov.
 
 **Current version: 0.6.0** — see [Releases](../../releases) for the APK.
 
+**Contents** — [What it does](#what-it-does) · [Screen lock](#screen-lock) ·
+[Planning the schedule](#planning-the-schedule) · [Install](#install) ·
+[First-time setup](#first-time-setup) · [Remote control](#remote-control-optional)
+
 ## What it does
+
+### When it plays
 
 - **Scheduled triggers**: per-schedule day-of-week + time picker. Multiple schedules supported.
 - **Trigger time can follow the calendar, not just the clock.** Each schedule picks what its
@@ -17,85 +28,10 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
     yields nothing on a day when no window ends, so such a schedule fires only on motzaei
     Shabat / Yom Tov even if extra days are ticked. When one window runs straight into the
     next (Shabat into Yom Tov), the intervening nightfall is not treated as an end.
-- **Plays playlists, songs and podcasts.** An entry can be:
-  - a YouTube Music **playlist**, album or radio mix (`…/playlist?list=…`, or a `watch` link
-    that carries a `list=`);
-  - a single YouTube Music **song** (`…/watch?v=…`) — these deep-link straight into playback,
-    so they never need the Play button pressed;
-  - a **podcast**, given either an RSS feed URL or a Spotify show link.
-  `www.youtube.com` links are rewritten to `music.youtube.com` automatically — as-is they
-  open the YouTube app, not YouTube Music.
-- **Podcasts play from the show's RSS feed**, which the app plays itself in a small
-  foreground service with its own media session (so the stop time, the pre-Shabat mute and
-  the console's Stop button all work on it unchanged). A Spotify show link is resolved to
-  that feed automatically via the show's title. Feeds are cached for 12 hours, and a stale
-  cache is preferred to failing a trigger.
-  - **Random / newest / in order** — set per schedule, and overridable per entry by ending the
-    entry's name with a mode:
-
-        https://feeds.npr.org/510325/podcast.xml  [The Indicator | newest]
-        https://rss.art19.com/business-wars       [Business Wars | sequential]
-
-    One block legitimately mixes shows with opposite needs, which a single per-schedule
-    setting could not express. Random suits evergreen archives; newest suits news and feeds
-    that mix short and long formats; **in order** suits a serial that tells one story across
-    numbered parts, where random produces part 1 followed by part 5 of a different series.
-  - **Minimum episode length** — some feeds carry two formats under one name, so a random
-    draw is really a draw between formats. `Jews You Should Know` publishes 45–100 minute
-    biography interviews and, in the same feed, 73 episodes of a 3–7 minute *Torah You
-    Should Know* series — a quarter of the feed, with nothing at all between 8 and 28
-    minutes. Adding `min 20` filters by length, so the entry picks the format rather than
-    the show:
-
-      https://rss.libsyn.com/shows/104921/....xml  [Jews You Should Know | min 20]
-      https://rss.libsyn.com/shows/104921/....xml  [Jews You Should Know | newest | min 20]
-
-    Qualifiers combine and may be given in any order. The floor applies only to the pool of
-    candidates, so an episode left part-heard is still resumed; episodes whose feed omits a
-    duration are kept, on the same principle as the half-episode rule; and a floor that
-    would exclude every episode is ignored rather than dropping the show from the block.
-  - **In-order position is remembered per feed** and advances only when an episode is heard
-    to the end, so a block that cuts one off resumes it rather than skipping past it. If the
-    marked episode drops out of the feed, or the show has been heard through, it starts again
-    from the oldest rather than going silent.
-  - **Continuous play** — a schedule can run its entries as a queue rather than picking one:
-    the next starts the moment the current finishes, wrapping back to the top so the block
-    stays filled until its stop time. Only podcast entries chain; a YouTube Music entry hands
-    control to YT Music and never hands it back, so music belongs last in a queue.
-  - **Won't start an episode it can't get halfway through.** With less than half an episode's
-    worth of block remaining, the block simply ends early rather than playing a fragment.
-    Episodes whose feed omits a duration are always played — unknown must not mean "skip".
-  - **Resumes what was cut off.** A block ends on a clock time, so something is always
-    interrupted. The position is remembered per feed and picked up next time, five minutes
-    earlier than where it stopped so the context is re-established rather than resuming
-    mid-sentence. An episode heard to the end clears its mark.
-  - Spotify's own API is deliberately not used: it requires a **Premium** account and its
-    public page exposes only 12 episodes, whereas the feed for the same show carries the
-    full back catalogue (384 episodes, in the case this was built against).
-  - Spotify **originals and exclusives** have no public feed and cannot be played.
-- **Keeps the screen awake only while music plays.** Free-tier YouTube Music pauses
-  anything you didn't upload yourself the moment the screen sleeps, which normally forces
-  the developer option "Stay awake" on — lighting the panel 24 hours a day. Instead the app
-  holds a 1×1 transparent overlay carrying `FLAG_KEEP_SCREEN_ON` for exactly as long as
-  YouTube Music reports it is playing, and can pin brightness near zero so the screen is
-  technically on but practically black. Needs a one-time **Display over other apps** grant;
-  toggles live in **Default settings**.
-  - Turn **off** Developer options → "Stay awake" once this is enabled.
-  - A wake lock is not used: `SCREEN_BRIGHT_WAKE_LOCK`/`SCREEN_DIM_WAKE_LOCK` have been
-    deprecated since API 17 and are unreliable, and a `PARTIAL_WAKE_LOCK` explicitly does
-    not keep the display on.
 - **Optional stop time** per schedule — leave it blank (the default) to play until stopped,
   or set a clock time to pause automatically. A stop time at or before the start time means
-  the next day, so an overnight schedule stops in the morning. The console has a **Stop**
-  button for the same thing on demand.
-- **Pause and resume a block** from a **Playback** card at the top of the home screen. This
-  is not the same as stopping it: stop ends the block and releases the episode, keeping only
-  a resume mark, whereas pause holds the player, its exact position and its place in the
-  queue, so resuming continues the same episode rather than choosing a new one. It works
-  whatever the block is playing through — this app's own podcast player, YouTube Music or
-  the Aleph Beta app — because it goes through media sessions. A paused block still ends at
-  its stop time and is still silenced before Shabat, and the end-of-playlist watcher holds
-  the queue still while paused instead of mistaking a pause for a finished playlist.
+  the next day, so an overnight schedule stops in the morning. The console and the app both
+  have a **Stop** button for the same thing on demand.
 - **Blocks can follow other blocks.** A schedule can start when another one finishes
   instead of at a clock time. Motzaei Shabat is why: the kids' block is anchored to
   nightfall, so its start moves nearly three hours across the year, while the teen block
@@ -116,6 +52,52 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   that would create those states, and a decision about what should happen to a follower
   when its predecessor is deleted.
 
+### What it plays
+
+- **Playlists, songs and podcasts.** An entry can be:
+  - a YouTube Music **playlist**, album or radio mix (`…/playlist?list=…`, or a `watch` link
+    that carries a `list=`);
+  - a single YouTube Music **song** (`…/watch?v=…`) — these deep-link straight into playback,
+    so they never need the Play button pressed;
+  - a **podcast**, given either an RSS feed URL or a Spotify show link.
+
+  `www.youtube.com` links are rewritten to `music.youtube.com` automatically — as-is they
+  open the YouTube app, not YouTube Music.
+- **Podcasts play from the show's RSS feed**, which the app plays itself in a small
+  foreground service with its own media session (so the stop time, the pre-Shabat mute and
+  the console's Stop button all work on it unchanged). A Spotify show link is resolved to
+  that feed automatically via the show's title. Feeds are cached for 12 hours, and a stale
+  cache is preferred to failing a trigger.
+  - Spotify's own API is deliberately not used: it requires a **Premium** account and its
+    public page exposes only 12 episodes, whereas the feed for the same show carries the
+    full back catalogue (384 episodes, in the case this was built against).
+  - Spotify **originals and exclusives** have no public feed and cannot be played.
+- **Which episode, per entry.** A block legitimately mixes shows with opposite needs, which a
+  single per-schedule setting could not express. The schedule sets a default; any entry can
+  override it by ending its name with qualifiers, in any order:
+
+      https://feeds.npr.org/510325/podcast.xml  [The Indicator | newest]
+      https://rss.art19.com/business-wars       [Business Wars | sequential]
+
+  - **Random** suits evergreen archives; **newest** suits news and feeds that mix short and
+    long formats; **in order** suits a serial that tells one story across numbered parts,
+    where random produces part 1 followed by part 5 of a different series.
+  - **`min N` — a length floor.** Some feeds carry two formats under one name, so a random
+    draw is really a draw between formats. *Jews You Should Know* publishes 45–100 minute
+    biography interviews and, in the same feed, 73 episodes of a 3–7 minute *Torah You
+    Should Know* series — a quarter of the feed, with nothing at all between 8 and 28
+    minutes. `min 20` picks the format rather than the show:
+
+        https://rss.libsyn.com/shows/104921/….xml  [Jews You Should Know | newest | min 20]
+
+    The floor applies only to the pool of candidates, so an episode left part-heard is still
+    resumed; episodes whose feed omits a duration are kept, on the same principle as the
+    half-episode rule; and a floor that would exclude every episode is ignored rather than
+    dropping the show from the block.
+  - **In-order position is remembered per feed** and advances only when an episode is heard
+    to the end, so a block that cuts one off resumes it rather than skipping past it. If the
+    marked episode drops out of the feed, or the show has been heard through, it starts again
+    from the oldest rather than going silent.
 - **Entries are edited as fields, not as text.** Each playlist, song or podcast is its own
   row in the app and in the web console — URL, name, and for podcasts which episode to play
   and the shortest episode worth starting — with an **Add** button for the next one. The
@@ -128,25 +110,74 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   `https://music.youtube.com/playlist?list=PLKNLlLCOCLas&si=txZZ [Quora]`.
   Lists then show the name with the URL underneath. The name is cosmetic — playback always
   uses the playlist ID — so labelled and bare URLs are interchangeable.
+
+### How a block runs
+
+- **Continuous play** — a schedule can run its entries as a queue rather than picking one:
+  the next starts the moment the current finishes, wrapping back to the top so the block
+  stays filled until its stop time. Podcast entries chain by themselves; a YouTube Music
+  entry hands control to YT Music, so the app watches for the playlist ending and moves the
+  queue on when it does, which means music no longer has to be the last thing in a queue.
+- **Won't start an episode it can't get halfway through.** With less than half an episode's
+  worth of block remaining, the block simply ends early rather than playing a fragment.
+  Episodes whose feed omits a duration are always played — unknown must not mean "skip".
+- **Resumes what was cut off.** A block ends on a clock time, so something is always
+  interrupted. The position is remembered per feed and picked up next time, five minutes
+  earlier than where it stopped so the context is re-established rather than resuming
+  mid-sentence. An episode heard to the end clears its mark.
+- **Recovers from a playback error.** A stream that dies mid-episode is retried once from
+  where it stopped; if that fails the queue advances to the next entry and the failure is
+  recorded. Before this, an error simply stopped the player: on 27 August a block died
+  39 minutes into its second episode and played nothing for the remaining seven hours, with
+  nothing anywhere to say so.
+- **Recovers from a silent stall.** The player samples its own position every 10 seconds.
+  Three unchanged samples are noted; twelve — about two minutes of a stream that is
+  connected but not advancing — are treated as a failure and go down the same
+  retry-then-advance path.
+- **Pause and resume a block** from a **Playback** card at the top of the home screen. This
+  is not the same as stopping it: stop ends the block and releases the episode, keeping only
+  a resume mark, whereas pause holds the player, its exact position and its place in the
+  queue, so resuming continues the same episode rather than choosing a new one. It works
+  whatever the block is playing through — this app's own podcast player, YouTube Music or
+  the Aleph Beta app — because it goes through media sessions. A paused block still ends at
+  its stop time and is still silenced before Shabat, and the end-of-playlist watcher holds
+  the queue still while paused instead of mistaking a pause for a finished playlist.
+- **Keeps the screen awake only while music plays.** Free-tier YouTube Music pauses
+  anything you didn't upload yourself the moment the screen sleeps, which normally forces
+  the developer option "Stay awake" on — lighting the panel 24 hours a day. Instead the app
+  holds a 1×1 transparent overlay carrying `FLAG_KEEP_SCREEN_ON` for exactly as long as
+  YouTube Music reports it is playing, and can pin brightness near zero so the screen is
+  technically on but practically black. Needs a one-time **Display over other apps** grant;
+  toggles live in **Default settings**.
+  - Turn **off** Developer options → "Stay awake" once this is enabled.
+  - A wake lock is not used: `SCREEN_BRIGHT_WAKE_LOCK`/`SCREEN_DIM_WAKE_LOCK` have been
+    deprecated since API 17 and are unreliable, and a `PARTIAL_WAKE_LOCK` explicitly does
+    not keep the display on.
+
+### Shabat and Yom Tov
+
 - **Never plays on Shabat or Yom Tov.** Every path that can start playback — scheduled
   alarm, home-screen widget, in-app **Play now**, and the remote console — is blocked.
   A scheduled trigger can never override this; a manual one can, but only after a
   confirmation dialog. Blocked triggers aren't counted as failures, and the schedule is
   still re-armed for next time.
-  - Shabat = from 40 minutes before sunset on Friday to 42 minutes after sunset on Saturday;
-    Yom Tov comes from a built-in table (2026-2030), **Israel** single-day by default
-    ("Use Diaspora dates" in Default settings switches it). Sunset is computed locally
-    from your coordinates — no network, no location permission — so the window tracks the
-    seasons. Coordinates and both offsets are editable in **Default settings**, which also
-    shows the resulting window ("Next Shabat: Fri 21 Aug, 18:38 → Sat 22 Aug, 19:59").
-  - A schedule that *would* have fired inside one of those windows in the coming week is
-    flagged on its card in the Schedules screen.
-  - **15 minutes before each window opens** the app stops anything playing and sets the
-    media volume to 0, so nothing can make noise once it begins — including playback it
-    didn't start, or YouTube Music autoplaying on from a queue. The volume is not restored
-    afterwards; the next scheduled trigger sets it from its own schedule. (If a schedule
-    has no volume configured and there is no default, it will stay muted — the level it
-    muted from is written to the log.)
+- Shabat = from 40 minutes before sunset on Friday to 42 minutes after sunset on Saturday;
+  Yom Tov comes from a built-in table (2026-2030), **Israel** single-day by default
+  ("Use Diaspora dates" in Default settings switches it). Sunset is computed locally
+  from your coordinates — no network, no location permission — so the window tracks the
+  seasons. Coordinates and both offsets are editable in **Default settings**, which also
+  shows the resulting window ("Next Shabat: Fri 21 Aug, 18:38 → Sat 22 Aug, 19:59").
+- A schedule that *would* have fired inside one of those windows in the coming week is
+  flagged on its card in the Schedules screen.
+- **15 minutes before each window opens** the app stops anything playing and sets the
+  media volume to 0, so nothing can make noise once it begins — including playback it
+  didn't start, or YouTube Music autoplaying on from a queue. The volume is not restored
+  afterwards; the next scheduled trigger sets it from its own schedule. (If a schedule
+  has no volume configured and there is no default, it will stay muted — the level it
+  muted from is written to the log.)
+
+### Starting YouTube Music
+
 - **End-to-end launch flow** via deep-link intent + AccessibilityService:
   - Wakes the screen and dismisses the keyguard.
   - Presses Play on the playlist page.
@@ -163,19 +194,57 @@ Android app that wakes a dedicated phone (alarm-clock / kitchen-radio style) at 
   upload yourself. Matching is deliberately narrow so the next-track button can never be
   mistaken for it; unmatched ads log their on-screen candidates so the matcher can be
   improved from real data. Toggle in **Default settings**.
+
+### Keeping itself working
+
 - **6-hourly background self-test** that silently confirms the whole flow still works.
-  Plays an audible TTS + alarm tone ("YouTube Music Bluetooth phone isn't working and needs attention") if the test fails three different ways in a row.
+  Plays an audible TTS + alarm tone ("YouTube Music Bluetooth phone isn't working and needs
+  attention") if the test fails three different ways in a row.
   - Volume is forced to 0 during the test.
   - Skipped automatically on Shabat and Yom Tov. A manual **Run now** asks for
-    confirmation first rather than being silently blocked.  - Every run is persisted as a **structured forensic record** (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, real intent dispatch result, accessibility step trace with latencies, and MediaSession / audio-active timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
+    confirmation first rather than being silently blocked.
+  - Every run is persisted as a **structured forensic record**
+    (`filesDir/selftest-history/YYYY-MM.jsonl`): per-strategy attempt, real intent dispatch
+    result, accessibility step trace with latencies, and MediaSession / audio-active
+    timelines. Tap **Export last 20 runs (JSON)** on the Self-test screen to share them.
+- **Sixteen health checks**, shown in the app and mirrored in the console: alarms armed,
+  block chaining, enabled schedules, screen lock, accessibility, MediaSession probe,
+  battery exemption, background restriction, automatic time, YouTube Music installed,
+  network, media volume, playback paused, and failures in the last week. Each says what is
+  wrong in a sentence and where to fix it, rather than reporting a raw flag.
 - **Failures in the last week** — a 7-day bar chart plus one sentence per failure, at the
   bottom of the Self-test screen and of the web console, or "No failures in the last week!"
-  when there were none.
-- **Accessibility resilience** — if Android disables the accessibility service, the app re-enables it automatically (on launch, on boot, before every trigger and self-test, plus a live settings watcher). If a self-test fails with the service having done nothing at all, the app restarts its own process, which is the only recovery observed for that state. Requires a one-time `WRITE_SECURE_SETTINGS` grant; see setup below.
-- **Remote control** — change playlists and schedules, trigger playback, pause, resume, stop, and read the phone's logs and all fourteen of its health checks from a browser. Optional; see below. The app and the console cover the same ground: every schedule field is editable in both, and both can pause, resume and stop.
+  when there were none. The count is aligned to calendar days, so "today" means today.
+- **Accessibility resilience** — if Android disables the accessibility service, the app
+  re-enables it automatically (on launch, on boot, before every trigger and self-test, plus
+  a live settings watcher), and escalates through re-asserting the setting, recreating the
+  component, and finally restarting its own process. Requires a one-time
+  `WRITE_SECURE_SETTINGS` grant; see setup below.
+  - The service can also end up **bound but delivering nothing** — Android reports it
+    running, and no event ever arrives. This is why a block can go quiet with every check
+    green. It is now detected rather than guessed at: YouTube Music publishing a media
+    session, or a launch the app made itself, is independent evidence that it ran, so
+    silence afterwards proves the binding is dead and the health screen says so.
+  - **For that state the only cure found is a reboot.** The escalation above does not clear
+    it — neither a process restart nor unbinding and rebinding the service, both tried and
+    recorded — so the health check says to reboot rather than pretending it can self-heal.
+    Reinstalling the APK reliably causes it, so reboot after any install.
+- **Pause is visible.** A pause left in force is reported by the health screen and called
+  degraded after a quarter of an hour. Every other check asks whether playback *could*
+  start; none noticed a block deliberately held silent.
+- **Persistent logs** with in-app viewer, level filter, search, copy/share. 14-day
+  retention. Diagnostic "EvalFix" markers let speculative fixes be evaluated and pruned
+  over time.
+
+### Controlling it
+
+- **Remote control** — change playlists and schedules, trigger playback, pause, resume, stop,
+  and read the phone's logs and all sixteen of its health checks from a browser. Optional;
+  see below. The app and the console cover the same ground: every schedule field is editable
+  in both, and both can pause, resume and stop.
 - **Manual trigger** from a **Play now** button on each schedule, or from a home-screen widget.
-- **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
-- **Persistent logs** with in-app viewer, level filter, search, copy/share. 14-day retention. Diagnostic "EvalFix" markers let speculative fixes be evaluated and pruned over time.
+- **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei,
+  Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
 
 ## Screen lock
 
@@ -261,6 +330,47 @@ files on the phone or from a feed served to it — the same machinery the podcas
 path already uses, including queue chaining, resume and stop-at-block-end. It
 needs the audio in a form the app can play, so it is not available for a
 streaming library.
+
+## Planning the schedule
+
+The line-up itself is not edited on the phone. `tools/schedule-blocks.mjs` is the **single
+definition of what plays when**; `build-schedules.mjs` turns it into the device config and
+pushes it, and `schedule-sheet.mjs` renders the same data to a Google Sheet. They used to be
+separate hand-maintained copies and had already drifted — the sheet showed music opening a
+block the app plays it last in, and called four sequential shows "Random".
+
+An entry there is a podcast by name, `MUSIC` for the default playlist rotation, or
+`playlist("Quora")` for one particular YouTube Music playlist. An unknown playlist name
+fails the build rather than arming a schedule that goes quiet at that point in the queue.
+
+Three tabs, all generated:
+
+| Tab | What it holds |
+|---|---|
+| **Schedule** | The day, the week, the running order, how queues behave, and what was recently settled |
+| **Catalog** | Everything playable — 103 shows and 9 playlists — with publishing rate, episode lengths and how predictable they are, plus **Plays via**: whether each works on the Google Home, in this app, both or neither |
+| **Schedule change log** | Every addition and removal, reconstructed back to 2022 from the sheet's own revision history |
+
+### Asking for changes
+
+Yellow **"Change guidance from us"** columns on the Schedule and Catalog tabs are where you
+write what you want different. The loop:
+
+```sh
+node tools/guidance.mjs                 # what is pending (exit 10 if any)
+#   … make the change, and add its row to build-changelog.mjs
+node tools/archive-guidance.mjs --all   # file it, and clear the yellow cell
+```
+
+Applied guidance moves one column right, stamped `Applied <date>`, so the request survives
+as history instead of being deleted. Catalog guidance is keyed to the show and follows a row
+that re-sorts; Schedule guidance is positional, which is why a section's row count must not
+change.
+
+A Windows scheduled task, **"YTM Trigger - check schedule guidance"**, runs this check at
+09:00 every second Sunday and opens a GitHub issue if anything is waiting. It is read-only
+and involves no AI: it never edits the schedule, so a request is noticed rather than acted
+on unattended.
 
 ## Install
 
@@ -385,9 +495,9 @@ base64 -w0 app/google-services.json      # paste into secret GOOGLE_SERVICES_JSO
 ### What you can do remotely
 
 - Edit default playlists, volume, shuffle/skip, ad-skipping, self-test options and full schedules
-- **Play now**, **Stop**, **Run self-test**, **Request logs**
+- **Play now**, **Pause**, **Resume**, **Stop**, **Run self-test**, **Request logs**
 - Read uploaded logs in the browser
-- See device health: accessibility, MediaSession probe, battery exemption, last self-test result
+- See all sixteen health checks, the same ones the app shows
 - See **failures in the last week** (chart + one sentence each) at the bottom of the page
 
 Logs are also **uploaded automatically whenever a self-test fails**, so a breakage shows up in the console without you touching the phone.
