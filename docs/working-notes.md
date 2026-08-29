@@ -322,7 +322,7 @@ that form, so this is parked.
 
 <https://docs.google.com/spreadsheets/d/<SHEET_ID>>
 
-Three tabs: **Podcast Catalog**, **Schedule**, **Schedule change log**. The
+Three tabs: **Catalog**, **Schedule**, **Schedule change log**. The
 schedule tab was called "Recommended Schedule" while it was still a proposal;
 `schedule-sheet.mjs` renames it in place on its next run, because re-creating it
 under the new name would strand the guidance columns and column widths Jason set
@@ -336,9 +336,31 @@ weekly timetable verbatim in `weeklyGrid`. Nothing generates from any of it —
 it is history, and the catalog's read-only "Your notes" column is the only
 place it surfaces.
 
+The **Catalog** lists everything the app can play, not only podcasts: the 103
+shows, and the 9 YouTube Music playlists at the bottom, generated into
+`tools/playlist-list.mjs` from the live device config by `regen-playlists.mjs`
+so they cannot drift from what the phone holds. Most columns describe an RSS
+feed and are blank for a playlist.
+
+Its **Plays via** column says which of the two ways of playing something work.
+It is derived, not typed: Google Home is credited only where `sheet-legacy.json`
+records the show in one of the old Assistant routines, so it demonstrably played
+there. "YTM Trigger app" therefore means the app can fetch it and nothing shows
+it ever ran on a speaker — not that it cannot. As of the last rebuild: 61 app
+only, 30 both, 9 playlists both, 10 Google Home only for want of a public feed,
+one Google Home only because its feed carries no episodes (The Economist Asks),
+and one neither (Saturday to Shabbos, HTTP 502).
+
+The config still holds three pre-rebuild schedules, all disabled: **Morning**,
+**Afternoon** and **Temp**. They are not armed, so they are harmless, but four
+playlists — Google Home, Old Sayings New Ears, Quora and Science
+Misunderstandings — are referenced only by the disabled Afternoon, so they never
+play. The catalog marks a disabled schedule as such rather than implying the
+playlist is in use.
+
 | Tool | Builds |
 |---|---|
-| `tools/podcast-sheet.mjs` | Podcast Catalog (103 shows) |
+| `tools/podcast-sheet.mjs` | Catalog (103 shows + 9 playlists) |
 | `tools/schedule-sheet.mjs` | Schedule |
 | `tools/build-changelog.mjs` | Schedule change log |
 | `tools/build-schedules.mjs` | the device config — pass `push` to write |
@@ -350,7 +372,7 @@ place it surfaces.
 
 Jason writes what he wants changed into the yellow **"Change guidance from us"**
 columns, and asks in a Copilot CLI session for the schedule to be reworked with
-it in mind. Four such columns exist: `Podcast Catalog!E`, and one per section on
+it in mind. Four such columns exist: `Catalog!E`, and one per section on
 the schedule tab at `F5`, `I16` and `G25`.
 
 The loop, in order:

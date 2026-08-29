@@ -1,6 +1,6 @@
 // Bookkeeping for guidance that has been acted on.
 //
-//   node archive-guidance.mjs "Podcast Catalog!E2" ["Schedule!F6" ...]
+//   node archive-guidance.mjs "Catalog!E2" ["Schedule!F6" ...]
 //   node archive-guidance.mjs --all
 //   node archive-guidance.mjs --all --dry-run
 //

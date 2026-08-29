@@ -1,4 +1,4 @@
-// Create/refresh the "Podcast Catalog" tab from podcast-stats.json.
+// Create/refresh the "Catalog" tab from podcast-stats.json and playlist-list.mjs.
 //
 // Any text already typed into the "Our preferences" column is read back and
 // re-applied before the tab is rebuilt. That column is the user's, not the
@@ -7,10 +7,14 @@ import { readFileSync } from "node:fs";
 import { GoogleAuth } from "google-auth-library";
 
 const ID = "<SHEET_ID>";
-const TAB = "Podcast Catalog";
-const OLD_TABS = ["Podcast Catalogue"]; // earlier spelling
+const TAB = "Catalog";
+// Renamed twice: an early misspelling, then "Podcast Catalog", which stopped
+// being true when the YouTube Music playlists were added.
+const OLD_TABS = ["Podcast Catalogue"];
+const PREVIOUS_TAB = "Podcast Catalog";
 import { MUSIC, queues } from "./schedule-blocks.mjs";
 import { PODCASTS } from "./podcast-list.mjs";
+import { PLAYLISTS } from "./playlist-list.mjs";
 const rows = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 
 // podcast-stats.json is a cache of what was fetched from each feed. The
@@ -64,13 +68,15 @@ const USER_COL = 4;
 let userHeading = "Our preferences";
 const meta = (await api("GET", "?fields=sheets.properties")).data;
 const prefs = new Map();
-for (const t of [TAB, ...OLD_TABS]) {
+for (const t of [TAB, PREVIOUS_TAB, ...OLD_TABS]) {
   if (!meta.sheets.find((s) => s.properties.title === t)) continue;
   try {
     const got = await api("GET", `/values/${encodeURIComponent(t)}!A1:AZ200`);
     const vals = got.data.values || [];
     const head = vals[0] || [];
-    const iName = head.indexOf("Podcast");
+    // The first column was "Podcast" until the catalog grew to cover playlists
+    // as well; an old sheet still says that, so accept either.
+    const iName = head.findIndex((h) => /^(name|podcast)$/i.test(String(h)));
     // Match the column by either name, and fall back to its position. Jason
     // renamed it to "Change guidance from us" and coloured it yellow; matching
     // only the original wording made this return -1, which silently dropped
@@ -139,7 +145,8 @@ rows.sort((a, b) =>
   (ORDER[a.status] - ORDER[b.status]) || a.slot.localeCompare(b.slot) || a.name.localeCompare(b.name));
 
 const HEAD = [
-  "Podcast", "Status", "Group", "Type", "Our preferences", "Your notes", "What it is",
+  "Name", "Status", "Group", "Type", "Change guidance from us", "Your notes",
+  "Plays via", "What it is",
   "Rating (ratings)", "Publishing?", "Last episode", "Days since",
   "Eps/week (last 90d)", "Eps/week (lifetime)", "Eps last 365d", "Typical days",
   "Day regularity", "Length median (m)", "Length mean (m)", "Length SD (m)",
@@ -148,12 +155,40 @@ const HEAD = [
   "Genre", "Notes", "Match confidence", "Feed URL",
 ];
 
+/**
+ * Which of the two ways of playing this thing actually work.
+ *
+ * Said from evidence rather than guessed. Google Home is credited only where
+ * the sheet records the show sitting in one of the old Assistant routines, so
+ * it demonstrably played there; "YTM Trigger app" therefore means the app can
+ * play it and nothing here shows it ever ran on a speaker, not that it cannot.
+ * The Assistant news briefs are the one case that runs the other way: they have
+ * no public feed at all, so the app has nothing to fetch.
+ */
+const googleHomeSlots = new Set(Object.keys(legacy.slots || {}).map(norm));
+function playsVia(r) {
+  const onHome = googleHomeSlots.has(norm(r.name));
+  // An Assistant news brief has no feed anywhere, whatever its Type says - some
+  // are recorded by kind and some only by the error the fetcher reported.
+  if (r.kind === "News brief" || /no public rss/i.test(r.error || "")) {
+    return "Google Home only - no public feed for the app to fetch";
+  }
+  if (r.ok === false) {
+    const why = /no items/i.test(r.error || "") ? "its feed carries no episodes"
+      : /HTTP/i.test(r.error || "") ? `its feed is not responding (${r.error})`
+        : `its feed could not be read (${r.error || "reason unrecorded"})`;
+    return onHome ? `Google Home only - ${why}` : `Neither - ${why}`;
+  }
+  return onHome ? "Both - ran on Google Home, and the app can fetch it" : "YTM Trigger app";
+}
+
 const body = rows.map((r) => {
   const recorded = lookupSheetDur(r.name);
   return [
     r.name, r.status, r.slot, r.kind || "Podcast",
     prefs.get(norm(r.name)) || "",
     lookupNote(r.name),
+    playsVia(r),
     r.description || "", rating(r), publishing(r),
     r.lastEpisode || "", r.daysSinceLast ?? "",
     r.ok ? r.perWeekRecent : "", r.ok ? (r.perWeekLifetime ?? "") : "", r.ok ? r.episodesLast365 : "",
@@ -169,9 +204,31 @@ const body = rows.map((r) => {
   ];
 });
 
+// The YouTube Music playlists. They belong in the catalog because it lists
+// everything the app can play, not only the things with an RSS feed - but
+// nearly every column here is about a feed, so most are blank for them rather
+// than filled with something invented. What is knowable is where each one is
+// used, which comes from the device config.
+const playlistBody = PLAYLISTS.map((p) => {
+  const row = new Array(HEAD.length).fill("");
+  row[0] = p.name;
+  row[1] = "Doing";
+  row[2] = "Music";
+  row[3] = "YTM playlist";
+  row[4] = prefs.get(norm(p.name)) || "";
+  row[5] = lookupNote(p.name);
+  // Both, and not from inference: the app plays these through YouTube Music
+  // itself, and one of them is the playlist he built for the Google Home.
+  row[6] = "Both - the app drives YouTube Music, which the speaker plays too";
+  row[7] = `YouTube Music playlist. Used by: ${p.usedBy || "not currently scheduled"}.`;
+  row[HEAD.length - 1] = p.url;
+  return row;
+});
+
 const legend = [
-  [],
   ["How to read this tab"],
+  ["What is in here", "Everything the app can play, not only podcasts: the shows, and the YouTube Music playlists at the bottom. Most columns describe an RSS feed, so they are blank for a playlist rather than filled with something invented."],
+  ["Plays via", "Which of the two ways of playing this actually work. 'Both' is only claimed where the sheet records the show sitting in one of your old Assistant routines, so it demonstrably played there. 'YTM Trigger app' therefore means the app can fetch it and nothing here shows it ever ran on a speaker - not that it cannot. The Assistant news briefs run the other way: no public feed exists, so the app has nothing to fetch."],
   ["Your notes", "The Notes and TODO wording you had written on the old Weekly/Daily/News tabs, carried over before those tabs were removed. Also where guidance ends up once it has been acted on, stamped 'Applied <date>'. History rather than an inbox - write new thoughts in the yellow column instead."],
   ["Change guidance from us", "Yours to write in, and the one place we look. Say what you want different - 'too long for the morning', 'Sarah loves this, more of it' - and ask in a Copilot session for the schedule to be reworked. Kept intact when this tab is regenerated, and keyed to the show, so it follows a row that moves. Once a change is made the text moves into 'Your notes' with the date, the cell is emptied, and a row appears on the change log. A check runs every fortnight and opens a GitHub issue if anything is sitting here unread."],
   ["Status: Considering", "Shows you had already noted as ideas."],
@@ -205,13 +262,29 @@ const del = OLD_TABS
   .map((s) => ({ deleteSheet: { sheetId: s.properties.sheetId } }));
 if (del.length) await api("POST", ":batchUpdate", { requests: del });
 
+// "Podcast Catalog" is renamed in place rather than left behind and rebuilt
+// under the new name, which would strand the yellow guidance column and every
+// note in it on an orphaned tab.
+{
+  const previous = meta.sheets.find((s) => s.properties.title === PREVIOUS_TAB);
+  const already = meta.sheets.find((s) => s.properties.title === TAB);
+  if (previous && !already) {
+    await api("POST", ":batchUpdate", { requests: [{ updateSheetProperties: {
+      properties: { sheetId: previous.properties.sheetId, title: TAB },
+      fields: "title",
+    } }] });
+    previous.properties.title = TAB;
+    console.log(`renamed "${PREVIOUS_TAB}" to "${TAB}"`);
+  }
+}
+
 const existing = meta.sheets.find((s) => s.properties.title === TAB);
 const fresh = !existing;
 let sheetId;
 if (existing) {
   sheetId = existing.properties.sheetId;
   const grid = existing.properties.gridProperties || {};
-  const needRows = body.length + legend.length + 40;
+  const needRows = body.length + playlistBody.length + legend.length + 40;
   if ((grid.rowCount || 0) < needRows || (grid.columnCount || 0) < HEAD.length) {
     await api("POST", ":batchUpdate", { requests: [{ updateSheetProperties: {
       properties: { sheetId, gridProperties: {
@@ -226,7 +299,7 @@ if (existing) {
   const made = await api("POST", ":batchUpdate", {
     requests: [{ addSheet: { properties: {
       title: TAB,
-      gridProperties: { rowCount: body.length + 40, columnCount: HEAD.length, frozenRowCount: 1, frozenColumnCount: 1 },
+      gridProperties: { rowCount: body.length + playlistBody.length + 40, columnCount: HEAD.length, frozenRowCount: 1, frozenColumnCount: 1 },
     } } }],
   });
   sheetId = made.data.replies[0].addSheet.properties.sheetId;
@@ -244,7 +317,7 @@ HEAD_OUT[USER_COL] = userHeading;
 // schedule tab shifted the legend down by a row and produced two "What is not
 // here" lines, one naming the old tab, because the spacer above it wrote
 // nothing at all.
-const grid = [HEAD_OUT, ...body, ...legend]
+const grid = [HEAD_OUT, ...body, ...playlistBody, ...legend]
   .map((r) => Array.from({ length: HEAD.length }, (_, i) => r[i] ?? ""));
 await api("PUT", `/values/${encodeURIComponent(TAB)}!A1?valueInputOption=RAW`, {
   values: grid,
@@ -258,7 +331,10 @@ if (existing) {
 }
 
 
-const dataEnd = 1 + body.length;
+// Playlists are part of the data, not an appendix: the filter, the banding and
+// the yellow guidance column all need to cover them, or a playlist row could
+// not be commented on.
+const dataEnd = 1 + body.length + playlistBody.length;
 const width = (start, end, px) => ({ updateDimensionProperties: {
   range: { sheetId, dimension: "COLUMNS", startIndex: start, endIndex: end }, properties: { pixelSize: px }, fields: "pixelSize" } });
 const wrap = (start, end) => ({ repeatCell: {
@@ -322,5 +398,5 @@ req.push(
 );
 await api("POST", ":batchUpdate", { requests: req });
 
-console.log(`wrote "${TAB}": ${body.length} shows`);
+console.log(`wrote "${TAB}": ${body.length} shows, ${playlistBody.length} playlists`);
 console.log("by status:", rows.reduce((m, r) => (m[r.status] = (m[r.status] || 0) + 1, m), {}));
