@@ -15,14 +15,14 @@ import { GoogleAuth } from "google-auth-library";
 
 const ID = "<SHEET_ID>";
 
-// Where applied guidance goes, per tab. The catalog is one show per row with a
-// notes column immediately to the right, so the move is unambiguous. The
-// schedule tab has no notes column of its own, so it is left out until there is
-// somewhere agreed to put it - better to refuse than to invent a destination
-// and bury the text in a column that gets rewritten.
-const DESTINATION = {
-  "Podcast Catalog": { guidance: 4, notes: 5 }, // E -> F "Your notes"
-};
+// Applied guidance goes into the cell immediately to the right, in the same
+// row. That holds everywhere: the catalog's guidance in column E is followed by
+// "Your notes" in F, and each of the schedule tab's three guidance columns is
+// followed by a "Notes from us" column. Those three sit at different letters -
+// F, I and G - because each hugs the right edge of its own section and the
+// sections are different widths, so this works from the header rather than from
+// fixed positions.
+const NOTES_OFFSET = 1;
 
 const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
 const client = await auth.getClient();
@@ -31,6 +31,8 @@ const api = (m, u, d) => client.request({ method: m, url: `https://sheets.google
 const colName = (i) => (i < 26
   ? String.fromCharCode(65 + i)
   : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26)));
+
+const colIndex = (s) => [...s].reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0) - 1;
 
 const dry = process.argv.includes("--dry-run");
 let cells = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -51,23 +53,26 @@ if (!cells.length) {
   process.exit(0);
 }
 
-const today = new Date().toISOString().slice(0, 10);
+// Local date, not UTC. Israel runs three hours ahead, so between midnight and
+// 03:00 an ISO timestamp still reads as the previous day and the note would be
+// stamped yesterday.
+const now = new Date();
+const today = [
+  now.getFullYear(),
+  String(now.getMonth() + 1).padStart(2, "0"),
+  String(now.getDate()).padStart(2, "0"),
+].join("-");
 let done = 0, skipped = 0;
 
 for (const ref of cells) {
   const [tab, a1] = ref.split("!");
-  const dest = DESTINATION[tab];
-  if (!dest) {
-    console.log(`SKIP  ${ref}\n      No agreed notes column on "${tab}". Move it by hand, or add one to DESTINATION.`);
-    skipped++;
-    continue;
-  }
   const m = /^([A-Z]+)(\d+)$/.exec(a1 || "");
   if (!m) { console.log(`SKIP  ${ref}: not a cell reference`); skipped++; continue; }
   const row = Number(m[2]);
+  const gCol = colIndex(m[1]);
 
-  const gRef = `${tab}!${colName(dest.guidance)}${row}`;
-  const nRef = `${tab}!${colName(dest.notes)}${row}`;
+  const gRef = `${tab}!${colName(gCol)}${row}`;
+  const nRef = `${tab}!${colName(gCol + NOTES_OFFSET)}${row}`;
   const get = async (r) => ((await api("GET", `/values/${encodeURIComponent(r)}`)).data.values || [])[0]?.[0] ?? "";
 
   const guidance = String(await get(gRef)).trim();

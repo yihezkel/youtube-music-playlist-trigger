@@ -372,9 +372,15 @@ Things that will catch you out:
   tab has no such key: its guidance is positional, which is why a section's row
   count must never change. Verified by writing a marker into all four columns
   and rebuilding both tabs - all four survived.
-- **Only the catalog has an agreed destination** for applied guidance, column F
-  "Your notes". The schedule tab has no notes column, so `archive-guidance.mjs`
-  refuses those cells rather than inventing somewhere to put the text.
+- **Applied guidance always moves one column right.** That is true everywhere:
+  the catalog's column E is followed by "Your notes" in F, and each of the
+  schedule tab's three guidance columns is followed by a "Notes from us" column
+  added beside it. Those three sit at different letters — F, I and G — because
+  each hugs the right edge of its own section and the sections are different
+  widths, so the tools work from the header rather than fixed positions.
+  Sections 4 to 6 have no guidance column; they are explanation and history.
+  Adding the third one needed the tab widened from 9 columns to 10, since
+  section 2's guidance is in column I and there was no J.
 - **A header is only a header if something sits to its left.** The catalog's own
   legend contains a row reading "Change guidance from us" in column A, and
   matching on the words alone turned that into a phantom header with fifteen
