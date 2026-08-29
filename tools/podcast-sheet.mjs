@@ -12,7 +12,7 @@ const TAB = "Catalog";
 // being true when the YouTube Music playlists were added.
 const OLD_TABS = ["Podcast Catalogue"];
 const PREVIOUS_TAB = "Podcast Catalog";
-import { MUSIC, queues } from "./schedule-blocks.mjs";
+import { MUSIC, isPlaylist, queues } from "./schedule-blocks.mjs";
 import { PODCASTS } from "./podcast-list.mjs";
 import { PLAYLISTS } from "./playlist-list.mjs";
 const rows = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
@@ -127,8 +127,14 @@ function drift(r, recorded) {
 // hand-maintained list said. Deriving it from the schedule rather than repeating
 // it here is what stops the catalog claiming "Considering" for something that
 // has been in the line-up for weeks.
+//
+// Named playlists are left out: they are not in podcast-stats.json and never
+// will be, and build-schedules.mjs already fails loudly on a name that is not
+// in playlist-list.mjs, so they cannot go missing unnoticed.
 const scheduled = new Set(
-  queues().flatMap((q) => q.shows.map(([n]) => n)).filter((n) => n !== MUSIC).map(norm));
+  queues().flatMap((q) => q.shows.map(([n]) => n))
+    .filter((n) => n !== MUSIC && !isPlaylist(n))
+    .map(norm));
 const promoted = [];
 for (const r of rows) {
   if (r.status !== "Doing" && scheduled.has(norm(r.name))) {

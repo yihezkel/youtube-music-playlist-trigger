@@ -21,13 +21,18 @@ const find = (n) => stats.find((s) => s.name === n) || stats.find((s) => s.name.
 const mins = (n) => find(n)?.durMedian ?? PRIVATE_MEDIAN[n] ?? null;
 /** Typical length for feeds that live outside podcast-stats.json. */
 const PRIVATE_MEDIAN = { "Aleph Beta": 36 };
-const label = (n) => (n === MUSIC ? "—" : (mins(n) ? `${mins(n)}m` : "—"));
+const label = (n) => (n === MUSIC || isPlaylist(n) ? "—" : (mins(n) ? `${mins(n)}m` : "—"));
 
-import { BLOCKS, MUSIC, modeLabel, queues } from "./schedule-blocks.mjs";
+import { BLOCKS, MUSIC, isPlaylist, modeLabel, playlistName, queues } from "./schedule-blocks.mjs";
 
 // Music is a set of YT Music playlists in the app rather than a feed, so it has
-// no duration and no episode mode; everything else is looked up by name.
-const showName = (s) => (s === MUSIC ? "Music — your YTM playlists" : s);
+// no duration and no episode mode; everything else is looked up by name. A
+// named playlist is the same, but says which one.
+const showName = (s) => (
+  s === MUSIC ? "Music — your YTM playlists"
+    : isPlaylist(s) ? `${playlistName(s)} — your YTM playlist`
+      : s
+);
 
 const WEEK = [
   ["Block", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Motzaei Shabat"],
@@ -79,7 +84,7 @@ for (const q of queues()) {
   push([`${q.block.id} · ${q.block.name} — ${q.label}`], "sub2");
   q.shows.forEach(([show, why], i) =>
     push(["", String(i + 1), showName(show), label(show), modeLabel(show), why]));
-  const total = q.shows.reduce((s, [n]) => s + (n === MUSIC ? 0 : (mins(n) || 0)), 0);
+  const total = q.shows.reduce((s, [n]) => s + (n === MUSIC || isPlaylist(n) ? 0 : (mins(n) || 0)), 0);
   push(["", "", "Queue length (median episodes)", `${Math.floor(total / 60)}h ${total % 60}m`, "",
     q.block.endsWithQueue
       ? `Nothing cuts this block off — it ends with its last episode, at about ${Math.floor(q.block.mins / 60)}h ${q.block.mins % 60}m`
@@ -260,6 +265,9 @@ for (const { r, kind } of fmt) {
 await api("POST", ":batchUpdate", { requests: req });
 console.log(`wrote "${TAB}": ${rows.length} rows`);
 
+// A named playlist has no feed and no recorded duration, so it is expected to
+// be absent from both lookups. build-schedules.mjs is where a playlist name is
+// checked, against playlist-list.mjs, and it throws on one it does not know.
 const unmatched = [...new Set(queues().flatMap((q) => q.shows.map(([n]) => n)))]
-  .filter((n) => n !== MUSIC && !find(n) && !(n in PRIVATE_MEDIAN));
+  .filter((n) => n !== MUSIC && !isPlaylist(n) && !find(n) && !(n in PRIVATE_MEDIAN));
 console.log(unmatched.length ? `UNMATCHED SHOWS: ${unmatched.join(", ")}` : "all show names resolve");

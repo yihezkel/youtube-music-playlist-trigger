@@ -10,7 +10,21 @@ import { readFileSync } from "node:fs";
 const DOC = "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
 const stats = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 
-import { BLOCKS, FILTERED_MEDIAN, MIN_MINUTES, MODE, MUSIC, queues } from "./schedule-blocks.mjs";
+import { BLOCKS, FILTERED_MEDIAN, MIN_MINUTES, MODE, MUSIC, isPlaylist, playlistName, queues } from "./schedule-blocks.mjs";
+import { PLAYLISTS } from "./playlist-list.mjs";
+
+// A named playlist entry resolves to its URL here. Failing loudly on an unknown
+// name matters: the app treats an unrecognised entry as nothing to play, so a
+// typo would arm a schedule that goes quiet at that point in the queue with no
+// error anywhere.
+const playlistUrl = (name) => {
+  const p = PLAYLISTS.find((x) => x.name === name);
+  if (!p) {
+    throw new Error(`schedule-blocks names the playlist "${name}", which is not in playlist-list.mjs. ` +
+      `Known: ${PLAYLISTS.map((x) => x.name).join(", ")}`);
+  }
+  return `${p.url} [${p.name}]`;
+};
 
 // Feed URLs that must never be committed - currently the rebuilt Aleph Beta
 // feed, whose path carries a token so it is not discoverable. Looked up by show
@@ -63,7 +77,9 @@ const built = all.map((q) => ({
   anchorOffsetMinutes: q.block.offset || 0,
   startsAfter: q.block.startsAfter || null,
   autoStopMinutes: q.block.autoStop || null,
-  playlistUrls: q.shows.flatMap(([s]) => (s === MUSIC ? music : [feed(s)])),
+  playlistUrls: q.shows.flatMap(([s]) => (
+    s === MUSIC ? music : isPlaylist(s) ? [playlistUrl(playlistName(s))] : [feed(s)]
+  )),
   targetVolumePercent: 100,
   enableShuffle: true,
   skipFirstTrack: false,
@@ -144,7 +160,10 @@ let thin = 0, over = 0;
 for (const q of all) {
   const B = q.block.mins;
   const hasMusic = q.shows.some(([s]) => s === MUSIC);
-  const total = q.shows.reduce((n, [s]) => n + (s === MUSIC ? 0 : median(s)), 0);
+  // A named playlist has no published episode length, so it cannot be counted
+  // towards the queue depth; like MUSIC it simply plays on until the block ends
+  // or it runs out, and MusicEndWatcher moves the queue along when it does.
+  const total = q.shows.reduce((n, [s]) => n + (s === MUSIC || isPlaylist(s) ? 0 : median(s)), 0);
   const tag = (q.block.id + " " + q.label).padEnd(34);
   // A block that ends with its queue is not judged on filling a window - it is
   // judged on landing near its nominal end, since nothing will cut it off.

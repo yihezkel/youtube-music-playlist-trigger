@@ -24,6 +24,7 @@ import com.jasonschoenbrun.ytmtrigger.diag.FailureLog
 import com.jasonschoenbrun.ytmtrigger.playback.LockSafeFallback
 import com.jasonschoenbrun.ytmtrigger.playback.MediaSessionListenerService
 import com.jasonschoenbrun.ytmtrigger.playback.NotifListenerEnforcer
+import com.jasonschoenbrun.ytmtrigger.playback.PlaybackPauser
 
 /**
  * One answer to "is this phone still able to do its job?".
@@ -93,6 +94,7 @@ object HealthChecks {
             ytMusicInstalled(context),
             network(context),
             mediaVolume(context),
+            playbackPaused(),
             recentFailures(context),
         )
     )
@@ -403,6 +405,40 @@ object HealthChecks {
             )
         }
     }
+
+    /**
+     * A pause left in force.
+     *
+     * Every other check here asks whether playback *could* start. None of them
+     * notices that it has been deliberately held, which is why the motzaei
+     * Shabat blocks on 29 Aug went quiet a minute into each and stayed quiet for
+     * two hours with the screen reporting all fifteen checks fine. A pause is
+     * legitimate, so this is never Broken; it just has to be visible.
+     */
+    private fun playbackPaused(): Check {
+        val heldMs = PlaybackPauser.pausedForMs()
+            ?: return Check("Playback", Health.Ok, "Not paused")
+        val mins = heldMs / 60_000
+        val forHowLong = when {
+            mins < 1L -> "just now"
+            mins < 60L -> "$mins min ago"
+            else -> "${mins / 60}h ${mins % 60}m ago"
+        }
+        // Short pauses are the feature working. A pause nobody has come back to
+        // is the thing worth surfacing.
+        val level = if (mins >= PAUSE_STALE_MIN) Health.Degraded else Health.Ok
+        return Check(
+            "Playback", level, "Paused $forHowLong",
+            if (level == Health.Degraded) {
+                "Playback was paused from the app and has not been resumed. Nothing will " +
+                    "play until it is resumed, the block is stopped, or the next block starts."
+            } else null,
+            if (level == Health.Degraded) "Resume on the home screen" else null,
+        )
+    }
+
+    /** How long a pause may sit before it is worth mentioning. */
+    private const val PAUSE_STALE_MIN = 15L
 
     private fun recentFailures(context: Context): Check {
         val entries = try {

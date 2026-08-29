@@ -46,7 +46,22 @@ object PlaybackPauser {
     /** Packages paused by [pause], so [resume] restarts those and nothing else. */
     @Volatile private var pausedPackages: List<String> = emptyList()
 
+    /**
+     * When the pause was applied, or 0.
+     *
+     * A pause is silent by design and nothing clears it but a resume, a stop or
+     * the next trigger. On 29 Aug the motzaei Shabat blocks were paused a minute
+     * into each, and the house then had two hours of silence that no check
+     * noticed, because every other check was about whether playback *could*
+     * start. This is what lets the health screen say how long it has been held.
+     */
+    @Volatile private var pausedAtMs: Long = 0L
+
     fun isPaused(): Boolean = userPaused.get()
+
+    /** How long the pause has been in force, or null if nothing is paused. */
+    fun pausedForMs(): Long? =
+        if (userPaused.get() && pausedAtMs > 0) System.currentTimeMillis() - pausedAtMs else null
 
     /**
      * Forget any pause. Called when a block is stopped or a new trigger starts,
@@ -56,6 +71,7 @@ object PlaybackPauser {
     fun clear(reason: String) {
         if (userPaused.getAndSet(false)) {
             pausedPackages = emptyList()
+            pausedAtMs = 0L
             Logger.i("Pause", "Pause cleared", mapOf("reason" to reason))
         }
     }
@@ -80,6 +96,7 @@ object PlaybackPauser {
         }
         if (did) {
             userPaused.set(true)
+            pausedAtMs = System.currentTimeMillis()
             Logger.i("Pause", "Paused", mapOf(
                 "reason" to reason, "packages" to pausedPackages.joinToString(","),
             ))
@@ -116,6 +133,7 @@ object PlaybackPauser {
         if (!did) did = sendKey(context, KeyEvent.KEYCODE_MEDIA_PLAY, reason)
         userPaused.set(false)
         pausedPackages = emptyList()
+        pausedAtMs = 0L
         Logger.i("Pause", if (did) "Resumed" else "Nothing to resume", mapOf("reason" to reason))
         return did
     }

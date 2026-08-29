@@ -68,11 +68,31 @@ export const FILTERED_MEDIAN = {
   "Smash Boom Best": 37,
   "The School of Greatness": 68,
 };export const modeLabel = (name) =>
-  name === MUSIC ? "—" : (MODE_LABEL[MODE[name]] || "Random");
+  name === MUSIC || isPlaylist(name) ? "—" : (MODE_LABEL[MODE[name]] || "Random");
 
 // Music comes from the user's existing YT Music playlists, which live in the
 // config's defaults; resolved at push time so renames there follow through.
 export const MUSIC = "__MUSIC__";
+
+/**
+ * A specific YouTube Music playlist as a queue entry, by name.
+ *
+ * MUSIC means "the default rotation", which is the five music playlists, and
+ * that is right where a block just wants something to wind down to. It is no
+ * use for naming one particular playlist, which is what the four that used to
+ * sit on the old disabled "Afternoon" schedule needed: Science
+ * Misunderstandings, Quora, Old Sayings New Ears and Google Home are spoken
+ * word, not background music, and belong at a chosen point in a day rather than
+ * in the wind-down rotation.
+ *
+ * The name must match one in playlist-list.mjs, which is generated from the
+ * device config, so a typo fails the build rather than arming a schedule that
+ * plays nothing.
+ */
+export const PLAYLIST_PREFIX = "__PLAYLIST__";
+export const playlist = (name) => `${PLAYLIST_PREFIX}${name}`;
+export const isPlaylist = (s) => typeof s === "string" && s.startsWith(PLAYLIST_PREFIX);
+export const playlistName = (s) => s.slice(PLAYLIST_PREFIX.length);
 
 // ISO day numbers, as the app stores them.
 export const SUN = 7, MON = 1, TUE = 2, WED = 3, THU = 4, FRI = 5, SAT = 6;
@@ -110,6 +130,7 @@ export const BLOCKS = [
           ["How I Built This with Guy Raz", ""],
           ["Hidden Brain", ""],
           ["Freakonomics Radio", ""],
+          [playlist("Science Misunderstandings"), "One of your own playlists, off the old Afternoon routine that has been switched off for months"],
           ["Ask Haviv Anything", "4.9 stars — Israel and current affairs, in depth"],
           ["Philosophize This!", "4.8 stars — one idea per episode, no background needed"],
           ["Economist Radio", "Carried over from your Google Home daily routine, which the app had never picked up"],
@@ -126,6 +147,7 @@ export const BLOCKS = [
           ["Meaningful People", ""],
           ["Planet Money", ""],
           ["This American Life", "Newest only — the feed holds just 15 episodes"],
+          [playlist("Quora"), "One of your own playlists, off the old Afternoon routine"],
           ["Ask Haviv Anything", ""],
           ["Philosophize This!", ""],
           ["Shapell's Virtual Beit Midrash", ""],
@@ -144,6 +166,7 @@ export const BLOCKS = [
           ["Cautionary Tales with Tim Harford", ""],
           ["Call Me Back", "Newest — current affairs only works fresh"],
           ["Revisionist History", ""],
+          [playlist("Old Sayings, New Ears"), "One of your own playlists, off the old Afternoon routine"],
           ["Ask Haviv Anything", ""],
           ["Shapell's Virtual Beit Midrash", ""],
           ["Economist Radio", ""],
@@ -163,6 +186,7 @@ export const BLOCKS = [
           ["SeforimChatter", ""],
           ["Hidden Brain", ""],
           ["18Forty - Exploring Big Jewish Ideas", "4.8 stars, long-form Jewish thought"],
+          [playlist("Google Home"), "One of your own playlists, off the old Afternoon routine"],
           ["Ask Haviv Anything", ""],
           ["Economist Radio", ""],
           ["Philosophize This!", ""],
