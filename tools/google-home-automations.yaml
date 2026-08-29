@@ -1,0 +1,510 @@
+# Google Home automations for the YTM Trigger schedule
+#
+# GENERATED from tools/schedule-blocks.mjs - the same file the app config and
+# the Schedule tab come from. Regenerate rather than editing by hand:
+#   node tools/google-home-automations.mjs > google-home-automations.yaml
+#
+# Paste into the script editor at https://home.google.com/automations
+# (Public Preview). Replace every occurrence of:
+#   SPEAKER NAME - ROOM
+# with the speaker exactly as the Home app names it, including the room.
+#
+# ---------------------------------------------------------------------------
+# READ THIS BEFORE TURNING THEM ON
+#
+# Shabat and Yom Tov. Google Home has no Jewish calendar and no way to
+# express one. These automations run on weekdays only, so they will not fire
+# on Shabat - but they WILL fire on Yom Tov, including the ones that fall on
+# a Sunday to Thursday. You have to turn them off for a festival yourself.
+# The erev Shabat and motzaei Shabat blocks are deliberately NOT generated:
+# their times depend on nightfall and on whether a festival runs into Shabat,
+# which only the app works out.
+#
+# Your own playlists probably will not work. Google's documentation says an
+# Assistant action needing Voice Match or personal results does not run in a
+# household automation, and a personal YouTube Music playlist is exactly
+# that. Named podcasts are public and should be fine. Each automation below
+# therefore asks for a show the sheet records as having actually played on
+# your old Assistant routines, not a playlist.
+#
+# One show, not a queue. A Home automation issues a single command. The app
+# plays a queue of a dozen shows, picks the episode, skips one it cannot
+# finish, resumes what was cut off and moves on when a stream dies. None of
+# that exists here: this starts one show at the right time and stops at the
+# end of the block.
+#
+# PASTE ONE AT A TIME. The script editor takes a single automation per
+# script - one metadata block and one automations block. Each numbered
+# section below is its own script; create a new automation for each and
+# paste only that section.
+#
+# Do not run these and the app at once on the same speaker. They will talk
+# over each other. Use these only if the phone is out of action, or point
+# them at a speaker the phone does not drive.
+# ---------------------------------------------------------------------------
+
+# ===== 1. A Morning Launch ==================================
+# UNVERIFIED: "TorahAnytime Daily Dose" is not recorded as having played on a speaker.
+# Say "Hey Google, play TorahAnytime Daily Dose" once and check it resolves.
+metadata:
+  name: A Morning Launch
+  description: Morning Launch, 07:30 – 08:00. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 07:30
+    weekdays:
+    - SUN
+    - MON
+    - TUE
+    - WED
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play TorahAnytime Daily Dose on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 2. A Morning Launch - stop ===========================
+metadata:
+  name: A Morning Launch - stop
+  description: Ends the block at 08:00, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 08:00
+    weekdays:
+    - SUN
+    - MON
+    - TUE
+    - WED
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 3. B Sarah Sun =======================================
+metadata:
+  name: B Sarah Sun
+  description: Sarah's Day, 08:00 – 15:50. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 08:00
+    weekdays:
+    - SUN
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play The Mindset Mentor on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 4. B Sarah Sun - stop ================================
+metadata:
+  name: B Sarah Sun - stop
+  description: Ends the block at 15:50, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 15:50
+    weekdays:
+    - SUN
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 5. B Sarah Mon =======================================
+metadata:
+  name: B Sarah Mon
+  description: Sarah's Day, 08:00 – 15:50. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 08:00
+    weekdays:
+    - MON
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play The Mindset Mentor on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 6. B Sarah Mon - stop ================================
+metadata:
+  name: B Sarah Mon - stop
+  description: Ends the block at 15:50, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 15:50
+    weekdays:
+    - MON
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 7. B Sarah Tue =======================================
+metadata:
+  name: B Sarah Tue
+  description: Sarah's Day, 08:00 – 15:50. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 08:00
+    weekdays:
+    - TUE
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play The Mindset Mentor on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 8. B Sarah Tue - stop ================================
+metadata:
+  name: B Sarah Tue - stop
+  description: Ends the block at 15:50, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 15:50
+    weekdays:
+    - TUE
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 9. B Sarah Wed =======================================
+metadata:
+  name: B Sarah Wed
+  description: Sarah's Day, 08:00 – 15:50. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 08:00
+    weekdays:
+    - WED
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play The Mindset Mentor on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 10. B Sarah Wed - stop ================================
+metadata:
+  name: B Sarah Wed - stop
+  description: Ends the block at 15:50, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 15:50
+    weekdays:
+    - WED
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 11. B Sarah Thu =======================================
+metadata:
+  name: B Sarah Thu
+  description: Sarah's Day, 08:00 – 15:50. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 08:00
+    weekdays:
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play The Mindset Mentor on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 12. B Sarah Thu - stop ================================
+metadata:
+  name: B Sarah Thu - stop
+  description: Ends the block at 15:50, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 15:50
+    weekdays:
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 13. C Landing =========================================
+# UNVERIFIED: "Who Smarted?" is not recorded as having played on a speaker.
+# Say "Hey Google, play Who Smarted?" once and check it resolves.
+metadata:
+  name: C Landing
+  description: Landing, 16:00 – 16:30. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 16:00
+    weekdays:
+    - SUN
+    - MON
+    - TUE
+    - WED
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play Who Smarted? on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 14. C Landing - stop ==================================
+metadata:
+  name: C Landing - stop
+  description: Ends the block at 16:30, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 16:30
+    weekdays:
+    - SUN
+    - MON
+    - TUE
+    - WED
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 15. D Family Sun ======================================
+metadata:
+  name: D Family Sun
+  description: Family Table, 16:30 – 19:30. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 16:30
+    weekdays:
+    - SUN
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play SciShow Tangents on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 16. D Family Sun - stop ===============================
+metadata:
+  name: D Family Sun - stop
+  description: Ends the block at 19:30, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - SUN
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 17. D Family Mon ======================================
+metadata:
+  name: D Family Mon
+  description: Family Table, 16:30 – 19:30. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 16:30
+    weekdays:
+    - MON
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play Jews You Should Know on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 18. D Family Mon - stop ===============================
+metadata:
+  name: D Family Mon - stop
+  description: Ends the block at 19:30, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - MON
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 19. D Family Tue - Rabbi Breitowitz ===================
+metadata:
+  name: D Family Tue - Rabbi Breitowitz
+  description: Family Table, 16:30 – 19:30. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 16:30
+    weekdays:
+    - TUE
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play SciShow Tangents on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 20. D Family Tue - Rabbi Breitowitz - stop ============
+metadata:
+  name: D Family Tue - Rabbi Breitowitz - stop
+  description: Ends the block at 19:30, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - TUE
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 21. D Family Wed ======================================
+metadata:
+  name: D Family Wed
+  description: Family Table, 16:30 – 19:30. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 16:30
+    weekdays:
+    - WED
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play Stuff You Should Know on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 22. D Family Wed - stop ===============================
+metadata:
+  name: D Family Wed - stop
+  description: Ends the block at 19:30, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - WED
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 23. D Family Thu - Rabbi Breitowitz ===================
+metadata:
+  name: D Family Thu - Rabbi Breitowitz
+  description: Family Table, 16:30 – 19:30. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 16:30
+    weekdays:
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play Behind the Bima on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 24. D Family Thu - Rabbi Breitowitz - stop ============
+metadata:
+  name: D Family Thu - Rabbi Breitowitz - stop
+  description: Ends the block at 19:30, as the app does.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Stop
+    devices: SPEAKER NAME - ROOM
+
+# ===== 25. E Teen Sun ========================================
+metadata:
+  name: E Teen Sun
+  description: Teen Evening, 19:30 – about 21:30, Sun–Thu. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - SUN
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play Orthodox Conundrum on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 26. E Teen Mon ========================================
+metadata:
+  name: E Teen Mon
+  description: Teen Evening, 19:30 – about 21:30, Sun–Thu. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - MON
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play The School of Greatness on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 27. E Teen Tue ========================================
+metadata:
+  name: E Teen Tue
+  description: Teen Evening, 19:30 – about 21:30, Sun–Thu. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - TUE
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play 18Forty - Exploring Big Jewish Ideas on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 28. E Teen Wed ========================================
+metadata:
+  name: E Teen Wed
+  description: Teen Evening, 19:30 – about 21:30, Sun–Thu. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - WED
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play TED Talks Daily on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ===== 29. E Teen Thu ========================================
+metadata:
+  name: E Teen Thu
+  description: Teen Evening, 19:30 – about 21:30, Sun–Thu. Generated from schedule-blocks.mjs.
+automations:
+  starters:
+  - type: time.schedule
+    at: 19:30
+    weekdays:
+    - THU
+  actions:
+  - type: assistant.command.OkGoogle
+    okGoogle: Play TED Talks Daily on SPEAKER NAME
+    devices: SPEAKER NAME - ROOM
+
+# ---------------------------------------------------------------------------
+# 29 automations generated.
+# Not generated: F Erev Shabat - anchored to Shabat/Yom Tov
+# Not generated: G Motzaei Shabat — kids - anchored to Shabat/Yom Tov
+# Not generated: H Motzaei Shabat — teen - anchored to Shabat/Yom Tov
+#
+# Unverified show names - check each resolves on a speaker once:
+#   A Morning Launch: TorahAnytime Daily Dose
+#   C Landing: Who Smarted?
+# ---------------------------------------------------------------------------

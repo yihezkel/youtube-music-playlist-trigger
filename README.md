@@ -372,6 +372,36 @@ A Windows scheduled task, **"YTM Trigger - check schedule guidance"**, runs this
 and involves no AI: it never edits the schedule, so a request is noticed rather than acted
 on unattended.
 
+### The same schedule on Google Home
+
+`tools/google-home-automations.mjs` generates
+[`tools/google-home-automations.yaml`](tools/google-home-automations.yaml) from the same
+source, for the Google Home **script editor** (Public Preview, at
+[home.google.com/automations](https://home.google.com/automations)). Paste each numbered
+section as its own automation — the editor takes one `metadata` + one `automations` block
+per script — and replace the `SPEAKER NAME - ROOM` placeholder.
+
+It is an approximation on purpose, and the gaps are the point:
+
+| The app does | Google Home |
+|---|---|
+| Anchors to sunset and to nightfall at the end of Shabat/Yom Tov | Sunset offsets exist (`at: sunset+30min`); **a Jewish calendar does not** |
+| Never plays on Shabat or Yom Tov, and mutes 15 minutes before | Weekdays only avoids Shabat; **Yom Tov will still fire** — turn them off yourself |
+| Plays a queue of a dozen shows per block | One command, so one show per block |
+| Picks the episode: random, newest, in order, `min N` | Whatever Assistant resolves from the name |
+| Resumes what was cut off, skips what it can't finish | Neither |
+| Starts a block when another finishes | Not expressible |
+| Plays your own YouTube Music playlists | Google's docs say an action needing Voice Match or personal results **will not run** in a household automation, so these ask for podcasts by name instead |
+
+The erev Shabat and both motzaei Shabat blocks are **not generated at all** — their times
+depend on nightfall and on a festival running into Shabat, which only the app works out.
+Where the sheet records a show as having actually played on your old Assistant routines the
+name is used as-is; the two that aren't recorded are flagged `UNVERIFIED` in the file, to be
+said aloud once before they're relied on.
+
+**Don't run these and the app on the same speaker** — they will talk over each other. They
+are for a speaker the phone doesn't drive, or for when the phone is out of action.
+
 ## Install
 
 Download the APK from the [Releases page](../../releases) and sideload it. The app needs Android 14 (API 34) or newer.
