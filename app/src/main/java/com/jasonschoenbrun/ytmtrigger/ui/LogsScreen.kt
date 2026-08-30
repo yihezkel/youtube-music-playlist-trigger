@@ -1,5 +1,8 @@
 package com.jasonschoenbrun.ytmtrigger.ui
 
+// Split out of MainActivity.kt, which had grown to 2,344 lines holding six
+// screens. Same package, so this is a move: no call site changed. The import
+// list is the one MainActivity carried; unused entries are harmless.
 
 import android.Manifest
 import android.app.AlarmManager
@@ -77,59 +80,63 @@ import java.time.LocalDateTime
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : ComponentActivity() {
-
-    private val notifPermLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        Logger.i("UI", "Notification permission result", mapOf("granted" to granted.toString()))
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        Logger.i("UI", "MainActivity onCreate")
-        // Request notif permission proactively
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LogsScreen(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val entries by Logger.entries.collectAsStateWithLifecycle()
+    var filter by remember { mutableStateOf("") }
+    var minLevel by remember { mutableStateOf(LogLevel.DEBUG) }
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Logs (${entries.size})") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+                actions = {
+                    IconButton(onClick = {
+                        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                        val text = entries.takeLast(500).joinToString("\n") { it.format() }
+                        cm?.setPrimaryClip(android.content.ClipData.newPlainText("YTM Trigger logs", text))
+                        android.widget.Toast.makeText(ctx, "Last ${entries.takeLast(500).size} log lines copied", android.widget.Toast.LENGTH_SHORT).show()
+                        Logger.i("UI", "Logs copied to clipboard", mapOf("count" to entries.takeLast(500).size.toString()))
+                    }) { Icon(Icons.Default.ContentCopy, null) }
+                    IconButton(onClick = {
+                        val f = Logger.exportLatestFile(ctx) ?: return@IconButton
+                        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        ctx.startActivity(Intent.createChooser(send, "Share logs").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }) { Icon(Icons.Default.Share, null) }
+                })
         }
-        setContent {
-            MaterialTheme(colorScheme = AppDarkColors) {
-                Surface(color = MaterialTheme.colorScheme.background) { AppNav() }
+    ) { inner ->
+        Column(Modifier.padding(inner)) {
+            Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (lvl in LogLevel.entries) {
+                    FilterChip(
+                        selected = minLevel == lvl,
+                        onClick = { minLevel = lvl },
+                        label = { Text(lvl.short) },
+                    )
+                }
+            }
+            OutlinedTextField(filter, { filter = it }, label = { Text("Filter") }, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp))
+            val visible = entries.asReversed().filter { e ->
+                e.level.priority >= minLevel.priority &&
+                    (filter.isBlank() || e.tag.contains(filter, true) || e.message.contains(filter, true))
+            }
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(visible) { e ->
+                    Text(
+                        e.format(),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                    Divider()
+                }
             }
         }
     }
-}
-
-@Composable
-fun AppNav() {
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
-    // Without this the system back button is never intercepted, so it reaches
-    // the Activity and finishes the app from every sub-screen instead of
-    // returning to the screen the user came from.
-    BackHandler(enabled = screen != Screen.Home) {
-        screen = when (screen) {
-            is Screen.Edit -> Screen.Schedules
-            else -> Screen.Home
-        }
-    }
-    when (val s = screen) {
-        Screen.Home -> HomeScreen(onNav = { screen = it })
-        Screen.Schedules -> SchedulesScreen(onNav = { screen = it })
-        is Screen.Edit -> EditScheduleScreen(scheduleId = s.id, onDone = { screen = Screen.Schedules })
-        Screen.Logs -> LogsScreen(onBack = { screen = Screen.Home })
-        Screen.SelfTest -> SelfTestScreen(onBack = { screen = Screen.Home })
-        Screen.Settings -> SettingsScreen(onBack = { screen = Screen.Home })
-    }
-}
-
-sealed class Screen {
-    data object Home : Screen()
-    data object Schedules : Screen()
-    data class Edit(val id: String?) : Screen()
-    data object Logs : Screen()
-    data object SelfTest : Screen()
-    data object Settings : Screen()
 }

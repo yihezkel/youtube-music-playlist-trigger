@@ -1,5 +1,8 @@
 package com.jasonschoenbrun.ytmtrigger.ui
 
+// Split out of MainActivity.kt, which had grown to 2,344 lines holding six
+// screens. Same package, so this is a move: no call site changed. The import
+// list is the one MainActivity carried; unused entries are harmless.
 
 import android.Manifest
 import android.app.AlarmManager
@@ -77,59 +80,55 @@ import java.time.LocalDateTime
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : ComponentActivity() {
+private val BrandRed          = Color(0xFFFF1744)
 
-    private val notifPermLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        Logger.i("UI", "Notification permission result", mapOf("granted" to granted.toString()))
-    }
+private val BrandRedContainer = Color(0xFF8B0017)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        Logger.i("UI", "MainActivity onCreate")
-        // Request notif permission proactively
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        setContent {
-            MaterialTheme(colorScheme = AppDarkColors) {
-                Surface(color = MaterialTheme.colorScheme.background) { AppNav() }
-            }
-        }
-    }
-}
+private val Accent            = Color(0xFFB59CFF)
 
-@Composable
-fun AppNav() {
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
-    // Without this the system back button is never intercepted, so it reaches
-    // the Activity and finishes the app from every sub-screen instead of
-    // returning to the screen the user came from.
-    BackHandler(enabled = screen != Screen.Home) {
-        screen = when (screen) {
-            is Screen.Edit -> Screen.Schedules
-            else -> Screen.Home
-        }
-    }
-    when (val s = screen) {
-        Screen.Home -> HomeScreen(onNav = { screen = it })
-        Screen.Schedules -> SchedulesScreen(onNav = { screen = it })
-        is Screen.Edit -> EditScheduleScreen(scheduleId = s.id, onDone = { screen = Screen.Schedules })
-        Screen.Logs -> LogsScreen(onBack = { screen = Screen.Home })
-        Screen.SelfTest -> SelfTestScreen(onBack = { screen = Screen.Home })
-        Screen.Settings -> SettingsScreen(onBack = { screen = Screen.Home })
-    }
-}
+private val AccentContainer   = Color(0xFF4A3E80)
 
-sealed class Screen {
-    data object Home : Screen()
-    data object Schedules : Screen()
-    data class Edit(val id: String?) : Screen()
-    data object Logs : Screen()
-    data object SelfTest : Screen()
-    data object Settings : Screen()
-}
+private val BgNeutral         = Color(0xFF101013)
+
+private val SurfaceNeutral    = Color(0xFF15151A)
+
+internal val SurfaceElevated   = Color(0xFF1F1F26)
+
+private val SurfaceMuted      = Color(0xFF2A2A33)
+
+private val OnSurface         = Color(0xFFEBE6F0)
+
+private val OnSurfaceMuted    = Color(0xFFB5B0BD)
+
+private val OutlineMuted      = Color(0xFF3A3A45)
+
+internal val AppDarkColors = darkColorScheme(
+    primary             = BrandRed,
+    onPrimary           = Color.White,
+    primaryContainer    = BrandRedContainer,
+    onPrimaryContainer  = Color(0xFFFFD9DC),
+    secondary           = Accent,
+    onSecondary         = Color.Black,
+    secondaryContainer  = AccentContainer,
+    onSecondaryContainer = Color(0xFFE6DEFF),
+    tertiary            = Color(0xFF7FE3C4),
+    onTertiary          = Color.Black,
+    background          = BgNeutral,
+    onBackground        = OnSurface,
+    surface             = SurfaceNeutral,
+    onSurface           = OnSurface,
+    surfaceVariant      = SurfaceMuted,
+    onSurfaceVariant    = OnSurfaceMuted,
+    outline             = OutlineMuted,
+    outlineVariant      = Color(0xFF2A2A33),
+    error               = Color(0xFFFF6E7C),
+    onError             = Color.Black,
+    errorContainer      = Color(0xFF6B0018),
+    onErrorContainer    = Color(0xFFFFD9DD),
+)
+
+internal val HealthGreen  = Color(0xFF3DDC84)
+
+internal val HealthOrange = Color(0xFFFFB020)
+
+internal val HealthRed    = Color(0xFFFF5252)
