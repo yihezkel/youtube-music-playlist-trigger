@@ -1,0 +1,111 @@
+name: Daily health check
+
+# Asks the phone's own reported state whether anything is fatally wrong, once a
+# day, and emails if it is.
+#
+# It runs here rather than on a PC for the reason the check exists at all:
+# everything else that watches this system runs ON the phone - the sixteen
+# health checks, the failure log, the self-test alert - so a phone that is off
+# reports nothing, and a watchdog on a laptop is silent whenever the laptop is.
+# GitHub runs this whether or not anyone is home.
+#
+# It only reads Firestore. It cannot change the schedule, the sheet or the phone.
+
+on:
+  schedule:
+    # 06:00 UTC is 09:00 in Israel year round, which is after the first block of
+    # the day has run, so a phone that failed overnight is caught the same
+    # morning rather than a day later.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # Evaluated once at job level: the secrets context is not reliably
+      # available to a step's own `if`, and a step's `env:` block is not in
+      # scope for that same step's condition.
+      HAS_MAIL: ${{ secrets.MAIL_PASSWORD != '' && secrets.MAIL_USERNAME != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install tools dependencies
+        working-directory: tools
+        run: npm ci --omit=dev
+
+      - name: Check the phone's reported state
+        id: check
+        working-directory: tools
+        env:
+          YTM_SERVICE_ACCOUNT: ${{ secrets.YTM_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$YTM_SERVICE_ACCOUNT" ]; then
+            echo "::error::YTM_SERVICE_ACCOUNT is not set. Add the service-account JSON as a repository secret."
+            exit 1
+          fi
+          # The report goes to a file, never to the log: this repository is
+          # public, so its Actions logs are public too.
+          set +e
+          node daily-health.mjs --md > report.md
+          code=$?
+          set -e
+          node daily-health.mjs > summary.txt || true
+          echo "fatal=$([ "$code" = "10" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # Titles only, no detail - safe for a public log.
+          cat summary.txt
+
+      - name: Email the report
+        if: steps.check.outputs.fatal == 'true' && env.HAS_MAIL == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: YTM Trigger watchdog
+          to: <MAIL_TO>
+          subject: 'YTM Trigger needs attention'
+          body: file://tools/report.md
+          convert_markdown: true
+
+      # Without mail secrets there is still a way to reach him: an issue on this
+      # repository notifies its owner by email. It also leaves a record of what
+      # was wrong and when, which an email alone does not.
+      - name: Open an issue instead
+        if: steps.check.outputs.fatal == 'true' && env.HAS_MAIL != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::warning::No mail secrets set, so this is reported as an issue instead."
+          TITLE="YTM Trigger needs attention"
+          EXISTING=$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$TITLE\")] | .[0].number // empty")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file tools/report.md
+            echo "commented on #$EXISTING"
+          else
+            gh issue create --title "$TITLE" --body-file tools/report.md
+          fi
+
+      # A problem that has cleared should not leave an open alarm behind.
+      - name: Close the issue when all is well
+        if: steps.check.outputs.fatal == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="YTM Trigger needs attention"
+          for n in $(gh issue list --state open --limit 100 --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number"); do
+            gh issue close "$n" --comment "The phone is reporting normally again. Closing automatically."
+            echo "closed #$n"
+          done

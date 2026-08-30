@@ -369,35 +369,50 @@ change.
 
 ### Two watchdogs
 
-Both are Windows scheduled tasks, both read-only, and neither involves AI: they
-cost nothing, cannot edit anything, and exist only so a problem is noticed.
+Neither runs on the phone, because everything that *does* run on the phone — the
+sixteen health checks, the failure log, the self-test alert — goes quiet exactly
+when the phone does.
 
-| Task | Runs | Does |
-|---|---|---|
-| **YTM Trigger - check schedule guidance** | 09:00 every second Sunday | `tools/guidance.mjs --notify` — opens a GitHub issue when the yellow cells have something in them |
-| **YTM Trigger - check phone is alive** | hourly | `tools/checkin.mjs --notify` — opens a GitHub issue when the phone has not checked in for 90 minutes, and **closes it again** when the phone comes back |
+| Watchdog | Where | Runs | Does |
+|---|---|---|---|
+| **Daily health check** | GitHub Actions | 06:00 UTC (09:00 Israel) | Reads the phone's reported state and **emails** `<MAIL_TO>` if anything is fatal |
+| **YTM Trigger - check schedule guidance** | Windows scheduled task | 09:00 every second Sunday | Opens a GitHub issue when the yellow cells have something in them |
 
-The second exists because of 30 August. The phone was off from 08:00 to 12:25;
-block B fired at 08:00, played one episode and then nothing happened for four
-and a half hours. Every other safeguard here runs *on the phone* — the health
-checks, the failure log, the self-test alert — so a phone that is off reports
-nothing at all. Nobody noticed until it was plugged back in. Ninety minutes is
-six of the app's fifteen-minute polls: long enough that a sleeping phone will
-not trip it, short enough to catch a morning like that one within the hour.
+The daily check runs in Actions rather than on a PC deliberately: a watchdog on
+a laptop is silent whenever the laptop is. It only ever reads Firestore.
 
-They log to `%LOCALAPPDATA%\ytm-trigger-guidance.log` and
-`…\ytm-trigger-checkin.log`.
+**"Fatal" is narrow**, and borrows the app's own severity language — red means
+nothing covers it, so a block will be missed or silent. Exactly three things
+qualify:
 
-- Both run only while you are logged on, because `gh` reads its token from the
-  Windows credential store, which a task running as SYSTEM cannot reach. They
-  also need this PC to be on — a watchdog on the same desk has its own blind
-  spot.
-- Duplicate issues are avoided by listing open issues and matching the title in
-  code, **not** by `gh issue list --search`: search is a separate index that lags
-  creation, so a second run soon after the first would not see the issue it had
-  just opened.
-- Remove either with
-  `Unregister-ScheduledTask -TaskName "YTM Trigger - check phone is alive"`.
+1. **The phone has gone quiet** — no check-in for over 2 hours, when it checks in
+   every 15 minutes. This is the failure that hides all the others.
+2. **A red health check** — any of the sixteen reporting `Broken`.
+3. **The self-test is failing** — its last failure is newer than its last success,
+   so playback has stopped working and has not recovered.
+
+An orange check is reported but is not fatal: the app is already handling it.
+The issue, if one is used, closes itself once the phone is healthy again.
+
+Its logic lives in `tools/health-verdict.mjs` with no I/O, so it can be tested
+against states the phone has never been in — `node tools/health-verdict.test.mjs`,
+22 assertions covering each fatal branch, the threshold boundary, and a phone
+that has never checked in at all.
+
+**Setup it needs** (repository → Settings → Secrets → Actions):
+
+| Secret | Why |
+|---|---|
+| `YTM_SERVICE_ACCOUNT` | The service-account JSON, to read Firestore. Required. |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | A Gmail address and an [app password](https://myaccount.google.com/apppasswords). Without these it falls back to opening a GitHub issue, which notifies you by email anyway. |
+
+This repository is public, so its Actions logs are public: the workflow prints
+only the *titles* of what is wrong, never the detail, and the report itself goes
+to a file that only the email or the issue sees.
+
+The guidance task still runs on this PC and logs to
+`%LOCALAPPDATA%\ytm-trigger-guidance.log`. It needs you logged on, because `gh`
+reads its token from the Windows credential store.
 
 ### The same schedule on Google Home
 

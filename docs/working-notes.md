@@ -408,29 +408,47 @@ Things that will catch you out:
   matching on the words alone turned that into a phantom header with fifteen
   phantom items beneath it.
 
-### The fortnightly check
+### The two watchdogs
 
-A Windows scheduled task, **"YTM Trigger - check schedule guidance"**, runs
-`tools/check-guidance.ps1` at 09:00 every second Sunday. It runs
-`guidance.mjs --notify`, which opens a GitHub issue titled *"Change guidance
-pending on the schedule sheet"* when anything is waiting, and does nothing at
-all when nothing is. It logs to `%LOCALAPPDATA%\ytm-trigger-guidance.log`.
+**Daily health check — GitHub Actions, `.github/workflows/daily-health.yml`.**
+Runs 06:00 UTC (09:00 Israel), reads the device document, and emails
+<MAIL_TO> when something is fatal. It lives in Actions rather
+than on the PC because a watchdog on a laptop is silent whenever the laptop is,
+and the thing it most needs to catch — the phone being off — is exactly when
+nothing on the phone can report.
 
-A second task, **"YTM Trigger - check phone is alive"**, runs
-`tools/check-phone.ps1` every hour. It reads the device document's
-`updatedAtMs` and raises an issue when the phone has not checked in for 90
-minutes — six of the app's fifteen-minute polls — then closes that issue itself
-once the phone reappears. Logs to `%LOCALAPPDATA%\ytm-trigger-checkin.log`.
+The verdict is in `tools/health-verdict.mjs`, deliberately free of I/O so it can
+be tested against states the phone has never been in:
+`node tools/health-verdict.test.mjs` is 22 assertions covering every fatal
+branch, the threshold boundary either side, and a phone that has never checked
+in. `tools/daily-health.mjs` is the thin I/O wrapper around it.
 
-That one exists because on 30 Aug the phone was off from 08:00 to 12:25 and
-nothing said so: every other safeguard in this project runs *on the phone*, so a
-phone that is off is a phone that cannot report. Its blind spot is that it runs
-on this PC, so it is silent when this PC is.
+Fatal means one of exactly three things, using the app's own severity language
+where red means "nothing covers this":
 
-Both are deliberately read-only and involve no AI: they never edit the schedule,
-cost no credits, and cannot act on anything by themselves.
+1. no check-in for over 2 hours, against a 15-minute poll;
+2. any of the sixteen health checks reporting `Broken`;
+3. the last self-test failure being newer than the last success.
 
-- They only run while he is logged on, because `gh` reads its token from the
+Orange checks are reported but never fatal — the app is handling those.
+
+Needs `YTM_SERVICE_ACCOUNT` as a repository secret, and optionally
+`MAIL_USERNAME` / `MAIL_PASSWORD` (a Gmail app password). Without the mail
+secrets it opens a GitHub issue instead, which notifies the owner by email
+anyway, and closes it again when the phone recovers.
+
+**The repository is public, so its Actions logs are public.** The workflow
+prints only the titles of what is wrong; the report with details goes to a file
+that only the email or the issue body reads. Worth remembering when adding to it.
+
+**Guidance check — Windows scheduled task, 09:00 every second Sunday.** Runs
+`tools/check-guidance.ps1`, which runs `guidance.mjs --notify` and opens a
+GitHub issue when the yellow cells hold anything. Logs to
+`%LOCALAPPDATA%\ytm-trigger-guidance.log`. Still on the PC because it reads the
+Google Sheet with the local service account, and because guidance waiting a few
+extra days costs nothing.
+
+- It only runs while he is logged on, because `gh` reads its token from the
   Windows credential store, which a task running as SYSTEM cannot reach.
 - Duplicate issues are avoided by listing open issues and matching the title in
   code, **not** by `gh issue list --search`: search is a separate index that lags
@@ -439,10 +457,10 @@ cost no credits, and cannot act on anything by themselves.
 - **`gh` writes its confirmations to stderr.** With
   `$ErrorActionPreference = 'Stop'` PowerShell turns native stderr into a
   terminating error, so a run that had just successfully closed an issue logged
-  `FAILED` and exited 1. Both wrappers now drop to `Continue` around the node
-  call and judge by exit code alone.
-- Remove either with
-  `Unregister-ScheduledTask -TaskName "YTM Trigger - check phone is alive"`.
+  `FAILED` and exited 1. The wrapper drops to `Continue` around the node call and
+  judges by exit code alone.
+- Remove it with
+  `Unregister-ScheduledTask -TaskName "YTM Trigger - check schedule guidance"`.
 
 **`schedule-blocks.mjs` is the only place the schedule is defined.** The device
 builder and the sheet renderer both derive from it. They used to hold separate
