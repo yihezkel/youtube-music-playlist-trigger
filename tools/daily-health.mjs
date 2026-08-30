@@ -18,8 +18,9 @@
 // service-account.json for running it by hand.
 import { readFileSync } from "node:fs";
 import { classify, toMarkdown } from "./health-verdict.mjs";
+import { id } from "./ids.mjs";
 
-const DEVICE_DOC = "users/<USER_ID>/devices/<DEVICE_ID>";
+const DEVICE_DOC = `users/${id("USER_ID")}/devices/${id("DEVICE_ID")}`;
 
 const admin = (await import("firebase-admin")).default;
 const cred = process.env.YTM_SERVICE_ACCOUNT

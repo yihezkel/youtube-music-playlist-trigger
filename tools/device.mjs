@@ -6,10 +6,10 @@
 // be found and changed.
 import admin from "firebase-admin";
 import { readFileSync } from "node:fs";
+import { id } from "./ids.mjs";
 
 /** The config document the app syncs from. */
-export const CONFIG_DOC =
-  "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
+export const CONFIG_DOC = `users/${id("USER_ID")}/devices/${id("DEVICE_ID")}/data/config`;
 
 /**
  * The device document itself, which the phone stamps on every check-in.

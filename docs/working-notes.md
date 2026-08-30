@@ -320,7 +320,9 @@ that form, so this is parked.
 
 ## 7. The Google Sheet
 
-<https://docs.google.com/spreadsheets/d/<SHEET_ID>>
+Its URL is `https://docs.google.com/spreadsheets/d/<SHEET_ID>`, where the id
+comes from `tools/ids.local.json` — see §12. The sheet is private; anonymous
+access redirects to a sign-in page.
 
 Three tabs: **Catalog**, **Schedule**, **Schedule change log**. The
 schedule tab was called "Recommended Schedule" while it was still a proposal;
@@ -411,8 +413,8 @@ Things that will catch you out:
 ### The two watchdogs
 
 **Daily health check — GitHub Actions, `.github/workflows/daily-health.yml`.**
-Runs 06:00 UTC (09:00 Israel), reads the device document, and emails
-<MAIL_TO> when something is fatal. It lives in Actions rather
+Runs 06:00 UTC (09:00 Israel), reads the device document, and emails the address
+in the `MAIL_TO` secret when something is fatal. It lives in Actions rather
 than on the PC because a watchdog on a laptop is silent whenever the laptop is,
 and the thing it most needs to catch — the phone being off — is exactly when
 nothing on the phone can report.
@@ -524,10 +526,18 @@ Links, Media3 session) but **cannot start playback** there, same as YT Music.
 | `tools/.ab-feed-token`, `tools/.ab-cache/` | crawl token and page cache |
 | `web/private-feeds/<token>/` | the generated feeds |
 | `.mcp.json` | the Aleph Beta MCP server |
+| `tools/ids.local.json` | which spreadsheet and which phone; copy `ids.example.json` |
 
-Firestore config doc:
-`users/<USER_ID>/devices/<DEVICE_ID>/data/config`,
-shaped `{revision, json}` — the app applies it only when `revision > applied`.
+Firestore config doc: `users/<USER_ID>/devices/<DEVICE_ID>/data/config`, shaped
+`{revision, json}` — the app applies it only when `revision > applied`. Both ids
+come from `tools/ids.local.json`, or from `YTM_USER_ID` / `YTM_DEVICE_ID` in the
+environment, which is how the GitHub Actions health check gets them.
+
+Those ids are not secrets: the Firestore rules deny every unauthenticated read
+(a bare `GET` of the device document returns 403, verified against the live
+project), so knowing the path grants nothing without a credential. They are kept
+out of the repository because it is public, and there is no reason to hand out
+half of a pair whose other half is a file we already refuse to commit.
 
 **Check the token never reaches a tracked file:**
 `git grep -l $(cat tools/.ab-feed-token) HEAD` should find nothing.

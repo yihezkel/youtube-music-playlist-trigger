@@ -1,0 +1,7 @@
+{
+  "_comment": "Copy to ids.local.json and fill in. That copy is gitignored.",
+
+  "SHEET_ID": "the id in the schedule spreadsheet's URL, between /d/ and /edit",
+  "USER_ID": "the Firebase Auth uid the app signs in as; Firebase console > Authentication",
+  "DEVICE_ID": "the phone's device id, shown on the app's Settings screen"
+}

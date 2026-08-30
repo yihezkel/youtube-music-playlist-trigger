@@ -34,7 +34,11 @@ data class AppSettings(
      *  Diaspora two-day table is used. UI exposes the inverse as
      *  "Use Diaspora dates" so the default-OFF semantics read naturally. */
     val israeliObservance: Boolean = true,
-    /** Where sunset is computed. Defaults to Jerusalem. */
+    /** Where sunset is computed. Defaults to central Jerusalem; set your own
+     *  location in Settings, which is stored in the device config rather than
+     *  compiled in. Precision here barely matters — moving the default two
+     *  kilometres shifts computed sunset by under seven seconds across the
+     *  whole year, against a 40-minute candle-lighting offset. */
     val latitude: Double = 31.7683,
     val longitude: Double = 35.2137,
     /** Minutes before sunset that Shabat / Yom Tov starts (candle lighting). */

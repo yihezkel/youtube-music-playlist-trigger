@@ -375,7 +375,7 @@ when the phone does.
 
 | Watchdog | Where | Runs | Does |
 |---|---|---|---|
-| **Daily health check** | GitHub Actions | 06:00 UTC (09:00 Israel) | Reads the phone's reported state and **emails** `<MAIL_TO>` if anything is fatal |
+| **Daily health check** | GitHub Actions | 06:00 UTC (09:00 Israel) | Reads the phone's reported state and **emails** the `MAIL_TO` address if anything is fatal |
 | **YTM Trigger - check schedule guidance** | Windows scheduled task | 09:00 every second Sunday | Opens a GitHub issue when the yellow cells have something in them |
 
 The daily check runs in Actions rather than on a PC deliberately: a watchdog on
@@ -404,7 +404,9 @@ that has never checked in at all.
 | Secret | Why |
 |---|---|
 | `YTM_SERVICE_ACCOUNT` | The service-account JSON, to read Firestore. Required. |
-| `MAIL_USERNAME`, `MAIL_PASSWORD` | A Gmail address and an [app password](https://myaccount.google.com/apppasswords). Without these it falls back to opening a GitHub issue, which notifies you by email anyway. |
+| `YTM_USER_ID`, `YTM_DEVICE_ID` | Which phone to ask. Required — they are not in the repository (see [Identifiers](#identifiers)). |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | A Gmail address and an [app password](https://myaccount.google.com/apppasswords). |
+| `MAIL_TO` | Where the alert goes. If any of the three mail secrets is missing, the workflow falls back to opening a GitHub issue, which notifies you by email anyway. |
 
 This repository is public, so its Actions logs are public: the workflow prints
 only the *titles* of what is wrong, never the detail, and the report itself goes
@@ -577,6 +579,32 @@ Logs are also **uploaded automatically whenever a self-test fails**, so a breaka
 ### Latency
 
 The phone applies remote changes on its next check-in: at app start, after every trigger and self-test, and on a 15-minute background poll. Commands are therefore not instant. True push would need FCM plus a server component to send it (Cloud Functions requires the paid Blaze plan), which isn't worth it for a personal device — so this deliberately trades a few minutes of latency for zero cost and no backend.
+
+### Identifiers
+
+The tools need to know *which* spreadsheet and *which* phone. Those three ids
+live in `tools/ids.local.json`, which is gitignored:
+
+```sh
+cd tools && cp ids.example.json ids.local.json   # then fill in the three values
+```
+
+| Id | Where to find it |
+|---|---|
+| `SHEET_ID` | In the spreadsheet's URL, between `/d/` and `/edit` |
+| `USER_ID` | The Firebase Auth uid the app signs in as — Firebase console → Authentication |
+| `DEVICE_ID` | Shown on the app's Settings screen |
+
+Each is also readable from the environment as `YTM_SHEET_ID`, `YTM_USER_ID` and
+`YTM_DEVICE_ID`, which is how GitHub Actions supplies them without a file on
+disk. A missing value fails immediately with a message naming it, rather than
+building a path like `users/undefined/devices/…` that fails later and less
+clearly.
+
+They are **not** secrets in the sense that knowing them grants access: the
+Firestore rules deny every unauthenticated read, and the spreadsheet is private.
+They are kept out of the repository because it is public, and there is no reason
+to publish half of a pair whose other half is a key we already refuse to commit.
 
 ### Pulling diagnostics without the phone
 

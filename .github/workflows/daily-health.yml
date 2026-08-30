@@ -30,7 +30,13 @@ jobs:
       # Evaluated once at job level: the secrets context is not reliably
       # available to a step's own `if`, and a step's `env:` block is not in
       # scope for that same step's condition.
-      HAS_MAIL: ${{ secrets.MAIL_PASSWORD != '' && secrets.MAIL_USERNAME != '' }}
+      #
+      # MAIL_TO is part of the gate, not just the mail step. The recipient is
+      # kept in a secret because this repository is public and there is no
+      # reason to publish an address for scrapers; with it in the gate, a
+      # missing value falls through to the issue path instead of sending mail
+      # to nobody and reporting success.
+      HAS_MAIL: ${{ secrets.MAIL_PASSWORD != '' && secrets.MAIL_USERNAME != '' && secrets.MAIL_TO != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,9 +53,17 @@ jobs:
         working-directory: tools
         env:
           YTM_SERVICE_ACCOUNT: ${{ secrets.YTM_SERVICE_ACCOUNT }}
+          # Which phone to ask. Kept in secrets rather than in the repository:
+          # they unlock nothing by themselves, but this repo is public.
+          YTM_USER_ID: ${{ secrets.YTM_USER_ID }}
+          YTM_DEVICE_ID: ${{ secrets.YTM_DEVICE_ID }}
         run: |
           if [ -z "$YTM_SERVICE_ACCOUNT" ]; then
             echo "::error::YTM_SERVICE_ACCOUNT is not set. Add the service-account JSON as a repository secret."
+            exit 1
+          fi
+          if [ -z "$YTM_USER_ID" ] || [ -z "$YTM_DEVICE_ID" ]; then
+            echo "::error::YTM_USER_ID and YTM_DEVICE_ID must both be set. See tools/ids.example.json."
             exit 1
           fi
           # The report goes to a file, never to the log: this repository is
@@ -73,7 +87,7 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           from: YTM Trigger watchdog
-          to: <MAIL_TO>
+          to: ${{ secrets.MAIL_TO }}
           subject: 'YTM Trigger needs attention'
           body: file://tools/report.md
           convert_markdown: true

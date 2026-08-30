@@ -14,9 +14,10 @@
 // That is a real difference, not duplication, and flattening it would lose the
 // distinction.
 import { GoogleAuth } from "google-auth-library";
+import { id } from "./ids.mjs";
 
-/** The household's schedule spreadsheet. */
-export const SHEET_ID = "<SHEET_ID>";
+/** The household's schedule spreadsheet. Supplied per-checkout; see ids.mjs. */
+export const SHEET_ID = id("SHEET_ID");
 
 /** Tab names, so a rename is one edit rather than a search. */
 export const TAB = {

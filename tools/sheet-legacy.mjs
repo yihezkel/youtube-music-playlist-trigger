@@ -25,8 +25,7 @@ throw new Error(
 /* eslint-disable no-unreachable */
 import { GoogleAuth } from "google-auth-library";
 import { writeFileSync } from "node:fs";
-
-const ID = "<SHEET_ID>";
+import { SHEET_ID as ID } from "./sheets.mjs";
 const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
 const client = await auth.getClient();
 const get = (r) => client.request({ url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}/values/${encodeURIComponent(r)}` });

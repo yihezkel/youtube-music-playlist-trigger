@@ -36,6 +36,12 @@ app/google-services.json
 # Service-account private key for the log fetcher, and whatever it pulls down.
 # The key grants admin access to the Firebase project — never commit it.
 tools/service-account.json
+
+# Which spreadsheet and which phone. Not secrets on their own — the Firestore
+# rules and the sheet's sharing both deny anonymous access — but this repo is
+# public, so there is no reason to publish the other half of the pair.
+# Copy tools/ids.example.json to get started.
+tools/ids.local.json
 tools/node_modules/
 .remote-logs/
 

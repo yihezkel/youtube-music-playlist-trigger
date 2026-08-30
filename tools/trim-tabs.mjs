@@ -8,8 +8,7 @@
 // columns are NOT deleted as columns, because on that tab columns E and F are
 // Thursday and Friday of the grid - only the lower rows carried notes.
 import { GoogleAuth } from "google-auth-library";
-
-const ID = "<SHEET_ID>";
+import { SHEET_ID as ID } from "./sheets.mjs";
 const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
 const client = await auth.getClient();
 const api = (m, u, d) => client.request({ method: m, url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${u}`, data: d });

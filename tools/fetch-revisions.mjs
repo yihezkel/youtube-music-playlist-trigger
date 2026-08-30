@@ -5,8 +5,7 @@
 // approximate history, not a complete one.
 import { GoogleAuth } from "google-auth-library";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-
-const ID = "<SHEET_ID>";
+import { SHEET_ID as ID } from "./sheets.mjs";
 const OUT = "C:/Users/yischoen/.copilot/session-state/7b7cab1a-e3ed-4d93-8833-3f514326952c/files/revisions";
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
