@@ -416,18 +416,33 @@ A Windows scheduled task, **"YTM Trigger - check schedule guidance"**, runs
 pending on the schedule sheet"* when anything is waiting, and does nothing at
 all when nothing is. It logs to `%LOCALAPPDATA%\ytm-trigger-guidance.log`.
 
-It is deliberately read-only and involves no AI: it never edits the schedule,
-costs no credits, and cannot act on guidance by itself. Reworking the schedule
-stays something Jason asks for.
+A second task, **"YTM Trigger - check phone is alive"**, runs
+`tools/check-phone.ps1` every hour. It reads the device document's
+`updatedAtMs` and raises an issue when the phone has not checked in for 90
+minutes — six of the app's fifteen-minute polls — then closes that issue itself
+once the phone reappears. Logs to `%LOCALAPPDATA%\ytm-trigger-checkin.log`.
 
-- It only runs while he is logged on, because `gh` reads its token from the
+That one exists because on 30 Aug the phone was off from 08:00 to 12:25 and
+nothing said so: every other safeguard in this project runs *on the phone*, so a
+phone that is off is a phone that cannot report. Its blind spot is that it runs
+on this PC, so it is silent when this PC is.
+
+Both are deliberately read-only and involve no AI: they never edit the schedule,
+cost no credits, and cannot act on anything by themselves.
+
+- They only run while he is logged on, because `gh` reads its token from the
   Windows credential store, which a task running as SYSTEM cannot reach.
 - Duplicate issues are avoided by listing open issues and matching the title in
   code, **not** by `gh issue list --search`: search is a separate index that lags
   creation by seconds to minutes, so a second run soon after the first did not
   see the issue it had just opened.
-- Remove it with
-  `Unregister-ScheduledTask -TaskName "YTM Trigger - check schedule guidance"`.
+- **`gh` writes its confirmations to stderr.** With
+  `$ErrorActionPreference = 'Stop'` PowerShell turns native stderr into a
+  terminating error, so a run that had just successfully closed an issue logged
+  `FAILED` and exited 1. Both wrappers now drop to `Continue` around the node
+  call and judge by exit code alone.
+- Remove either with
+  `Unregister-ScheduledTask -TaskName "YTM Trigger - check phone is alive"`.
 
 **`schedule-blocks.mjs` is the only place the schedule is defined.** The device
 builder and the sheet renderer both derive from it. They used to hold separate

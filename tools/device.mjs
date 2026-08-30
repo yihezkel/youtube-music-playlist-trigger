@@ -11,6 +11,14 @@ import { readFileSync } from "node:fs";
 export const CONFIG_DOC =
   "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
 
+/**
+ * The device document itself, which the phone stamps on every check-in.
+ *
+ * Its `json` field carries the state the console shows - health checks, recent
+ * failures, playback state - and `updatedAtMs` says when the phone last spoke.
+ */
+export const DEVICE_DOC = CONFIG_DOC.replace(/\/data\/config$/, "");
+
 let app = null;
 
 /** The Firestore handle, initialised once however many callers ask for it. */

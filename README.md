@@ -367,10 +367,37 @@ as history instead of being deleted. Catalog guidance is keyed to the show and f
 that re-sorts; Schedule guidance is positional, which is why a section's row count must not
 change.
 
-A Windows scheduled task, **"YTM Trigger - check schedule guidance"**, runs this check at
-09:00 every second Sunday and opens a GitHub issue if anything is waiting. It is read-only
-and involves no AI: it never edits the schedule, so a request is noticed rather than acted
-on unattended.
+### Two watchdogs
+
+Both are Windows scheduled tasks, both read-only, and neither involves AI: they
+cost nothing, cannot edit anything, and exist only so a problem is noticed.
+
+| Task | Runs | Does |
+|---|---|---|
+| **YTM Trigger - check schedule guidance** | 09:00 every second Sunday | `tools/guidance.mjs --notify` — opens a GitHub issue when the yellow cells have something in them |
+| **YTM Trigger - check phone is alive** | hourly | `tools/checkin.mjs --notify` — opens a GitHub issue when the phone has not checked in for 90 minutes, and **closes it again** when the phone comes back |
+
+The second exists because of 30 August. The phone was off from 08:00 to 12:25;
+block B fired at 08:00, played one episode and then nothing happened for four
+and a half hours. Every other safeguard here runs *on the phone* — the health
+checks, the failure log, the self-test alert — so a phone that is off reports
+nothing at all. Nobody noticed until it was plugged back in. Ninety minutes is
+six of the app's fifteen-minute polls: long enough that a sleeping phone will
+not trip it, short enough to catch a morning like that one within the hour.
+
+They log to `%LOCALAPPDATA%\ytm-trigger-guidance.log` and
+`…\ytm-trigger-checkin.log`.
+
+- Both run only while you are logged on, because `gh` reads its token from the
+  Windows credential store, which a task running as SYSTEM cannot reach. They
+  also need this PC to be on — a watchdog on the same desk has its own blind
+  spot.
+- Duplicate issues are avoided by listing open issues and matching the title in
+  code, **not** by `gh issue list --search`: search is a separate index that lags
+  creation, so a second run soon after the first would not see the issue it had
+  just opened.
+- Remove either with
+  `Unregister-ScheduledTask -TaskName "YTM Trigger - check phone is alive"`.
 
 ### The same schedule on Google Home
 
