@@ -4,18 +4,15 @@
 // shows play back to back until the stop. Episode lengths vary threefold within
 // a single show, so per-episode times cannot fill a window continuously.
 import { readFileSync } from "node:fs";
-import { GoogleAuth } from "google-auth-library";
+import { sheetsApi } from "./sheets.mjs";
 
-const ID = "<SHEET_ID>";
 const TAB = "Schedule";
 /** What the tab was called before; renamed in place on the next run. */
 const PREVIOUS_TAB = "Recommended Schedule";
 const stats = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 const legacy = JSON.parse(readFileSync("sheet-legacy.json", "utf8"));
 
-const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
-const client = await auth.getClient();
-const api = (m, u, d) => client.request({ method: m, url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${u}`, data: d });
+const api = await sheetsApi();
 
 const find = (n) => stats.find((s) => s.name === n) || stats.find((s) => s.name.startsWith(n));
 const mins = (n) => find(n)?.durMedian ?? PRIVATE_MEDIAN[n] ?? null;

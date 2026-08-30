@@ -4,9 +4,8 @@
 // re-applied before the tab is rebuilt. That column is the user's, not the
 // generator's, and losing it on a refresh would be a data-loss bug.
 import { readFileSync } from "node:fs";
-import { GoogleAuth } from "google-auth-library";
+import { sheetsApi } from "./sheets.mjs";
 
-const ID = "<SHEET_ID>";
 const TAB = "Catalog";
 // Renamed twice: an early misspelling, then "Podcast Catalog", which stopped
 // being true when the YouTube Music playlists were added.
@@ -36,9 +35,7 @@ const rows = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
   if (stale) console.log(`refreshed ${stale} row(s) from the master list`);
 }
 
-const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
-const client = await auth.getClient();
-const api = (method, url, data) => client.request({ method, url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${url}`, data });
+const api = await sheetsApi();
 
 const norm = (s) => String(s).toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 

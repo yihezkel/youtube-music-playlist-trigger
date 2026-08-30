@@ -4,14 +4,14 @@
 //   node push-config.mjs test    - add a silent 2-entry queue for verification
 //   node push-config.mjs clean   - remove the test schedule again
 import admin from "firebase-admin";
+import { CONFIG_DOC } from "./device.mjs";
 import { readFileSync } from "node:fs";
 
-const DOC = "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
 const TORAH = "https://rss.buzzsprout.com/1566434.rss";
 
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync("./service-account.json", "utf8"))) });
 const db = admin.firestore();
-const ref = db.doc(DOC);
+const ref = db.doc(CONFIG_DOC);
 
 const snap = await ref.get();
 const cfg = JSON.parse(snap.get("json"));

@@ -5,12 +5,9 @@
 // The columns are at different letters because each hugs the right edge of its
 // own section and the sections are different widths, so this works from the
 // guidance headers rather than from fixed positions.
-import { GoogleAuth } from 'google-auth-library';
+import { sheetsApi } from './sheets.mjs';
 
-const ID = '<SHEET_ID>';
-const auth = new GoogleAuth({ keyFile: 'service-account.json', scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
-const client = await auth.getClient();
-const api = (m, u, d) => client.request({ method: m, url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${u}`, data: d });
+const api = await sheetsApi();
 
 const col = (i) => String.fromCharCode(65 + i);
 const meta = (await api('GET', '?fields=sheets.properties')).data;

@@ -11,13 +11,12 @@
 // This only ever reads the sheet. Applying guidance changes the schedule, which
 // is a judgement call, so it stays a thing a person asks for in a chat; see
 // archive-guidance.mjs for the bookkeeping half once a change has been made.
-import { GoogleAuth } from "google-auth-library";
 import { execSync } from "node:child_process";
 import { writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { colName, sheetsApi } from "./sheets.mjs";
 
-const ID = "<SHEET_ID>";
 const HEADER = "change guidance from us";
 
 /**
@@ -35,13 +34,10 @@ const isHeader = (row, c) =>
   c > 0 &&
   String(row[c - 1] ?? "").trim() !== "";
 
-const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
-const client = await auth.getClient();
-const api = (u) => client.request({ url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${u}` });
-
-const colName = (i) => (i < 26
-  ? String.fromCharCode(65 + i)
-  : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26)));
+const sheets = await sheetsApi();
+// This script only ever reads, so the method is fixed here and the call sites
+// stay as short as they were.
+const api = (u) => sheets("GET", u);
 
 /**
  * The label for a row, used to say what a piece of guidance is about.

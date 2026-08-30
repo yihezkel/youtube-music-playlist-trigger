@@ -2,10 +2,11 @@
 // playlists in the catalog are the ones the app actually holds rather than a
 // hand-copied list that will drift.
 import admin from 'firebase-admin';
+import { CONFIG_DOC } from "./device.mjs";
 import { readFileSync, writeFileSync } from 'node:fs';
 
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync('./service-account.json', 'utf8'))) });
-const snap = await admin.firestore().doc('users/<USER_ID>/devices/<DEVICE_ID>/data/config').get();
+const snap = await admin.firestore().doc(CONFIG_DOC).get();
 const cfg = JSON.parse(snap.get('json'));
 
 const byId = new Map();

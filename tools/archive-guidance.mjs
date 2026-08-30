@@ -11,9 +11,7 @@
 //
 // Guidance is only cleared once it has been carried across, so a failure
 // half way leaves the text somewhere rather than nowhere.
-import { GoogleAuth } from "google-auth-library";
-
-const ID = "<SHEET_ID>";
+import { colIndex, colName, sheetsApi } from "./sheets.mjs";
 
 // Applied guidance goes into the cell immediately to the right, in the same
 // row. That holds everywhere: the catalog's guidance in column E is followed by
@@ -24,15 +22,7 @@ const ID = "<SHEET_ID>";
 // fixed positions.
 const NOTES_OFFSET = 1;
 
-const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
-const client = await auth.getClient();
-const api = (m, u, d) => client.request({ method: m, url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${u}`, data: d });
-
-const colName = (i) => (i < 26
-  ? String.fromCharCode(65 + i)
-  : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26)));
-
-const colIndex = (s) => [...s].reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0) - 1;
+const api = await sheetsApi();
 
 const dry = process.argv.includes("--dry-run");
 let cells = process.argv.slice(2).filter((a) => !a.startsWith("--"));

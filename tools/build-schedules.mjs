@@ -5,9 +5,9 @@
 //   node build-schedules.mjs        - show what would be pushed
 //   node build-schedules.mjs push   - write it
 import admin from "firebase-admin";
+import { CONFIG_DOC } from "./device.mjs";
 import { readFileSync } from "node:fs";
 
-const DOC = "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
 const stats = JSON.parse(readFileSync("podcast-stats.json", "utf8"));
 
 import { BLOCKS, FILTERED_MEDIAN, MIN_MINUTES, MODE, MUSIC, isPlaylist, playlistName, queues } from "./schedule-blocks.mjs";
@@ -59,7 +59,7 @@ const median = (name) => {
 const PRIVATE_MEDIAN = { "Aleph Beta": 36 };
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync("./service-account.json", "utf8"))) });
 const db = admin.firestore();
-const ref = db.doc(DOC);
+const ref = db.doc(CONFIG_DOC);
 const snap = await ref.get();
 const cfg = JSON.parse(snap.get("json"));
 const revision = Number(snap.get("revision") || 0);

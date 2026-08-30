@@ -7,10 +7,10 @@
 //                                    resume position is saved
 //   node test-schedule.mjs clean
 import admin from "firebase-admin";
+import { CONFIG_DOC } from "./device.mjs";
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 
-const DOC = "users/<USER_ID>/devices/<DEVICE_ID>/data/config";
 const TORAH = "https://rss.buzzsprout.com/1566434.rss";     // ~108s episodes
 const SHORTWAVE = "https://feeds.npr.org/510351/podcast.xml"; // ~13 min episodes
 const NAME = "ZZ QueueTest";
@@ -23,7 +23,7 @@ const length = Number(process.argv[4] ?? 5); // block length in minutes
 
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync("./service-account.json", "utf8"))) });
 const db = admin.firestore();
-const ref = db.doc(DOC);
+const ref = db.doc(CONFIG_DOC);
 const snap = await ref.get();
 const cfg = JSON.parse(snap.get("json"));
 const revision = Number(snap.get("revision") || 0);

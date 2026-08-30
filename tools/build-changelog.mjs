@@ -6,18 +6,15 @@
 // snapshots - so those dates are "on or before", and many changes will have
 // happened between milestones and be invisible.
 import { readFileSync } from "node:fs";
-import { GoogleAuth } from "google-auth-library";
+import { sheetsApi } from "./sheets.mjs";
 
-const ID = "<SHEET_ID>";
 const TAB = "Schedule change log";
 const TODAY = "2026-08-26";
 
 const legacy = JSON.parse(readFileSync("sheet-legacy.json", "utf8"));
 const { changes: historic } = JSON.parse(readFileSync("revision-changes.json", "utf8"));
 
-const auth = new GoogleAuth({ keyFile: "./service-account.json", scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
-const client = await auth.getClient();
-const api = (m, u, d) => client.request({ method: m, url: `https://sheets.googleapis.com/v4/spreadsheets/${ID}${u}`, data: d });
+const api = await sheetsApi();
 
 // --- reasons the user wrote, keyed loosely by show name ----------------------
 const norm = (s) => String(s).toLowerCase().replace(/\(.*?\)/g, " ")
