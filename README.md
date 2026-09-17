@@ -375,11 +375,21 @@ when the phone does.
 
 | Watchdog | Where | Runs | Does |
 |---|---|---|---|
-| **Daily health check** | GitHub Actions | 06:00 UTC (09:00 Israel) | Reads the phone's reported state and **emails** the `MAIL_TO` address if anything is fatal |
+| **Daily health check** | GitHub Actions | 06:00 UTC (09:00 Israel) | Reads the phone's reported state; if anything is fatal, opens a tracking issue and **emails** the `MAIL_TO` address |
 | **YTM Trigger - check schedule guidance** | Windows scheduled task | 09:00 every second Sunday | Opens a GitHub issue when the yellow cells have something in them |
 
 The daily check runs in Actions rather than on a PC deliberately: a watchdog on
-a laptop is silent whenever the laptop is. It only ever reads Firestore.
+a laptop is silent whenever the laptop is. It only ever reads Firestore — the
+service account it uses holds `roles/datastore.viewer`, verified by attempting a
+write and being refused, so it cannot alter the schedule even if it wanted to.
+
+**It does not repeat itself daily.** A fault that lasts a fortnight would
+otherwise send a fortnight of identical mail — the phone really was off for
+14 days in September 2026. So it alerts on the first day and then every third
+day while the fault persists. The tracking issue *is* that timer: it is open
+exactly while something is wrong, so a new fault always finds no open issue and
+alerts at once, and only the bot's own comments count towards the interval.
+Change the cadence with `REPEAT_DAYS` in the workflow.
 
 **"Fatal" is narrow**, and borrows the app's own severity language — red means
 nothing covers it, so a block will be missed or silent. Exactly three things
@@ -392,7 +402,7 @@ qualify:
    so playback has stopped working and has not recovered.
 
 An orange check is reported but is not fatal: the app is already handling it.
-The issue, if one is used, closes itself once the phone is healthy again.
+The tracking issue closes itself once the phone is healthy again.
 
 Its logic lives in `tools/health-verdict.mjs` with no I/O, so it can be tested
 against states the phone has never been in — `node tools/health-verdict.test.mjs`,

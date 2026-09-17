@@ -419,6 +419,14 @@ than on the PC because a watchdog on a laptop is silent whenever the laptop is,
 and the thing it most needs to catch — the phone being off — is exactly when
 nothing on the phone can report.
 
+It alerts on the first day and then only every third day (`REPEAT_DAYS`) while
+the same fault persists, because the phone was off for 14 days in September 2026
+and daily mail would have meant 14 identical messages. The tracking issue is the
+timer rather than any stored state: open exactly while something is wrong, so a
+new fault finds no open issue and alerts immediately, and the reset costs
+nothing. Only comments authored by `github-actions` count towards the interval,
+so a human reply does not read as the watchdog repeating itself.
+
 The verdict is in `tools/health-verdict.mjs`, deliberately free of I/O so it can
 be tested against states the phone has never been in:
 `node tools/health-verdict.test.mjs` is 22 assertions covering every fatal

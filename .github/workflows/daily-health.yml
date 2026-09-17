@@ -77,8 +77,55 @@ jobs:
           # Titles only, no detail - safe for a public log.
           cat summary.txt
 
+      # A fault that lasts a fortnight should not send a fortnight of identical
+      # mail. The rule is: speak up on the first day, then every third day for
+      # as long as it is still broken.
+      #
+      # The issue IS the timer, which is why there is no state file, cache or
+      # artifact here. It is open exactly while something is wrong and closed
+      # the moment it clears, so a brand-new fault always finds no open issue
+      # and alerts immediately - the reset is free, and a stale timer cannot
+      # silence the first day of a different problem.
+      #
+      # Only the bot's own comments count towards the interval. A reply from a
+      # human is not the watchdog saying the same thing again.
+      - name: Decide whether to speak, and keep the record
+        id: alert
+        if: steps.check.outputs.fatal == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPEAT_DAYS: '3'
+        run: |
+          TITLE="YTM Trigger needs attention"
+          NUM=$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$TITLE\")] | .[0].number // empty")
+
+          if [ -z "$NUM" ]; then
+            URL=$(gh issue create --title "$TITLE" --body-file tools/report.md)
+            echo "opened ${URL##*/}"
+            SPEAK=true
+          else
+            LAST=$(gh issue view "$NUM" --json comments \
+              --jq '[.comments[] | select(.author.login | startswith("github-actions")) | .createdAt] | last // empty')
+            [ -n "$LAST" ] || LAST=$(gh issue view "$NUM" --json createdAt --jq .createdAt)
+            AGE=$(( ( $(date -u +%s) - $(date -u -d "$LAST" +%s) ) / 86400 ))
+            if [ "$AGE" -ge "$REPEAT_DAYS" ]; then
+              gh issue comment "$NUM" --body-file tools/report.md
+              echo "still broken after ${AGE}d; commented on #$NUM"
+              SPEAK=true
+            else
+              echo "already reported ${AGE}d ago on #$NUM; staying quiet"
+              SPEAK=false
+            fi
+          fi
+
+          echo "speak=$SPEAK" >> "$GITHUB_OUTPUT"
+          if [ "$SPEAK" = "true" ] && [ "${HAS_MAIL}" != "true" ]; then
+            echo "::warning::No mail secrets set, so the issue above is the only alert."
+          fi
+
       - name: Email the report
-        if: steps.check.outputs.fatal == 'true' && env.HAS_MAIL == 'true'
+        if: steps.check.outputs.fatal == 'true' && steps.alert.outputs.speak == 'true' && env.HAS_MAIL == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -91,25 +138,6 @@ jobs:
           subject: 'YTM Trigger needs attention'
           body: file://tools/report.md
           convert_markdown: true
-
-      # Without mail secrets there is still a way to reach him: an issue on this
-      # repository notifies its owner by email. It also leaves a record of what
-      # was wrong and when, which an email alone does not.
-      - name: Open an issue instead
-        if: steps.check.outputs.fatal == 'true' && env.HAS_MAIL != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "::warning::No mail secrets set, so this is reported as an issue instead."
-          TITLE="YTM Trigger needs attention"
-          EXISTING=$(gh issue list --state open --limit 100 --json number,title \
-            --jq "[.[] | select(.title == \"$TITLE\")] | .[0].number // empty")
-          if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body-file tools/report.md
-            echo "commented on #$EXISTING"
-          else
-            gh issue create --title "$TITLE" --body-file tools/report.md
-          fi
 
       # A problem that has cleared should not leave an open alarm behind.
       - name: Close the issue when all is well
