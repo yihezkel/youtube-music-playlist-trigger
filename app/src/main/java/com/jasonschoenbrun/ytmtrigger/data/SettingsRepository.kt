@@ -84,7 +84,14 @@ class SettingsRepository private constructor(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _flow = MutableStateFlow(AppSettings())
     val flow: StateFlow<AppSettings> = _flow.asStateFlow()
-    private val json = Json { ignoreUnknownKeys = true }
+    // encodeDefaults matters here, and its absence was a real bug rather than a
+    // style point. Without it kotlinx omits any property that happens to equal
+    // its declared default, so the value never reaches disk and the *compiled*
+    // default silently becomes the stored one. Changing a default in this file
+    // then changes existing installs: the home coordinates moved by 2 km on an
+    // upgrade in September 2026, shifting candle lighting by five seconds, and
+    // nothing re-applied the remote config because its revision had not moved.
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     init {
         runBlocking {

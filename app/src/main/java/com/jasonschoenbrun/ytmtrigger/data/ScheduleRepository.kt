@@ -25,7 +25,11 @@ class ScheduleRepository private constructor(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _flow = MutableStateFlow<List<Schedule>>(emptyList())
     val flow: StateFlow<List<Schedule>> = _flow.asStateFlow()
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
+    // encodeDefaults for the same reason as SettingsRepository: without it a
+    // field equal to its default is dropped on write and silently re-acquires
+    // whatever the default is at *read* time, so changing a default in
+    // Schedule.kt would quietly rewrite schedules already on the device.
+    private val json = Json { ignoreUnknownKeys = true; prettyPrint = false; encodeDefaults = true }
 
     /**
      * Serializes every read-modify-write below.

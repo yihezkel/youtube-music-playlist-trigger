@@ -268,6 +268,21 @@ Facts that are easy to get wrong:
   `MusicEndWatcher` also has to check the pause flag: paused and "the playlist
   ran out" are indistinguishable from outside, and without the check pausing
   music would skip to the next entry within five minutes.
+- **Settings and schedules are stored as one serialized JSON blob each, and
+  `encodeDefaults` must stay on.** kotlinx omits any property equal to its
+  declared default, so without the flag a value that merely *matches* the
+  compiled default never reaches disk, and the compiled default silently
+  becomes the stored value at read time. That is not theoretical: changing the
+  default coordinates in `SettingsRepository.kt` moved the home location by
+  2 km on the next upgrade, shifting Friday candle lighting by five seconds,
+  even though the remote config had carried the right coordinates all along.
+  Nothing corrected it because `applyConfig` only runs when
+  `revision > applied`, and the revision had not moved. `RemoteSync` already
+  set the flag; the two repositories that persist to disk did not.
+  **Changing a default in `AppSettings` or `Schedule` changes existing
+  installs** unless the stored blob names that field — and after this fix it
+  does, so new writes are explicit. If you ever do need a default changed on a
+  device, bump the config revision to force a re-apply.
 
 ---
 
