@@ -246,6 +246,29 @@ clock, and nothing plays on Shabat or Yom Tov.
 - **Setup checklist + diagnostics** with vendor-specific advice (Samsung, Xiaomi, Huawei,
   Oppo, Vivo, OnePlus, Pixel) for "Sleeping apps" / "Auto-launch" / "Protected apps" systems.
 
+### Pausing and resuming
+
+The podcast player publishes a standard Android `MediaSession` advertising
+`PLAY`, `PAUSE`, `STOP` and `PLAY_PAUSE`, so **anything that speaks the ordinary
+media-control protocol can pause and resume a block**, not just this app's own
+buttons. Four routes, in rough order of convenience:
+
+| Route | How | Notes |
+|---|---|---|
+| **Voice** | "Hey Google, pause" / "Hey Google, resume" spoken **to the phone** | Needs "Hey Google" enabled on the phone. Assistant acts on whichever media session is active, so it covers podcasts and YouTube Music alike. |
+| **A Bluetooth remote or headset button** | Pair a cheap media remote; its play/pause button is `KEYCODE_MEDIA_PLAY_PAUSE` | No code, no network, works anywhere in Bluetooth range. The most reliable option if the phone is out of earshot. |
+| **The app** | **Pause** / **Stop** on the home screen, or the home-screen widget | Immediate, but you have to be at the phone. |
+| **The web console** | Pause / resume / stop from a browser | Subject to the check-in latency described under [Latency](#latency) — minutes, not seconds. |
+
+Pause is not stop: the episode, its position and its place in the block's queue
+all survive, so resuming continues where it left off. Verified on the device —
+a media-pause at 55.6 s resumed at 55.8 s.
+
+**A Google Home speaker cannot pause the phone.** Assistant on a speaker
+controls that speaker's own playback or a cast session; it has no route to
+another device's local playback. Casting the app's audio to the speaker would
+give speaker-side voice control, and is the only thing that would.
+
 ## Screen lock
 
 **Podcasts play with the phone locked. YouTube Music does not.** This is a
@@ -428,12 +451,32 @@ reads its token from the Windows credential store.
 
 ### The same schedule on Google Home
 
+> **They do not currently play anything.** Google acknowledged in January 2026
+> that automations built in the script editor fire but their media commands
+> execute silently, and no fix has shipped. Measured here on 18 September 2026:
+> the Activity feed logs "Routine started", and the speaker reports "Nothing
+> playing" — twice, and again for an automation built in the **visual** editor
+> with its native *Play podcast* action, so it is not specific to the YAML. The
+> automations below are correct and will start working when Google fixes it;
+> until then the app is the only thing actually playing the schedule.
+
 `tools/google-home-automations.mjs` generates
 [`tools/google-home-automations.yaml`](tools/google-home-automations.yaml) from the same
 source, for the Google Home **script editor** (Public Preview, at
 [home.google.com/automations](https://home.google.com/automations)). Paste each numbered
 section as its own automation — the editor takes one `metadata` + one `automations` block
-per script — and replace the `SPEAKER NAME - ROOM` placeholder.
+per script — and replace the `SPEAKER NAME - ROOM` placeholder, or set
+`YTM_HOME_SPEAKER` before generating so the file comes out ready to paste.
+
+Three things about that placeholder are easy to get wrong, and each one saves an
+automation that then silently never runs:
+
+- **`devices` is a list**, not a scalar — `devices:` then `- Name - Room`.
+- **The room is the room as the Home app names it.** Read it off the *All
+  devices* tab rather than assuming; a speaker "downstairs" may sit in a room
+  called `Downstairs`, not `Living room`.
+- **Quote the spoken command.** A show called `18Forty - Exploring Big Jewish
+  Ideas` breaks an unquoted plain scalar.
 
 It is an approximation on purpose, and the gaps are the point:
 
