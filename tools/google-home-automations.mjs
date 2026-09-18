@@ -25,7 +25,16 @@ const norm = (s) => String(s).toLowerCase().replace(/\(.*?\)/g, " ")
 // a guess that fails is silence in a kitchen.
 const provenOnHome = new Set(Object.keys(legacy.slots || {}).map(norm));
 
-const SPEAKER = "SPEAKER NAME - ROOM";
+// The target speaker, as the Home app names it: "Name - Room". Supplied per
+// household rather than committed, so this repository does not carry someone's
+// device list. The placeholder is what an unconfigured run emits, which is also
+// what the header tells the reader to replace.
+//
+// Both halves are case-sensitive and must match the Home app exactly. Read the
+// room off the "All devices" tab rather than assuming: the speaker downstairs
+// sits in a room called "Downstairs", not "Living room", and the wrong room is
+// not a warning - it saves as an automation with an error and will not run.
+const SPEAKER = process.env.YTM_HOME_SPEAKER || "SPEAKER NAME - ROOM";
 const DAY = { 7: "SUN", 1: "MON", 2: "TUE", 3: "WED", 4: "THU", 5: "FRI", 6: "SAT" };
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
@@ -122,8 +131,14 @@ for (const block of BLOCKS) {
     for (const d of days) out(`    - ${DAY[d]}`);
     out(`  actions:`);
     out(`  - type: assistant.command.OkGoogle`);
-    out(`    okGoogle: Play ${candidate} on ${SPEAKER.split(" - ")[0]}`);
-    out(`    devices: ${SPEAKER}`);
+    // Quoted deliberately. One show is called "18Forty - Exploring Big Jewish
+    // Ideas", and unquoted that phrase makes the script editor reject the
+    // automation - it saves with an error and never runs, with no hint that
+    // the show name was the cause. Quoting every command removes the whole
+    // class, including the title ending in a question mark.
+    out(`    okGoogle: "Play ${candidate} on ${SPEAKER.split(" - ")[0]}"`);
+    out(`    devices:`);
+    out(`    - ${SPEAKER}`);
     out();
 
     if (block.stop != null) {
@@ -141,7 +156,8 @@ for (const block of BLOCKS) {
       out(`  actions:`);
       out(`  - type: assistant.command.OkGoogle`);
       out(`    okGoogle: Stop`);
-      out(`    devices: ${SPEAKER}`);
+      out(`    devices:`);
+      out(`    - ${SPEAKER}`);
       out();
     }
   }
