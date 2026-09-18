@@ -64,6 +64,11 @@ automations:
     okGoogle: "Play TorahAnytime Daily Dose on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 2. A Morning Launch - stop ===========================
 metadata:
@@ -100,6 +105,11 @@ automations:
     okGoogle: "Play The Mindset Mentor on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 4. B Sarah Sun - stop ================================
 metadata:
@@ -130,6 +140,11 @@ automations:
   actions:
   - type: assistant.command.OkGoogle
     okGoogle: "Play The Mindset Mentor on SPEAKER NAME"
+    devices:
+    - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
     devices:
     - SPEAKER NAME - ROOM
 
@@ -164,6 +179,11 @@ automations:
     okGoogle: "Play The Mindset Mentor on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 8. B Sarah Tue - stop ================================
 metadata:
@@ -196,6 +216,11 @@ automations:
     okGoogle: "Play The Mindset Mentor on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 10. B Sarah Wed - stop ================================
 metadata:
@@ -226,6 +251,11 @@ automations:
   actions:
   - type: assistant.command.OkGoogle
     okGoogle: "Play The Mindset Mentor on SPEAKER NAME"
+    devices:
+    - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
     devices:
     - SPEAKER NAME - ROOM
 
@@ -266,6 +296,11 @@ automations:
     okGoogle: "Play Who Smarted? on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 14. C Landing - stop ==================================
 metadata:
@@ -302,6 +337,11 @@ automations:
     okGoogle: "Play SciShow Tangents on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 16. D Family Sun - stop ===============================
 metadata:
@@ -332,6 +372,11 @@ automations:
   actions:
   - type: assistant.command.OkGoogle
     okGoogle: "Play Jews You Should Know on SPEAKER NAME"
+    devices:
+    - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
     devices:
     - SPEAKER NAME - ROOM
 
@@ -366,6 +411,11 @@ automations:
     okGoogle: "Play SciShow Tangents on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 20. D Family Tue - Rabbi Breitowitz - stop ============
 metadata:
@@ -396,6 +446,11 @@ automations:
   actions:
   - type: assistant.command.OkGoogle
     okGoogle: "Play Stuff You Should Know on SPEAKER NAME"
+    devices:
+    - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
     devices:
     - SPEAKER NAME - ROOM
 
@@ -430,6 +485,11 @@ automations:
     okGoogle: "Play Behind the Bima on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 24. D Family Thu - Rabbi Breitowitz - stop ============
 metadata:
@@ -462,6 +522,11 @@ automations:
     okGoogle: "Play Orthodox Conundrum on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 26. E Teen Mon ========================================
 metadata:
@@ -476,6 +541,11 @@ automations:
   actions:
   - type: assistant.command.OkGoogle
     okGoogle: "Play The School of Greatness on SPEAKER NAME"
+    devices:
+    - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
     devices:
     - SPEAKER NAME - ROOM
 
@@ -494,6 +564,11 @@ automations:
     okGoogle: "Play 18Forty - Exploring Big Jewish Ideas on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 28. E Teen Wed ========================================
 metadata:
@@ -510,6 +585,11 @@ automations:
     okGoogle: "Play TED Talks Daily on SPEAKER NAME"
     devices:
     - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
+    devices:
+    - SPEAKER NAME - ROOM
 
 # ===== 29. E Teen Thu ========================================
 metadata:
@@ -524,6 +604,11 @@ automations:
   actions:
   - type: assistant.command.OkGoogle
     okGoogle: "Play TED Talks Daily on SPEAKER NAME"
+    devices:
+    - SPEAKER NAME - ROOM
+  - type: time.delay
+    for: 15sec
+  - type: device.command.MediaResume
     devices:
     - SPEAKER NAME - ROOM
 

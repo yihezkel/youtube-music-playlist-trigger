@@ -451,14 +451,20 @@ reads its token from the Windows credential store.
 
 ### The same schedule on Google Home
 
-> **They do not currently play anything.** Google acknowledged in January 2026
-> that automations built in the script editor fire but their media commands
-> execute silently, and no fix has shipped. Measured here on 18 September 2026:
-> the Activity feed logs "Routine started", and the speaker reports "Nothing
-> playing" — twice, and again for an automation built in the **visual** editor
-> with its native *Play podcast* action, so it is not specific to the YAML. The
-> automations below are correct and will start working when Google fixes it;
-> until then the app is the only thing actually playing the schedule.
+> **Assistant loads the podcast paused, so each block presses play itself.**
+> Asking a speaker to play a podcast queues the episode and leaves it stopped —
+> measured twice on 18 September 2026: the Home app showed the episode loaded
+> with a Play button, and pressing it started the audio. Every play automation
+> therefore ends with a 15-second `time.delay` and a `device.command.MediaResume`
+> on the same speaker. The delay matters; resuming before the episode has loaded
+> resumes nothing.
+>
+> Before that was understood this looked like Google's acknowledged January 2026
+> bug, where script-editor automations fire while their media commands run
+> silently. That bug is real, but it was not what was happening here: the
+> Activity feed logged "Routine started" and the speaker genuinely had nothing
+> queued, because the show could not be resolved at all — which is a different
+> failure, described below.
 
 `tools/google-home-automations.mjs` generates
 [`tools/google-home-automations.yaml`](tools/google-home-automations.yaml) from the same
@@ -477,6 +483,14 @@ automation that then silently never runs:
   called `Downstairs`, not `Living room`.
 - **Quote the spoken command.** A show called `18Forty - Exploring Big Jewish
   Ideas` breaks an unquoted plain scalar.
+
+**Not every show resolves.** Assistant hands the name to whichever music service
+is the household default (`assistant.google.com/settings/music`). A name it
+cannot match produces exactly the same symptom as a broken automation: the
+routine logs "Routine started" and the speaker stays empty. *TED Talks Daily*
+resolved and played; *The Mindset Mentor* queued nothing at all. Say a show
+aloud once before relying on it — which is why the two with no record of ever
+having played are flagged `UNVERIFIED` in the generated file.
 
 It is an approximation on purpose, and the gaps are the point:
 

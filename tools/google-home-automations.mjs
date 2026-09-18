@@ -139,6 +139,16 @@ for (const block of BLOCKS) {
     out(`    okGoogle: "Play ${candidate} on ${SPEAKER.split(" - ")[0]}"`);
     out(`    devices:`);
     out(`    - ${SPEAKER}`);
+    // Asking Assistant to play a podcast loads it onto the speaker and leaves
+    // it PAUSED. Measured, twice: the Home app showed the episode queued with
+    // a Play button, and pressing that button started it. So the automation
+    // has to press play itself. The delay is for the load to finish - resuming
+    // before there is anything to resume does nothing.
+    out(`  - type: time.delay`);
+    out(`    for: 15sec`);
+    out(`  - type: device.command.MediaResume`);
+    out(`    devices:`);
+    out(`    - ${SPEAKER}`);
     out();
 
     if (block.stop != null) {
