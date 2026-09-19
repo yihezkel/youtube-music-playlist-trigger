@@ -88,5 +88,24 @@ const md = toMarkdown(v, NOW);
 check("email names all three", ["gone quiet", "Accessibility service", "self-test"].every((s) => md.includes(s)));
 check("email separates the handled one", md.includes("though the app is handling these"));
 
+console.log("\nthe phone off during Shabat / Yom Tov:");
+v = classify({ ...healthy, updatedAtMs: min(QUIET_MIN + 600) }, NOW, { restWindow: true });
+check("not fatal - the phone is off on purpose", v.fatal.length === 0);
+check("still reported, as degraded", v.degraded.some((d) => /quiet, as expected/i.test(d.what)));
+check("markdown does not cry wolf", toMarkdown(v, NOW).startsWith("Nothing fatal."));
+
+console.log("\nthe same silence on an ordinary day:");
+v = classify({ ...healthy, updatedAtMs: min(QUIET_MIN + 600) }, NOW, { restWindow: false });
+check("fatal", v.fatal.length === 1);
+check("names the silence", /gone quiet/i.test(v.fatal[0]?.what ?? ""));
+
+console.log("\na red check is still fatal during Shabat:");
+v = classify(
+  { ...healthy, healthChecks: [{ title: "Alarms armed", health: "Broken", detail: "0 of 19" }] },
+  NOW,
+  { restWindow: true },
+);
+check("the rest-day exemption covers silence only", v.fatal.length === 1);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

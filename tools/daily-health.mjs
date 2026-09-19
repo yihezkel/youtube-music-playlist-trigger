@@ -18,6 +18,7 @@
 // service-account.json for running it by hand.
 import { readFileSync } from "node:fs";
 import { classify, toMarkdown } from "./health-verdict.mjs";
+import { isRestWindow } from "./rest-window.mjs";
 import { id } from "./ids.mjs";
 
 const DEVICE_DOC = `users/${id("USER_ID")}/devices/${id("DEVICE_ID")}`;
@@ -41,7 +42,9 @@ try { state = JSON.parse(data.json || "{}"); } catch { /* fall back to the top-l
 state.updatedAtMs ??= data.updatedAtMs;
 state.appVersionName ??= data.appVersionName;
 
-const v = classify(state);
+// A phone that is off for Shabat or Yom Tov is not a fault, and saying so
+// weekly would train us to ignore the alarm that matters.
+const v = classify(state, Date.now(), { restWindow: isRestWindow() });
 
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify(v, null, 1));

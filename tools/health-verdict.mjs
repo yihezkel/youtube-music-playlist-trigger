@@ -27,25 +27,46 @@ const fmt = (ms) => new Date(ms).toLocaleString("en-GB", {
 /**
  * @param state the phone's reported state, parsed from the device document
  * @param nowMs the moment to judge against, so tests are not clock-dependent
+ * @param opts.restWindow true when Shabat or Yom Tov is in progress, in which
+ *   case a silent phone is expected rather than alarming. Passed in rather
+ *   than worked out here so this stays free of I/O and of the calendar, and so
+ *   the tests can exercise both sides without mocking a date.
  */
-export function classify(state = {}, nowMs = Date.now()) {
+export function classify(state = {}, nowMs = Date.now(), opts = {}) {
   const fatal = [];
   const degraded = [];
+  const restWindow = Boolean(opts.restWindow);
 
   const lastMs = Number(state.updatedAtMs || 0);
   const ageMin = lastMs ? Math.round((nowMs - lastMs) / 60000) : null;
 
   // 1. The phone is not talking. Everything else in this project reports from
   // the phone, so this is the one failure that hides all the others.
+  //
+  // Unless it is Shabat or Yom Tov, when the phone is switched off on purpose.
+  // Without that exception this fires every week: on 19 September 2026 it
+  // opened an issue and sent mail at 12:49 on Shabbat, about a phone that was
+  // off exactly as intended. A weekly false alarm is worse than no alarm,
+  // because it trains you to ignore the real one.
   if (ageMin == null || ageMin > QUIET_MIN) {
     const howLong = ageMin == null ? "never"
       : ageMin < 60 ? `${ageMin} minutes` : `${Math.floor(ageMin / 60)}h ${ageMin % 60}m`;
-    fatal.push({
-      what: "The phone has gone quiet",
-      detail: `Last check-in ${lastMs ? `${howLong} ago (${fmt(lastMs)})` : "never"}. `
-        + "It checks in every 15 minutes, so it is off, offline, or the app is not running. "
-        + "Nothing scheduled will play, and nothing on the phone can tell you so.",
-    });
+    const detail = `Last check-in ${lastMs ? `${howLong} ago (${fmt(lastMs)})` : "never"}. `;
+    if (restWindow) {
+      degraded.push({
+        what: "The phone is quiet, as expected",
+        detail: detail
+          + "Shabat or Yom Tov is in progress and the phone is switched off for it, "
+          + "so this is not raised as a fault. It will be if it is still quiet afterwards.",
+      });
+    } else {
+      fatal.push({
+        what: "The phone has gone quiet",
+        detail: detail
+          + "It checks in every 15 minutes, so it is off, offline, or the app is not running. "
+          + "Nothing scheduled will play, and nothing on the phone can tell you so.",
+      });
+    }
   }
 
   // 2. A red health check: the app's own definition of "nothing covers this".
